@@ -1,6 +1,6 @@
 # PO Intelligence Hub V2
 
-Local-first application for PO Intelligence Hub V2. Current delivery includes the **V2-001 application shell**, **V2-002 local SQLite metadata schema**, **V2-003 typed research API**, **V2-004 information architecture**, and **V2-005 project setup and versioned plan editor**. Research collection, AI, and source integrations are not implemented.
+Local-first application for PO Intelligence Hub V2. Current delivery includes the **V2-001 application shell**, **V2-002 local SQLite metadata schema**, **V2-003 typed research API**, **V2-004 information architecture**, **V2-005 project setup and versioned plan editor**, and **V2-008 app listing registry and Explorer**. Research collection, AI, scraping, and source integrations are not implemented.
 
 ## Requirements
 
@@ -49,6 +49,7 @@ The API exposes typed JSON contracts under `/api/v1`. OpenAPI documentation is a
 - `POST /api/v1/projects/{project_id}/plans` creates the next immutable plan version; `PUT /api/v1/projects/{project_id}/plans/{version}` edits the latest version by appending a new one. `GET /api/v1/projects/{project_id}/plans`, `GET /api/v1/projects/{project_id}/plans/latest`, and `GET /api/v1/projects/{project_id}/plans/{version}` read versions. A version can be deleted only before a run references it.
 - `POST /api/v1/projects/{project_id}/runs` starts a queued run for an explicitly selected `plan_version`; `GET /api/v1/projects/{project_id}/runs` lists project runs and `GET /api/v1/runs/{run_id}` reads run status. A run can be deleted only while queued; state updates follow the run lifecycle.
 - `PATCH /api/v1/runs/{run_id}/state` applies an allowed session-state transition. This records lifecycle metadata only and does not execute research.
+- `POST /api/v1/apps` registers user-provided store listing metadata; `GET /api/v1/apps?cursor=&limit=&platform=&geo=&keyword=` provides filtered cursor pagination; `GET /api/v1/apps/{listing_id}` reads one store-specific listing. iOS/Android listings and country scopes remain separate; matching names are never automatically grouped.
 
 List responses include `items`, `next_cursor`, and `limit`. Request validation and API errors use `{ "error": { "code", "message", "details", "retryable" } }`. Plans remain versioned and read-only after creation; editing creates a new version so existing runs continue to point to their original plan version.
 
@@ -62,4 +63,4 @@ The checks cover the `/health` response, default data-root location, and fronten
 
 ## UI status
 
-The Research workspace supports project setup and creating or editing versioned research plans. An edit appends a new version; older versions remain available and read-only. Primary and comparison periods are optional, and source preferences are recorded without connecting to or collecting from those sources. Explorer, Sources, Reports, and research-run execution remain future work.
+The Research workspace supports project setup and creating or editing versioned research plans. An edit appends a new version; older versions remain available and read-only. Primary and comparison periods are optional, and source preferences are recorded without connecting to or collecting from those sources. Explorer supports manually registered store listing metadata with OS/GEO filters and cursor pagination; URLs are stored as references and are never fetched. Listing data is user-provided, with no fixture or market data seeded into the workspace.

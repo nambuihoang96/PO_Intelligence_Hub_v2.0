@@ -160,6 +160,69 @@ class ResearchRunManifestRead(APIModel):
     created_at: datetime
 
 
+class AppPlatform(StrEnum):
+    IOS = "ios"
+    ANDROID = "android"
+
+
+class AppListingCreate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    platform: AppPlatform
+    store_app_id: str = Field(min_length=1, max_length=255)
+    country: str = Field(min_length=2, max_length=2)
+    title: str = Field(min_length=1, max_length=300)
+    developer: str = Field(min_length=1, max_length=200)
+    listing_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("store_app_id", "title", "developer")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("value must not be blank")
+        return value
+
+    @field_validator("country")
+    @classmethod
+    def normalize_country(cls, value: str) -> str:
+        value = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", value):
+            raise ValueError("country must be a two-letter ISO-style code")
+        return value
+
+    @model_validator(mode="after")
+    def validate_store_app_id(self) -> "AppListingCreate":
+        if self.platform == AppPlatform.IOS and not re.fullmatch(r"[0-9]+", self.store_app_id):
+            raise ValueError("iOS store_app_id must be a numeric Apple listing ID")
+        if self.platform == AppPlatform.ANDROID and not re.fullmatch(
+            r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+", self.store_app_id
+        ):
+            raise ValueError("Android store_app_id must be a package name")
+        if self.listing_url is not None:
+            value = self.listing_url.strip()
+            try:
+                parsed = urlsplit(value)
+                parsed.port
+            except ValueError as exc:
+                raise ValueError("listing_url contains an invalid port") from exc
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError("listing_url must be an HTTP or HTTPS URL without embedded credentials")
+            self.listing_url = value
+        return self
+
+
+class AppListingRead(APIModel):
+    id: str
+    platform: AppPlatform
+    store_app_id: str
+    country: str
+    title: str
+    developer: str
+    listing_url: str | None
+    created_at: datetime
+
+
 class SourceLicenseStatus(StrEnum):
     UNKNOWN = "unknown"
     MANUAL_ONLY = "manual_only"
