@@ -76,6 +76,9 @@ class SourceRegistryAPITest(unittest.TestCase):
                 response = self.client.post("/api/v1/sources", json=payload)
                 self.assertEqual(response.status_code, 422)
                 self.assertEqual(response.json()["error"]["code"], "VALIDATION_ERROR")
+        source = self.client.post("/api/v1/sources", json={"name": "Metadata", "source_type": "website"}).json()
+        null_status = self.client.patch(f"/api/v1/sources/{source['id']}", json={"license_status": None})
+        self.assertEqual(null_status.status_code, 422)
 
     def test_manual_evidence_is_saved_unverified_and_can_be_paginated(self) -> None:
         run = self.create_run()
@@ -109,6 +112,8 @@ class SourceRegistryAPITest(unittest.TestCase):
                 self.assertEqual(response.status_code, 422)
         missing_source = self.client.post(f"/api/v1/runs/{run['id']}/evidence", json={"source_url": base["source_url"], "excerpt_or_ref": "note"})
         self.assertEqual(missing_source.status_code, 422)
+        blank_registry = self.client.post(f"/api/v1/runs/{run['id']}/evidence", json={**base, "source_registry_id": ""})
+        self.assertEqual(blank_registry.status_code, 422)
         mismatch = self.client.post(f"/api/v1/runs/{run['id']}/evidence", json={**base, "source_registry_id": blocked["id"], "source_url": "https://unrelated.test/page"})
         self.assertEqual(mismatch.status_code, 409)
         allowed_domain = self.client.post("/api/v1/sources", json={"name": "Blocked domain", "source_type": "website", "url_domain": "example.com", "license_status": "blocked"}).json()

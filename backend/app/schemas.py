@@ -212,6 +212,9 @@ class SourceRegistryUpdate(APIModel):
     def validate_update(self) -> "SourceRegistryUpdate":
         if not self.model_fields_set:
             raise ValueError("at least one field must be supplied")
+        for field_name in ("license_status", "collection_mode"):
+            if field_name in self.model_fields_set and getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} must not be null")
         for field_name in ("name", "source_type"):
             value = getattr(self, field_name)
             if field_name in self.model_fields_set and (value is None or not value.strip()):
@@ -241,7 +244,7 @@ class SourceRegistryRead(APIModel):
 class ManualEvidenceCreate(APIModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
-    source_registry_id: str | None = None
+    source_registry_id: str | None = Field(default=None, min_length=1, max_length=36)
     source_name: str | None = Field(default=None, max_length=200)
     source_type: str | None = Field(default=None, max_length=80)
     source_url: str = Field(min_length=1, max_length=2048)
