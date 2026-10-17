@@ -41,6 +41,17 @@ V2-002 adds versioned SQLite migrations. Apply the schema after installing depen
 
 The database file is stored as `po_intelligence_hub.sqlite3` under `APP_DATA_ROOT` (default `<workspace>\data`). The initial schema creates metadata tables only; no research behavior or source connections are included.
 
+## Research API contracts
+
+The API exposes typed JSON contracts under `/api/v1`. OpenAPI documentation is available at `http://127.0.0.1:8000/docs`.
+
+- `POST /api/v1/projects`, `GET /api/v1/projects?cursor=&limit=`, `GET/PATCH/DELETE /api/v1/projects/{project_id}`
+- `POST /api/v1/projects/{project_id}/plans` creates the next immutable plan version; `GET /api/v1/projects/{project_id}/plans`, `GET /api/v1/projects/{project_id}/plans/latest`, and `GET /api/v1/projects/{project_id}/plans/{version}` read versions.
+- `POST /api/v1/projects/{project_id}/runs` starts a queued run for an explicitly selected `plan_version`; `GET /api/v1/projects/{project_id}/runs` lists project runs and `GET /api/v1/runs/{run_id}` reads run status.
+- `PATCH /api/v1/runs/{run_id}/state` applies an allowed session-state transition. This records lifecycle metadata only and does not execute research.
+
+List responses include `items`, `next_cursor`, and `limit`. Request validation and API errors use `{ "error": { "code", "message", "details", "retryable" } }`. Plans remain versioned and read-only after creation; editing creates a new version so existing runs continue to point to their original plan version.
+
 ## Run smoke checks
 
 ```powershell
