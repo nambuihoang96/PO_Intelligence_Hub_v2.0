@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from enum import StrEnum
+import re
 from typing import Any, Generic, TypeVar
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -148,6 +150,173 @@ class ResearchRunRead(APIModel):
     finished_at: datetime | None
     coverage_summary: dict[str, Any]
     created_at: datetime
+
+
+class SourceLicenseStatus(StrEnum):
+    UNKNOWN = "unknown"
+    MANUAL_ONLY = "manual_only"
+    APPROVED = "approved"
+    BLOCKED = "blocked"
+    REVIEW_REQUIRED = "review_required"
+
+
+class SourceRegistryCreate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    source_type: str = Field(min_length=1, max_length=80)
+    url_domain: str | None = Field(default=None, max_length=253)
+    license_status: SourceLicenseStatus = SourceLicenseStatus.UNKNOWN
+    collection_mode: str = Field(default="manual", pattern="^manual$")
+
+    @field_validator("name", "source_type")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("value must not be blank")
+        return value
+
+    @field_validator("url_domain")
+    @classmethod
+    def validate_domain(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip().lower().rstrip(".")
+        if "://" in value or any(char in value for char in "/?#@"):
+            raise ValueError("url_domain must be a hostname without scheme or path")
+        try:
+            parsed = urlsplit(f"//{value}")
+            hostname = parsed.hostname
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("url_domain must be a valid hostname") from exc
+        if not hostname or port is not None or not re.fullmatch(
+            r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?",
+            hostname,
+        ):
+            raise ValueError("url_domain must be a valid hostname")
+        return hostname
+
+
+class SourceRegistryUpdate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    source_type: str | None = Field(default=None, min_length=1, max_length=80)
+    url_domain: str | None = Field(default=None, max_length=253)
+    license_status: SourceLicenseStatus | None = None
+    collection_mode: str | None = Field(default=None, pattern="^manual$")
+
+    @model_validator(mode="after")
+    def validate_update(self) -> "SourceRegistryUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field must be supplied")
+        for field_name in ("name", "source_type"):
+            value = getattr(self, field_name)
+            if field_name in self.model_fields_set and (value is None or not value.strip()):
+                raise ValueError(f"{field_name} must not be blank or null")
+            if value is not None:
+                object.__setattr__(self, field_name, value.strip())
+        return self
+
+    @field_validator("url_domain")
+    @classmethod
+    def validate_domain(cls, value: str | None) -> str | None:
+        return SourceRegistryCreate.validate_domain(value)
+
+
+class SourceRegistryRead(APIModel):
+    id: str
+    name: str
+    source_type: str
+    url_domain: str | None
+    license_status: SourceLicenseStatus
+    collection_mode: str
+    rate_limit: int | None
+    enabled: bool
+    created_at: datetime
+
+
+class ManualEvidenceCreate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    source_registry_id: str | None = None
+    source_name: str | None = Field(default=None, max_length=200)
+    source_type: str | None = Field(default=None, max_length=80)
+    source_url: str = Field(min_length=1, max_length=2048)
+    title: str | None = Field(default=None, max_length=1000)
+    published_at: datetime | None = None
+    excerpt_or_ref: str = Field(min_length=1, max_length=10000)
+    scope: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("source_name", "source_type", "title")
+    @classmethod
+    def clean_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_http_url(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) > 2048 or any(char.isspace() or ord(char) < 0x20 for char in value):
+            raise ValueError("source_url must be a valid HTTP or HTTPS URL")
+        try:
+            parsed = urlsplit(value)
+            hostname = parsed.hostname
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("source_url contains an invalid port") from exc
+        if parsed.scheme.lower() not in {"http", "https"} or not hostname or parsed.username or parsed.password:
+            raise ValueError("source_url must be a valid HTTP or HTTPS URL without embedded credentials")
+        return value
+
+    @field_validator("excerpt_or_ref")
+    @classmethod
+    def clean_excerpt(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("notes or excerpt must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def require_source_details_without_registry(self) -> "ManualEvidenceCreate":
+        if self.source_registry_id is None and (not self.source_name or not self.source_type):
+            raise ValueError("source_name and source_type are required when no registry source is selected")
+        return self
+
+
+class SourceRecordRead(APIModel):
+    id: str
+    run_id: str
+    source_registry_id: str | None
+    source_name: str
+    source_type: str
+    collection_mode: str
+    source_url: str | None
+    title: str | None
+    retrieved_at: datetime
+    published_at: datetime | None
+    content_sha256: str | None
+    scope: dict[str, Any]
+
+
+class EvidenceRead(APIModel):
+    id: str
+    run_id: str
+    source_record_id: str
+    excerpt_or_ref: str
+    method: str
+    quality: str
+    status: str
+    scope: dict[str, Any]
+    observed_at: datetime | None
+    created_at: datetime
+
+
+class ManualEvidenceRead(APIModel):
+    source: SourceRecordRead
+    evidence: EvidenceRead
 
 
 T = TypeVar("T")
