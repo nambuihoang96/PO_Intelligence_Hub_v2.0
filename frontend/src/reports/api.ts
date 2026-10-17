@@ -67,6 +67,11 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): 
   const apiError = body?.error;
   const detail = apiError?.message ?? body?.detail?.[0]?.msg ?? body?.detail ?? body?.message;
   if (!response.ok) {
+    if (response.status === 404 && /\/api\/v1\/reports\/[^/]+\/benchmark-state(?:\?|$)/.test(url)) {
+      const error = new Error('Benchmark was not saved. The local backend may be outdated. Your selection and PO notes are still on this screen; close the running PO Hub windows, reopen run.bat, then try again.') as Error & { diagnostics?: string };
+      error.diagnostics = `HTTP 404 · ${url}`;
+      throw error;
+    }
     if (response.status === 404 && url.endsWith('/structure-from-response')) {
       throw new Error('Backend local đang chạy phiên bản cũ, chưa có chức năng cấu trúc báo cáo. Hãy đóng cửa sổ/terminal PO Intelligence Hub đang chạy, rồi mở lại run.bat. Câu trả lời vừa dán vẫn được giữ để thử lại.');
     }

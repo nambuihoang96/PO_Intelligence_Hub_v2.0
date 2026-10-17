@@ -197,7 +197,7 @@ describe('ChatGPT research intake', () => {
     expect((await screen.findByLabelText('PO Assessment for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Worth validating');
     expect((screen.getByLabelText('Next Action for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Test the reminder timing');
     expect((screen.getByLabelText('Evidence quality assessment for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Learning App A' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove from Benchmark: Learning App A' }).at(-1)!);
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]));
     expect(screen.queryByRole('table')).toBeNull();
     expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
@@ -211,8 +211,8 @@ describe('ChatGPT research intake', () => {
         ...report.research_data,
         executive_summary: 'Guided setup is documented; outcome impact is not measured.',
         key_takeaways: ['Setup guidance appears before the first action.'],
-        entities: [{ key: 'subject-a', entity_type: 'service', name: 'Transfer service A', attributes: { setup_flow: 'guided steps' }, evidence_references: ['https://example.com/'] }],
-        findings: [{ key: 'finding-a', finding_type: 'workflow observation', title: 'Guidance precedes first action', description: 'The report states that setup guidance is shown before the first transfer.', related_entities: ['subject-a'], evidence_references: ['https://example.com/'], source_locations: [], scope: { region: 'US', period: '2025' }, evidence_status: 'needs_review', confidence: null, uncertainty: 'Only one source was supplied.', po_implications: 'Validate the flow with first-time users.' }],
+        entities: [{ key: 'subject-a', entity_type: 'service', name: 'Transfer service A', attributes: { description: 'Guided steps are shown before the first action.', platform_signature: 'web portal' }, evidence_references: ['https://example.com/'] }],
+        findings: [{ key: 'finding-a', finding_type: 'workflow observation', title: 'Guidance precedes first action', description: 'The report states that setup guidance is shown before the first transfer.', related_entities: ['subject-a'], evidence_references: ['https://example.com/'], source_locations: [], scope: { region: 'US', period: '2025', os: null, source: '', audience: [] }, evidence_status: 'needs_review', confidence: null, uncertainty: 'Only one source was supplied.', po_implications: 'Validate the flow with first-time users.' }],
         evidence_references: [{ url: 'https://example.com/', title: 'Source report', source_location: null, verified: false }],
         benchmark_dimensions: [{ key: 'setup-time', name: 'Setup time reported', related_entities: ['subject-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'subject-a', value: 'About 3 minutes', evidence_references: ['https://example.com/'], source_locations: [], evidence_status: 'unverified', uncertainty: 'Source method is not described.' }], po_notes: null }],
       },
@@ -221,10 +221,16 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Guided setup is documented; outcome impact is not measured.')).toBeTruthy();
-    const card = await screen.findByText('Guidance precedes first action');
-    fireEvent.click(card.closest('summary')!);
+    fireEvent.click(await screen.findByRole('button', { name: 'View Insight' }));
     expect(await screen.findByText('Validate the flow with first-time users.')).toBeTruthy();
-    expect(screen.getByText(/guided steps/)).toBeTruthy();
+    expect(screen.getByText('Guided steps are shown before the first action.')).toBeTruthy();
+    expect(screen.getAllByText('The report states that setup guidance is shown before the first transfer.')).toHaveLength(1);
+    expect(screen.getByText('Region: US · Research period: 2025')).toBeTruthy();
+    expect(screen.queryByText(/Operating system:|source:|audience:/i)).toBeNull();
+    expect(screen.getByText('Show attributes (1)')).toBeTruthy();
+    expect(screen.getByText('platform signature').closest('details')?.open).toBe(false);
+    fireEvent.click(screen.getByText('Show attributes (1)'));
+    expect(screen.getByText('platform signature')).toBeTruthy();
     expect(screen.queryByText(/Setup time reported:/)).toBeNull();
     expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
     expect(screen.getByText('workflow observation · needs_review')).toBeTruthy();
@@ -250,7 +256,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Seasonal access changes')).toBeTruthy();
-    fireEvent.click(screen.getByText('Seasonal access changes').closest('summary')!);
+    fireEvent.click(screen.getByRole('button', { name: 'View Insight' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: Seasonal access changes' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xem Benchmark' }));
     expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
@@ -291,17 +297,53 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     await screen.findByText('An observed pattern');
-    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
+    fireEvent.click(screen.getByRole('button', { name: 'View Insight' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
     expect(await screen.findByText('Adding…')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
+    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
+    const pendingDraft = await screen.findByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement;
+    fireEvent.change(pendingDraft, { target: { value: 'Draft typed while save was pending' } });
     releaseState.current?.();
+    fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
+    expect((screen.getByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement).value).toBe('Draft typed while save was pending');
+    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
+    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
     expect(await screen.findByText('Added to Benchmark.')).toBeTruthy();
     failNextState = true;
     fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
     expect((await screen.findByRole('alert')).textContent).toContain('The selection could not be saved.');
     expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' })).toBeTruthy();
     expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]);
+  });
+
+  it('explains a benchmark 404 and preserves a local PO draft and confirmed membership', async () => {
+    const selectedEntity = {
+      ...report,
+      benchmark_selections: [{ item_type: 'entity' as const, item_key: 'subject-a' }],
+      benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'entity' as const, item_key: 'subject-a', po_assessment: 'Previously saved', notes: 'Keep these notes', next_action: 'Review later', dimension_assessments: {}, observation_finding_links: {} }] },
+      research_data: { ...report.research_data, entities: [{ key: 'subject-a', entity_type: 'service', name: 'Transfer service A', attributes: {}, evidence_references: [] }] },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/benchmark-state')) return new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(selectedEntity), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(screen.getByText('Transfer service A').closest('summary')!);
+    const assessment = await screen.findByLabelText('PO Assessment for Transfer service A') as HTMLTextAreaElement;
+    fireEvent.change(assessment, { target: { value: 'Unsaved decision draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Transfer service A' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('local backend may be outdated');
+    expect(alert.textContent).toContain('reopen run.bat');
+    expect((screen.getByLabelText('PO Assessment for Transfer service A') as HTMLTextAreaElement).value).toBe('Unsaved decision draft');
+    expect(screen.getByRole('button', { name: 'Remove from Benchmark: Transfer service A' })).toBeTruthy();
+    const diagnostics = screen.getByText(/HTTP 404 · \/api\/v1\/reports\/saved-report\/benchmark-state/);
+    expect(diagnostics.closest('details')?.open).toBe(false);
   });
 
   it('explains an outdated backend and keeps the full ChatGPT response after a 404', async () => {

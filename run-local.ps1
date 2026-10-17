@@ -3,6 +3,8 @@ param([string]$PythonExecutable)
 $ErrorActionPreference = 'Stop'
 $workspace = $PSScriptRoot
 $setupScript = Join-Path $workspace 'scripts\setup.ps1'
+$compatibilityScript = Join-Path $workspace 'scripts\launcher-compatibility.ps1'
+. $compatibilityScript
 $venvPython = if ([string]::IsNullOrWhiteSpace($PythonExecutable)) {
     Join-Path $workspace '.venv\Scripts\python.exe'
 } else {
@@ -45,23 +47,22 @@ function Get-PortOwnerDescription([int]$Port) {
 
 if (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue) {
     $backendCompatible = $false
-    $backendIsOlderHub = $false
+$backendIsPoHub = $false
     try {
         $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2
         $openApi = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/openapi.json' -TimeoutSec 3
-        $backendIsOlderHub = $health.status -eq 'ok' -and $openApi.info.title -eq 'PO Intelligence Hub API'
-        $reportPaths = @($openApi.paths.PSObject.Properties.Name)
-        $backendSupportsReports = $reportPaths -contains '/api/v1/reports'
-        $backendSupportsStructuring = $reportPaths -contains '/api/v1/reports/{report_id}/structure-from-response'
-        $backendCompatible = $backendIsOlderHub -and $backendSupportsReports -and $backendSupportsStructuring
+        $backendIsPoHub = $health.status -eq 'ok' -and $openApi.info.title -eq 'PO Intelligence Hub API'
+        $compatibility = Test-PoHubOpenApiCompatibility -OpenApi $openApi
+        $backendCompatible = $backendIsPoHub -and $compatibility.Compatible
     } catch { }
     if ($backendCompatible) {
         $backendAlreadyRunning = $true
         Write-Host 'Reusing the existing PO Intelligence Hub API on port 8000.'
     } else {
         $owner = Get-PortOwnerDescription 8000
-        if ($backendIsOlderHub) {
-            throw "Port 8000 is used by a PO Intelligence Hub API ($owner) that does not support the current report workflow. Close the running PO Hub window/terminal, then open run.bat again. The process was not stopped automatically."
+        if ($backendIsPoHub) {
+            $missingOperations = if ($compatibility) { $compatibility.MissingOperations -join ', ' } else { 'OpenAPI compatibility could not be verified.' }
+            throw "Port 8000 is used by an outdated PO Intelligence Hub API ($owner). Missing: $missingOperations. Close the old PO Hub window/terminal, then run run.bat again to start the current backend. The process was not stopped automatically; SQLite data was not changed."
         }
         throw "Port 8000 is used by $owner and does not expose the expected PO Hub API. The process was not stopped. Close it manually, then retry."
     }
@@ -72,14 +73,15 @@ if (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyCont
     try {
         $frontendHtml = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/' -TimeoutSec 3 -UseBasicParsing
         $intakeModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/reports/ResearchIntake.tsx' -TimeoutSec 3 -UseBasicParsing
-        $frontendCompatible = $frontendHtml.StatusCode -eq 200 -and $frontendHtml.Content -match 'PO Intelligence Hub V2' -and $intakeModule.StatusCode -eq 200
+        $reportApiModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/reports/api.ts' -TimeoutSec 3 -UseBasicParsing
+        $frontendCompatible = $frontendHtml.StatusCode -eq 200 -and $frontendHtml.Content -match 'PO Intelligence Hub V2' -and $intakeModule.StatusCode -eq 200 -and $reportApiModule.StatusCode -eq 200 -and $reportApiModule.Content -match 'benchmark-state'
     } catch { }
     if ($frontendCompatible) {
         $frontendAlreadyRunning = $true
         Write-Host 'Reusing the existing PO Intelligence Hub frontend on port 5173.'
     } else {
         $owner = Get-PortOwnerDescription 5173
-        throw "Port 5173 is used by $owner and does not appear to be the PO Hub frontend. The process was not stopped. Close it manually, then retry."
+        throw "Port 5173 is used by $owner and does not serve the current PO Hub Results client (including the Benchmark API contract). The process was not stopped. Close the old frontend window/terminal, then retry run.bat."
     }
 }
 
@@ -131,6 +133,16 @@ if (-not $backendAlreadyRunning) {
             Start-Sleep -Seconds 1
         }
         if (-not $backendReady) { throw "Backend health check timed out. See $stderrLog" }
+
+        try {
+            $openApi = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/openapi.json' -TimeoutSec 3
+            $compatibility = Test-PoHubOpenApiCompatibility -OpenApi $openApi
+        } catch {
+            throw "The newly started backend did not expose a readable OpenAPI document. See $stderrLog. $($_.Exception.Message)"
+        }
+        if (-not $compatibility.Compatible) {
+            throw "The newly started backend is missing required Results API operations: $($compatibility.MissingOperations -join ', '). See $stderrLog."
+        }
     } catch {
         $backend.Refresh()
         if (-not $backend.HasExited) { Stop-Process -Id $backend.Id -Force }

@@ -26,6 +26,27 @@ function includeSelectedEntries(workspace: BenchmarkWorkspace, selections: Bench
   return { ...workspace, entries };
 }
 
+function preserveLocalBenchmarkDraft(server: BenchmarkWorkspace, local: BenchmarkWorkspace): BenchmarkWorkspace {
+  const localEntries = new Map(local.entries.map((entry) => [`${entry.item_type}:${entry.item_key}`, entry]));
+  const serverEntries = server.entries.map((entry) => {
+    const draft = localEntries.get(`${entry.item_type}:${entry.item_key}`);
+    if (!draft) return entry;
+    localEntries.delete(`${entry.item_type}:${entry.item_key}`);
+    return {
+      ...entry,
+      po_assessment: draft.po_assessment,
+      notes: draft.notes,
+      next_action: draft.next_action,
+      dimension_assessments: draft.dimension_assessments,
+      observation_finding_links: draft.observation_finding_links,
+    };
+  });
+  return {
+    custom_dimensions: [...new Set([...server.custom_dimensions, ...local.custom_dimensions])],
+    entries: [...serverEntries, ...localEntries.values()],
+  };
+}
+
 export function ReportViewer({ reportId }: { reportId: string }) {
   const [report, setReport] = useState<ImportedReport | null>(null);
   const [error, setError] = useState('');
@@ -39,7 +60,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const [newDimension, setNewDimension] = useState('');
   const [activeFinding, setActiveFinding] = useState<string | null>(null);
   const [pendingItems, setPendingItems] = useState<Record<string, 'adding' | 'removing'>>({});
-  const [itemFeedback, setItemFeedback] = useState<Record<string, { kind: 'success' | 'error'; text: string }>>({});
+  const [itemFeedback, setItemFeedback] = useState<Record<string, { kind: 'success' | 'error'; text: string; diagnostics?: string }>>({});
   const reportRef = useRef<ImportedReport | null>(null);
   const workspaceRef = useRef<BenchmarkWorkspace>(blankWorkspace());
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -65,7 +86,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     setBusy(true); setError(''); setNotice('');
     try {
       const updated = await action();
-      applyLocalState(updated, updated.benchmark_workspace || blankWorkspace());
+      applyLocalState(updated, preserveLocalBenchmarkDraft(updated.benchmark_workspace || blankWorkspace(), workspaceRef.current));
       setNotice(successMessage);
       return true;
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không cập nhật được báo cáo.'); return false; }
@@ -76,7 +97,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     setBusy(true); setError(''); setNotice('');
     try {
       const result = await reportApi.reprocess(reportId);
-      applyLocalState(result, result.benchmark_workspace || blankWorkspace()); setNotice(result.message);
+      applyLocalState(result, preserveLocalBenchmarkDraft(result.benchmark_workspace || blankWorkspace(), workspaceRef.current)); setNotice(result.message);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không thể xử lý lại báo cáo.'); }
     finally { setBusy(false); }
   }
@@ -116,16 +137,22 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     mutationQueueRef.current = mutationQueueRef.current.then(async () => {
       try {
         const saved = await reportApi.updateBenchmarkState(current.id, selections, nextWorkspace);
-        if (sequence === mutationSequenceRef.current) applyLocalState(saved, saved.benchmark_workspace || blankWorkspace());
+        if (sequence === mutationSequenceRef.current) {
+          applyLocalState(saved, preserveLocalBenchmarkDraft(saved.benchmark_workspace || blankWorkspace(), workspaceRef.current));
+        }
         if (latestItemMutationRef.current[key] === sequence) setItemFeedback((values) => ({ ...values, [key]: { kind: 'success', text: exists ? 'Removed from Benchmark. PO notes are preserved and can be restored.' : 'Added to Benchmark.' } }));
       } catch (reason) {
         if (sequence === mutationSequenceRef.current) {
           try {
             const latest = await reportApi.get(current.id);
-            applyLocalState(latest, includeSelectedEntries(latest.benchmark_workspace || blankWorkspace(), latest.benchmark_selections));
+            const serverWorkspace = includeSelectedEntries(latest.benchmark_workspace || blankWorkspace(), latest.benchmark_selections);
+            applyLocalState(latest, preserveLocalBenchmarkDraft(serverWorkspace, workspaceRef.current));
           } catch { /* Keep the last locally known server state if refresh also fails. */ }
         }
-        if (latestItemMutationRef.current[key] === sequence) setItemFeedback((values) => ({ ...values, [key]: { kind: 'error', text: reason instanceof Error ? reason.message : 'Could not update Benchmark. Try again.' } }));
+        if (latestItemMutationRef.current[key] === sequence) {
+          const failure = reason as Error & { diagnostics?: string };
+          setItemFeedback((values) => ({ ...values, [key]: { kind: 'error', text: reason instanceof Error ? reason.message : 'Could not update Benchmark. Try again.', diagnostics: failure?.diagnostics } }));
+        }
       } finally {
         if (latestItemMutationRef.current[key] === sequence) setPendingItems((values) => { const next = { ...values }; delete next[key]; return next; });
       }
@@ -221,18 +248,38 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     return <div className="benchmark-card-actions">
       <button className={isActive ? 'text-button' : 'secondary-action'} disabled={Boolean(pending)} aria-label={`${actionText}${label ? `: ${label}` : ''}`} onClick={() => void toggleSelection(item)}>{pending ? (pending === 'adding' ? 'Adding…' : 'Removing…') : actionText}</button>
       {isActive && <button className="text-button" onClick={() => setTab('benchmark')}>Xem Benchmark</button>}
-      {feedback && <span className={feedback.kind === 'error' ? 'inline-action-error' : 'inline-action-success'} role={feedback.kind === 'error' ? 'alert' : 'status'}>{feedback.text}</span>}
+      {feedback && <span className={feedback.kind === 'error' ? 'inline-action-error' : 'inline-action-success'} role={feedback.kind === 'error' ? 'alert' : 'status'}>{feedback.text}{feedback.diagnostics && <details className="inline-diagnostics"><summary>Technical details</summary><code>{feedback.diagnostics}</code></details>}</span>}
     </div>;
   }
 
   function relatedEntityCandidates(finding: ResearchData['findings'][number]) {
     const candidates = data.entities.filter((entity) => finding.related_entities.includes(entity.key));
     if (!candidates.length) return null;
-    return <section className="related-entity-candidates"><h5>Related research subjects</h5><p>Choose only subjects that should be compared. Research type alone does not classify an item as a product.</p><ul>{candidates.map((entity) => <li key={entity.key}><span><strong>{entity.name}</strong><small>{entity.entity_type}{Object.keys(entity.attributes).length ? ` · ${Object.entries(entity.attributes).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${String(value)}`).join('; ')}` : ''}</small></span>{benchmarkAction({ item_type: 'entity', item_key: entity.key }, entity.name)}</li>)}</ul></section>;
+    return <section className="related-entity-candidates"><h5>Related research subjects</h5><p>Choose only subjects that should be compared. Research type alone does not classify an item as a product.</p><ul>{candidates.map((entity) => {
+      const attributes = Object.entries(entity.attributes).filter(([, value]) => value !== null && value !== undefined && value !== '');
+      const descriptionEntry = attributes.find(([key]) => ['description', 'summary', 'context'].includes(key.toLocaleLowerCase()));
+      const technicalAttributes = attributes.filter(([key]) => key !== descriptionEntry?.[0]);
+      const description = descriptionEntry?.[1];
+      const descriptionText = typeof description === 'string' ? description : description ? JSON.stringify(description) : '';
+      return <li key={entity.key}>
+        <div className="related-entity-copy"><div className="related-entity-heading"><strong>{entity.name}</strong><span>{entity.entity_type}</span></div>
+          {descriptionText && <p>{descriptionText}</p>}
+          {technicalAttributes.length > 0 && <details className="related-entity-attributes"><summary>Show attributes ({technicalAttributes.length})</summary><dl>{technicalAttributes.map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}</dl></details>}
+        </div>
+        <div className="related-entity-action">{benchmarkAction({ item_type: 'entity', item_key: entity.key }, entity.name)}</div>
+      </li>;
+    })}</ul></section>;
   }
 
   function scopeLabel(scope: Record<string, unknown>): string {
-    return Object.entries(scope).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${String(value)}`).join(' · ');
+    const labels: Record<string, string> = { geo: 'GEO', environment: 'Environment', platform: 'Platform', os: 'Operating system', period: 'Research period', research_period: 'Research period', time_period: 'Time period', date_range: 'Date range', region: 'Region', country: 'Country', segment: 'Segment', language: 'Language', currency: 'Currency' };
+    return Object.entries(scope).flatMap(([key, value]) => {
+      if (value === null || value === undefined || value === '') return [];
+      if (Array.isArray(value) && value.length === 0) return [];
+      if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 0) return [];
+      const readableValue = Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return [`${labels[key.toLocaleLowerCase()] ?? key.replaceAll('_', ' ')}: ${readableValue}`];
+    }).join(' · ');
   }
 
   function poAssessmentFields(item: BenchmarkSelection, label: string) {
@@ -275,14 +322,14 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     {(report.orphaned_benchmark_selections?.length || report.orphaned_benchmark_entries?.length) ? <div className="research-alert" role="alert">Có {(report.orphaned_benchmark_selections?.length || 0) + (report.orphaned_benchmark_entries?.length || 0)} benchmark reference/PO note đang trỏ tới keys không còn trong structured data. Dữ liệu được giữ nguyên; xem tab Benchmark để xử lý references khi cần.</div> : null}
     {!hasStructured && <section className="research-panel structuring-callout"><strong>{report.research_status || 'TEXT_ONLY'} · cần cấu trúc ngữ nghĩa</strong><p>Đây là nội dung báo cáo gốc. Hệ thống không tự biến heading hoặc văn bản thành insight. Dùng ChatGPT Plus để cấu trúc report hiện có; báo cáo gốc và ghi chú PO sẽ được giữ nguyên.</p><div className="intake-actions"><button className="secondary-action" type="button" disabled={busy} onClick={reprocess}>Reprocess deterministic</button><button className="secondary-action" type="button" disabled={busy} onClick={copyStructuringPrompt}>Chuẩn hóa bằng ChatGPT Plus</button></div>{structurePrompt && <label className="intake-field"><span className="field-label">Prompt cho ChatGPT Plus</span><textarea rows={10} readOnly value={structurePrompt} onFocus={(event) => event.currentTarget.select()} /></label>}<label className="intake-field"><span className="field-label">Dán câu trả lời ChatGPT đầy đủ</span><textarea rows={12} value={structureResponse} onChange={(event) => setStructureResponse(event.target.value)} placeholder="Dán toàn bộ câu trả lời có marker PO_RESEARCH_V1 và JSON payload." /></label><button className="primary-action" type="button" disabled={busy || !structureResponse.trim()} onClick={() => void applyStructuringResponse()}>{busy ? 'Đang cập nhật…' : 'Cập nhật báo cáo hiện tại'}</button>{report.extraction_error && <p className="field-error">Không thể áp dụng cấu trúc trước đó: {report.extraction_error}</p>}</section>}
     <nav className="report-tabs" aria-label="Research result sections" role="tablist">{tabs.filter((item) => item.visible).map((item) => <button key={item.id} role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}>{item.label}</button>)}</nav>
-    {tab === 'overview' && <section className="research-panel results-panel" aria-label="Overview"><h3>Overview</h3>{data.executive_summary && <p className="executive-summary">{data.executive_summary}</p>}{keyTakeaways.length > 0 && <section><h4>Key takeaways</h4><ul>{keyTakeaways.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}{data.findings.length > 0 && <section><h4>Key insights</h4><div className="insight-grid">{data.findings.map((finding) => { const metrics = findingMetrics(finding.key); return <details className="insight-card" key={finding.key}><summary><span className="field-label">{finding.finding_type} · {finding.evidence_status}</span><strong>{finding.title}</strong><span>{finding.description}</span></summary><div className="insight-card-detail">{scopeLabel(finding.scope) && <p><strong>Scope:</strong> {scopeLabel(finding.scope)}</p>}{metrics.map((metric, index) => <div className="insight-metric" key={`${metric.dimension}-${index}`}><strong>{metric.dimension}:</strong> {metric.value} <EvidenceLinks urls={metric.urls} references={data.evidence_references} /></div>)}{finding.uncertainty && <p><strong>Uncertainty:</strong> {finding.uncertainty}</p>}{finding.po_implications && <p><strong>PO implications:</strong> {finding.po_implications}</p>}{relatedEntityCandidates(finding)}<EvidenceLinks urls={finding.evidence_references} references={data.evidence_references} />{benchmarkAction({ item_type: 'finding', item_key: finding.key }, finding.title)}</div></details>; })}</div></section>}{data.research_gaps.length > 0 && <section><h4>Research gaps</h4><ul>{data.research_gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul></section>}{data.po_recommendations.length > 0 && <section><h4>PO recommendations</h4><ul>{data.po_recommendations.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}{data.findings.length + data.research_gaps.length + data.po_recommendations.length + keyTakeaways.length === 0 && !data.executive_summary && <p>{report.research_status === 'TEXT_ONLY' ? 'Chỉ có nội dung báo cáo gốc; chưa có insight được cấu trúc. Dùng “Chuẩn hóa bằng ChatGPT Plus” để nâng cấp báo cáo này.' : 'Structured report has no overview fields.'}</p>}</section>}
-    {tab === 'insights' && <section className="research-panel results-panel"><h3>Insights</h3><div className="insight-list">{data.findings.map((finding) => { const locations = [...(finding.source_locations || []), ...finding.evidence_references.flatMap((url) => data.evidence_references.filter((source) => source.url === url && source.source_location).map((source) => source.source_location!))]; const excerpt = excerptAtLocations(report.content, locations); const metrics = findingMetrics(finding.key); return <details className="insight-result" key={finding.key} id={`finding-${finding.key}`} open={activeFinding === finding.key}><summary><div><span className="field-label">{finding.finding_type} · {finding.evidence_status}</span><h4>{finding.title}</h4><span>{finding.description}</span></div><span className="unverified-chip">Details</span></summary><div className="insight-result-detail"><p>{finding.description}</p>{metrics.length > 0 && <section><h5>PO-confirmed related observations</h5><ul>{metrics.map((metric, index) => <li key={`${metric.dimension}-${index}`}><strong>{metric.dimension}:</strong> {metric.value} <EvidenceLinks urls={metric.urls} references={data.evidence_references} /></li>)}</ul></section>}{scopeLabel(finding.scope) && <p><strong>Scope:</strong> {scopeLabel(finding.scope)}</p>}{finding.uncertainty && <p><strong>Uncertainty:</strong> {finding.uncertainty}</p>}{finding.po_implications && <p><strong>PO implications:</strong> {finding.po_implications}</p>}{relatedEntityCandidates(finding)}<EvidenceLinks urls={finding.evidence_references} references={data.evidence_references} /><button className="text-button" onClick={() => setActiveFinding(activeFinding === finding.key ? null : finding.key)}>View support in original report</button>{activeFinding === finding.key && <div className="support-excerpt">{excerpt.length ? excerpt.map((line) => <pre key={line}>{line}</pre>) : <p>No reliable source location was provided. Open Full Report and inspect the cited URL manually.</p>}</div>}{benchmarkAction({ item_type: 'finding', item_key: finding.key }, finding.title)}</div></details>; })}</div></section>}
+    {tab === 'overview' && <section className="research-panel results-panel" aria-label="Overview"><h3>Overview</h3>{data.executive_summary && <p className="executive-summary">{data.executive_summary}</p>}{keyTakeaways.length > 0 && <section><h4>Key takeaways</h4><ul>{keyTakeaways.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}{data.findings.length > 0 && <section><h4>Key insights</h4><div className="insight-grid">{data.findings.map((finding) => <article className="insight-card" key={finding.key}><span className="field-label">{finding.finding_type} · {finding.evidence_status}</span><h4>{finding.title}</h4><p className="insight-card-summary">{finding.description}</p><span className="insight-evidence-status">{finding.evidence_references.length ? `${finding.evidence_references.length} source reference${finding.evidence_references.length === 1 ? '' : 's'} · unverified` : 'No source reference · unverified'}</span><button className="secondary-action" onClick={() => { setActiveFinding(finding.key); setTab('insights'); }}>View Insight</button></article>)}</div></section>}{data.research_gaps.length > 0 && <section><h4>Research gaps</h4><ul>{data.research_gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul></section>}{data.po_recommendations.length > 0 && <section><h4>PO recommendations</h4><ul>{data.po_recommendations.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}{data.findings.length + data.research_gaps.length + data.po_recommendations.length + keyTakeaways.length === 0 && !data.executive_summary && <p>{report.research_status === 'TEXT_ONLY' ? 'Chỉ có nội dung báo cáo gốc; chưa có insight được cấu trúc. Dùng “Chuẩn hóa bằng ChatGPT Plus” để nâng cấp báo cáo này.' : 'Structured report has no overview fields.'}</p>}</section>}
+    {tab === 'insights' && <section className="research-panel results-panel"><h3>Insights</h3><div className="insight-list">{data.findings.map((finding) => { const locations = [...(finding.source_locations || []), ...finding.evidence_references.flatMap((url) => data.evidence_references.filter((source) => source.url === url && source.source_location).map((source) => source.source_location!))]; const excerpt = excerptAtLocations(report.content, locations); const metrics = findingMetrics(finding.key); return <details className="insight-result" key={finding.key} id={`finding-${finding.key}`} open={activeFinding === finding.key}><summary><div><span className="field-label">{finding.finding_type} · {finding.evidence_status}</span><h4>{finding.title}</h4></div><span className="unverified-chip">View details</span></summary><div className="insight-result-detail"><section className="insight-finding-copy"><h5>Finding</h5><p>{finding.description}</p></section>{metrics.length > 0 && <section><h5>PO-confirmed related observations</h5><ul>{metrics.map((metric, index) => <li key={`${metric.dimension}-${index}`}><strong>{metric.dimension}:</strong> {metric.value} <EvidenceLinks urls={metric.urls} references={data.evidence_references} /></li>)}</ul></section>}{scopeLabel(finding.scope) && <section><h5>Scope</h5><p>{scopeLabel(finding.scope)}</p></section>}{finding.uncertainty && <section><h5>Uncertainty</h5><p>{finding.uncertainty}</p></section>}{finding.po_implications && <section><h5>PO implications</h5><p>{finding.po_implications}</p></section>}{relatedEntityCandidates(finding)}<section><h5>Evidence</h5><EvidenceLinks urls={finding.evidence_references} references={data.evidence_references} /></section><button className="text-button" onClick={() => setActiveFinding(activeFinding === finding.key ? null : finding.key)}>View support in original report</button>{activeFinding === finding.key && <div className="support-excerpt">{excerpt.length ? excerpt.map((line) => <pre key={line}>{line}</pre>) : <p>No reliable source location was provided. Open Full Report and inspect the cited URL manually.</p>}</div>}{benchmarkAction({ item_type: 'finding', item_key: finding.key }, finding.title)}</div></details>; })}</div></section>}
     {tab === 'entities' && <section className="research-panel results-panel"><h3>Entities</h3><div className="dynamic-card-grid">{data.entities.map((entity) => <article className="dynamic-card" key={entity.key}><span className="field-label">{entity.entity_type}</span><h4>{entity.name}</h4>{Object.entries(entity.attributes).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {String(value)}</p>)}<EvidenceLinks urls={entity.evidence_references} references={data.evidence_references} />{benchmarkAction({ item_type: 'entity', item_key: entity.key })}</article>)}</div></section>}
     {tab === 'benchmark' && <section className="research-panel results-panel benchmark-workspace"><h3>{selectedEntityRows.length > 0 ? 'Research subject comparison' : 'Insight assessment'}</h3><p>Only explicitly selected research subjects appear as rows. Entity type remains visible; an Insight alone never selects its related subjects. Missing observations are shown as Unknown.</p>
       {selectedEntityRows.length > 0 && <>
         <label className="intake-field"><span className="field-label">Add a comparison dimension</span><div className="dimension-add"><input aria-label="PO dimension" value={newDimension} onChange={(event) => setNewDimension(event.target.value)} placeholder="What should the PO compare?" /><button className="secondary-action" disabled={!newDimension.trim() || busy} onClick={() => void addCustomDimension()}>Add dimension</button></div></label>
         {dimensions.length > 0 && <div className="benchmark-table-wrap"><table className="benchmark-table"><thead><tr><th>Comparison target / subject</th>{dimensions.map((dimension) => <th key={dimension.key}>{dimension.name}{dimension.custom ? ' · PO-defined' : ''}</th>)}</tr></thead><tbody>{selectedEntityRows.map((entity) => { const item: BenchmarkSelection = { item_type: 'entity', item_key: entity.key }; const entry = workspace.entries.find((candidate) => candidate.item_type === 'entity' && candidate.item_key === entity.key); return <tr key={entity.key}><th><strong>{entity.name}</strong><small>{entity.entity_type} · explicitly selected</small>{benchmarkAction(item, entity.name)}</th>{dimensions.map((dimension) => { const found = dimension.custom ? null : observation(item, dimension.key); const poValue = dimension.custom ? entry?.dimension_assessments?.[dimension.name] : undefined; const supportKeys = !dimension.custom && found ? supportingFindings(entity.key, dimension.key) : []; const candidates = !dimension.custom && found ? data.findings.filter((finding) => finding.related_entities.includes(entity.key)) : []; const preservedKeys = entry?.observation_finding_links?.[dimension.key] ?? []; return <td key={dimension.key}>{dimension.custom ? <textarea aria-label={`${dimension.name} assessment for ${entity.name}`} value={poValue || ''} onChange={(event) => changeDimensionAssessment(item, dimension.name, event.target.value)} placeholder="PO assessment" /> : found ? <><span>{found.value === null || found.value === undefined || found.value === '' ? 'Unknown / Not provided' : String(found.value)}</span><small>{found.status} · source-provided, not independently verified{found.uncertainty ? ` · ${found.uncertainty}` : ''}</small>{found.urls.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer">Evidence</a>)}{supportKeys.map((key) => { const finding = data.findings.find((candidate) => candidate.key === key); return finding ? <button className="text-button" key={key} onClick={() => { setActiveFinding(key); setTab('insights'); }}>PO-confirmed insight: {finding.title}</button> : <small key={key}>Previously confirmed insight reference unavailable ({key}); preserved without remapping.</small>; })}{!supportKeys.length && <small>No confirmed supporting insight.</small>}{candidates.length > 0 && <label className="observation-link-control"><span>Confirm supporting insight (PO)</span><select aria-label={`Confirm supporting insight for ${entity.name} / ${dimension.name}`} value={supportKeys[0] || ''} onChange={(event) => updateObservationFindingLink(item, dimension.key, event.target.value)}><option value="">No confirmed supporting insight</option>{preservedKeys.filter((key) => !candidates.some((finding) => finding.key === key)).map((key) => <option key={key} value={key}>Unavailable prior reference ({key})</option>)}{candidates.map((finding) => <option key={finding.key} value={finding.key}>{finding.title}</option>)}</select></label>}</> : <span>Unknown / Not provided</span>}</td>; })}</tr>; })}</tbody></table></div>}
-        <section className="benchmark-assessments"><h4>PO assessment and decisions</h4>{selectedEntityRows.map((entity) => { const item: BenchmarkSelection = { item_type: 'entity', item_key: entity.key }; return <details className="benchmark-po-entry" key={entity.key}><summary><strong>{entity.name}</strong><span>Assessment, notes and next action</span></summary>{poAssessmentFields(item, entity.name)}</details>; })}</section>
+        <section className="benchmark-assessments"><h4>PO assessment and decisions</h4>{selectedEntityRows.map((entity) => { const item: BenchmarkSelection = { item_type: 'entity', item_key: entity.key }; return <details className="benchmark-po-entry" key={entity.key}><summary><strong>{entity.name}</strong><span>Assessment, notes and next action</span></summary><div className="benchmark-assessment-entry-actions">{benchmarkAction(item, entity.name)}</div>{poAssessmentFields(item, entity.name)}</details>; })}</section>
       </>}
       {selectedFindings.length > 0 && <section className="benchmark-assessments"><h4>{selectedEntityRows.length > 0 ? 'Supporting insights' : 'Contextual insight assessment'}</h4>{selectedFindings.map(({ selection, finding }) => <details className="benchmark-po-entry" key={finding.key}><summary><strong>{finding.title}</strong><span>{finding.finding_type} · {finding.evidence_status}</span></summary><div className="insight-result-detail"><p>{finding.description}</p>{scopeLabel(finding.scope) && <p><strong>Scope:</strong> {scopeLabel(finding.scope)}</p>}{finding.uncertainty && <p><strong>Uncertainty:</strong> {finding.uncertainty}</p>}<EvidenceLinks urls={finding.evidence_references} references={data.evidence_references} />{poAssessmentFields(selection, finding.title)}</div></details>)}</section>}
       {selectedEntityRows.length === 0 && selectedFindings.length === 0 && <p className="report-history-state">Select an entity or add an insight from its evidence details to begin.</p>}

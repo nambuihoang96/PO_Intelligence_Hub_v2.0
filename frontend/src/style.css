@@ -355,3 +355,88 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
   .form-actions { align-items: stretch; flex-direction: column-reverse; }
   .form-actions a, .form-actions button { width: 100%; }
 }
+
+/* P01.2: readable type and responsive layout for Research Results. */
+.report-viewer {
+  --results-title: 26px;
+  --results-section: 22px;
+  --results-subsection: 19px;
+  --results-body: 15px;
+  --results-control: 14px;
+  --results-meta: 13px;
+  --results-leading: 1.6;
+  color: #354740;
+  font-size: var(--results-body);
+  line-height: var(--results-leading);
+  overflow-wrap: anywhere;
+}
+.content-wrap:has(.report-viewer) { width: min(1240px, calc(100% - 64px)); margin-top: 34px; }
+.report-viewer .report-meta > h2 { font-size: var(--results-title); line-height: 1.3; }
+.report-viewer .report-meta dt { color: #66756e; font-size: var(--results-meta); }
+.report-viewer .report-meta dd { font-size: var(--results-meta); line-height: 1.5; overflow-wrap: anywhere; }
+.report-viewer .results-panel > h3, .report-viewer .full-report h3 { margin: 0; font-size: var(--results-section); line-height: 1.35; }
+.report-viewer .results-panel h4 { margin: 0 0 8px; font-size: var(--results-subsection); line-height: 1.4; }
+.report-viewer .results-panel h5 { margin: 0; font-size: 16px; line-height: 1.4; }
+.report-viewer .results-panel p, .report-viewer .results-panel li { font-size: var(--results-body); line-height: var(--results-leading); }
+.report-viewer .report-tabs button, .report-viewer button, .report-viewer .text-button { font-size: var(--results-control); line-height: 1.4; }
+.report-viewer .field-label, .report-viewer .unverified-chip { font-size: var(--results-meta); line-height: 1.4; }
+.report-viewer .insight-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.report-viewer .insight-card { display: grid; align-content: start; justify-items: start; gap: 10px; min-width: 0; min-height: 230px; padding: 20px; overflow-wrap: anywhere; }
+.report-viewer .insight-card h4 { margin: 0; color: #354a40; font-size: 19px; line-height: 1.4; }
+.report-viewer .insight-card-summary { display: -webkit-box; min-width: 0; margin: 0; overflow: hidden; color: #52635b; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.report-viewer .insight-evidence-status { color: #5d6c64; font-size: var(--results-meta); }
+.report-viewer .insight-card .secondary-action { min-height: 40px; margin-top: auto; font-size: var(--results-control); }
+.report-viewer .insight-list { gap: 16px; }
+.report-viewer .insight-result { min-width: 0; padding: 20px; }
+.report-viewer .insight-result summary { min-width: 0; align-items: center; }
+.report-viewer .insight-result summary > div { min-width: 0; }
+.report-viewer .insight-result summary h4 { margin: 4px 0 0; font-size: 19px; }
+.report-viewer .insight-result-detail { gap: 18px; margin-top: 18px; padding-top: 18px; font-size: var(--results-body); line-height: var(--results-leading); }
+.report-viewer .insight-result-detail section { display: grid; gap: 7px; min-width: 0; }
+.report-viewer .insight-result-detail p { margin: 0; }
+.report-viewer .related-entity-candidates { min-width: 0; padding: 18px; }
+.report-viewer .related-entity-candidates h5 { margin: 0 0 5px; }
+.report-viewer .related-entity-candidates > p { margin: 0; color: #5b6b62; }
+.report-viewer .related-entity-candidates ul { gap: 12px; }
+.report-viewer .related-entity-candidates li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 16px; min-width: 0; padding: 14px 0; border-top: 1px solid #e4eae5; }
+.report-viewer .related-entity-copy { display: grid; gap: 6px; min-width: 0; }
+.report-viewer .related-entity-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; min-width: 0; }
+.report-viewer .related-entity-heading strong { color: #344a40; font-size: 16px; overflow-wrap: anywhere; }
+.report-viewer .related-entity-heading span { color: #586a60; font-size: var(--results-meta); }
+.report-viewer .related-entity-copy > p { margin: 0; color: #506159; }
+.report-viewer .related-entity-attributes { color: #53655b; }
+.report-viewer .related-entity-attributes summary { cursor: pointer; color: #526f46; font-size: var(--results-control); }
+.report-viewer .related-entity-attributes dl { display: grid; gap: 7px; margin: 8px 0 0; }
+.report-viewer .related-entity-attributes dl > div { display: grid; grid-template-columns: minmax(100px, .3fr) minmax(0, 1fr); gap: 10px; }
+.report-viewer .related-entity-attributes dt { color: #68776e; font-size: var(--results-meta); }
+.report-viewer .related-entity-attributes dd { margin: 0; overflow-wrap: anywhere; }
+.report-viewer .related-entity-action { min-width: max-content; }
+.report-viewer .benchmark-assessment-entry-actions { display: flex; justify-content: flex-end; }
+.report-viewer .benchmark-card-actions { align-items: flex-start; }
+.report-viewer .inline-action-success, .report-viewer .inline-action-error { min-width: 0; max-width: 560px; font-size: var(--results-meta); overflow-wrap: anywhere; }
+.report-viewer .inline-diagnostics { margin-top: 5px; color: #596960; }
+.report-viewer .inline-diagnostics summary { cursor: pointer; color: #526f46; font-size: 12px; }
+.report-viewer .inline-diagnostics code { display: block; max-width: 100%; margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-viewer .observation-link-control { font-size: var(--results-meta); line-height: 1.5; }
+.report-viewer .observation-link-control select, .report-viewer .benchmark-po-fields textarea, .report-viewer .benchmark-table td textarea { min-width: 0; font: inherit; font-size: var(--results-control); line-height: 1.5; }
+.report-viewer .benchmark-table { font-size: var(--results-body); }
+.report-viewer .benchmark-table th, .report-viewer .benchmark-table td { overflow-wrap: anywhere; }
+.report-viewer .benchmark-table td small, .report-viewer .benchmark-table tbody th small { font-size: var(--results-meta); line-height: 1.5; }
+.report-viewer .evidence-results span, .report-viewer .evidence-link-list small { color: #5d6d64; font-size: var(--results-meta); line-height: 1.5; }
+.report-viewer .markdown-report { font-size: var(--results-body); line-height: 1.7; }
+.report-viewer .markdown-report table { font-size: var(--results-meta); }
+@media (max-width: 760px) {
+  .content-wrap:has(.report-viewer) { width: calc(100% - 48px); }
+  .report-viewer .related-entity-candidates li { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .report-viewer .related-entity-action { min-width: 0; }
+}
+@media (max-width: 560px) {
+  .content-wrap:has(.report-viewer) { width: calc(100% - 32px); margin-top: 24px; }
+  .report-viewer { --results-title: 24px; --results-section: 21px; --results-subsection: 18px; }
+  .report-viewer .research-panel { padding: 16px; }
+  .report-viewer .insight-card { min-height: 210px; padding: 16px; }
+  .report-viewer .insight-result { padding: 15px; }
+  .report-viewer .report-tabs { gap: 4px; }
+  .report-viewer .report-tabs button { min-height: 40px; padding: 7px 9px; }
+  .report-viewer .related-entity-attributes dl > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
