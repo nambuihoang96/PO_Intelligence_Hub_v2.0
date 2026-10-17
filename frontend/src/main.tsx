@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { ExplorerWorkspace } from './explorer/ExplorerWorkspace';
 import { ResearchWorkspace } from './research/ResearchWorkspace';
 import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import './style.css';
@@ -40,8 +41,8 @@ const pages: Page[] = [
     label: 'Explorer',
     icon: '▦',
     eyebrow: 'APP EXPLORER',
-    title: 'Explore product evidence',
-    intro: 'Review collected product and market evidence in one place.',
+    title: 'Explore app store listings',
+    intro: 'Search store-specific listings by app name, platform, and country.',
     emptyTitle: 'Nothing to explore yet',
     emptyCopy: 'Evidence will appear here after it has been collected by a research run.',
   },
@@ -182,7 +183,7 @@ function App() {
             )}
           </section>
 
-          {researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace /> : <>
+          {researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

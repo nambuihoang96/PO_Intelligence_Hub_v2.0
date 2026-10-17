@@ -119,6 +119,25 @@ class ResearchRunManifest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class AppStoreListing(Base):
+    __tablename__ = "app_store_listings"
+    __table_args__ = (
+        UniqueConstraint("platform", "country", "store_app_id", name="uq_app_store_listings_platform_country_store_id"),
+        CheckConstraint("platform IN ('ios','android')", name="ck_app_store_listings_platform"),
+        CheckConstraint("length(country) = 2 AND country GLOB '[A-Z][A-Z]'", name="ck_app_store_listings_country"),
+        Index("ix_app_store_listings_country_platform_id", "country", "platform", "id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)
+    store_app_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    country: Mapped[str] = mapped_column(String(2), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    developer: Mapped[str] = mapped_column(String(200), nullable=False)
+    listing_url: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class SourceRegistry(Base):
     __tablename__ = "source_registry"
     __table_args__ = (

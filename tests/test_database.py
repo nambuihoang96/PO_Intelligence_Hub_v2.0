@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.app.db import create_database_engine, get_database_path
 
 
-CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence"}
+CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence", "app_store_listings"}
 
 
 class DatabaseMigrationTest(unittest.TestCase):
@@ -198,6 +198,37 @@ class DatabaseMigrationTest(unittest.TestCase):
                         "INSERT INTO source_registry "
                         "(id, name, source_type, license_status, collection_mode, enabled, created_at) "
                         "VALUES ('blocked-auto', 'Unreviewed source', 'web', 'unknown', 'manual', 1, CURRENT_TIMESTAMP)"
+                    )
+        finally:
+            engine.dispose()
+
+    def test_app_listing_registry_enforces_platform_geo_and_store_identity(self) -> None:
+        command.upgrade(self.config, "head")
+        engine = create_database_engine(get_database_path())
+        try:
+            with engine.begin() as connection:
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "INSERT INTO app_store_listings "
+                        "(id, platform, store_app_id, country, title, developer, created_at) "
+                        "VALUES ('bad-platform', 'windows', 'app', 'US', 'Title', 'Dev', CURRENT_TIMESTAMP)"
+                    )
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "INSERT INTO app_store_listings "
+                        "(id, platform, store_app_id, country, title, developer, created_at) "
+                        "VALUES ('bad-country', 'ios', '123', 'USA', 'Title', 'Dev', CURRENT_TIMESTAMP)"
+                    )
+                connection.exec_driver_sql(
+                    "INSERT INTO app_store_listings "
+                    "(id, platform, store_app_id, country, title, developer, created_at) "
+                    "VALUES ('listing-1', 'ios', '123', 'US', 'Title', 'Dev', CURRENT_TIMESTAMP)"
+                )
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "INSERT INTO app_store_listings "
+                        "(id, platform, store_app_id, country, title, developer, created_at) "
+                        "VALUES ('listing-2', 'ios', '123', 'US', 'Duplicate', 'Dev', CURRENT_TIMESTAMP)"
                     )
         finally:
             engine.dispose()

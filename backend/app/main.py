@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
+from backend.app.apps import router as apps_router
 from backend.app.api import router
 from backend.app.config import get_data_root
 from backend.app.db import create_database_engine
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     application = FastAPI(title="PO Intelligence Hub API", version="2.0.0", lifespan=lifespan)
     application.include_router(router)
     application.include_router(sources_router)
+    application.include_router(apps_router)
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(HTTPException, http_error_handler)
 
