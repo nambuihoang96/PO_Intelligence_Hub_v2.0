@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.app.research_data import UniversalResearchData
+
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -421,6 +423,7 @@ class ImportedReportCreate(APIModel):
     os: str = Field(pattern="^(iOS|Android|Both)$")
     research_period: str | None = Field(default=None, max_length=200)
     content: str = Field(min_length=1, max_length=2_000_000)
+    structured_json: str | None = Field(default=None, max_length=2_000_000)
 
     @field_validator("research_period")
     @classmethod
@@ -454,8 +457,29 @@ class ImportedReportSummary(APIModel):
     verification_status: str = "unverified"
 
 
+class BenchmarkSelection(APIModel):
+    item_type: str = Field(pattern="^(entity|finding|dimension)$")
+    item_key: str = Field(min_length=1, max_length=120)
+
+
+class BenchmarkSelectionsUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    selections: list[BenchmarkSelection] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_selections(self) -> "BenchmarkSelectionsUpdate":
+        pairs = [(selection.item_type, selection.item_key) for selection in self.selections]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("benchmark selections must be unique")
+        return self
+
+
 class ImportedReportRead(ImportedReportSummary):
     content: str
+    parse_status: str
+    research_data: UniversalResearchData
+    extraction_error: str | None
+    benchmark_selections: list[BenchmarkSelection]
 
 
 class ImportedReportCreated(ImportedReportRead):

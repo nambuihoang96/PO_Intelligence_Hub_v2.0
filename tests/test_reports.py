@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,6 +93,120 @@ class ImportedReportsAPITest(unittest.TestCase):
         create_contract = schema["components"]["schemas"]["ImportedReportCreate"]
         self.assertEqual(create_contract["additionalProperties"], False)
         self.assertIn("content", create_contract["required"])
+        self.assertIn("research_data", schema["components"]["schemas"]["ImportedReportRead"]["properties"])
+        self.assertIn("/api/v1/reports/{report_id}/benchmark-selections", schema["paths"])
+
+    def test_unstructured_report_extracts_only_structure_and_never_marks_urls_verified(self) -> None:
+        raw = "# Local transit patterns\n\n- Weekend demand differs\n- Coverage remains unclear\n\n| Area | Observation |\n| --- | --- |\n| North | Later service |\n\nSee https://example.com/source.\n"
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = response.json()
+        self.assertEqual(saved["content"], raw)
+        self.assertEqual(saved["parse_status"], "PARTIAL")
+        self.assertEqual(saved["research_data"]["sections"][0]["heading"], "Local transit patterns")
+        self.assertEqual(saved["research_data"]["sections"][0]["lists"][0]["items"], ["Weekend demand differs", "Coverage remains unclear"])
+        self.assertEqual(saved["research_data"]["sections"][0]["tables"][0]["columns"], ["Area", "Observation"])
+        self.assertEqual(saved["research_data"]["evidence_references"][0]["verified"], False)
+        self.assertEqual(saved["research_data"]["findings"], [])
+        self.assertEqual(saved["research_data"]["entities"], [])
+
+    def test_plain_text_without_deterministic_structure_needs_structuring(self) -> None:
+        response = self.client.post("/api/v1/reports", json=self.payload("A narrative without headings or references."))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["parse_status"], "NEEDS_STRUCTURING")
+        self.assertEqual(response.json()["research_data"]["sections"], [])
+
+    def test_headingless_markdown_table_and_list_are_still_parsed(self) -> None:
+        raw = "- Sample A\n- Sample B\n\n| Factor | Observation |\n| --- | --- |\n| Timing | Variable |"
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 201)
+        saved = response.json()
+        self.assertEqual(saved["parse_status"], "PARTIAL")
+        section = saved["research_data"]["sections"][0]
+        self.assertEqual(section["heading"], "Unheaded content")
+        self.assertEqual(section["tables"][0]["rows"], [["Timing", "Variable"]])
+        self.assertEqual(section["lists"][0]["items"], ["Sample A", "Sample B"])
+
+    def test_fenced_structured_json_is_detected_in_report_without_manual_reentry(self) -> None:
+        raw = (
+            "# Regional water services\n\n"
+            "Source: https://example.com/water\n\n"
+            "```json\n"
+            + json.dumps({"entities": [{"key": "utility-one", "entity_type": "operator", "name": "Water operator"}], "findings": [], "evidence_references": [{"url": "https://example.com/water"}]})
+            + "\n```"
+        )
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = response.json()
+        self.assertEqual(saved["content"], raw)
+        self.assertEqual(saved["parse_status"], "PARSED")
+        self.assertEqual(saved["research_data"]["entities"][0]["name"], "Water operator")
+
+    def test_valid_domain_neutral_structured_import_and_benchmark_selection(self) -> None:
+        raw = "# Regional payment options\n\nSettlement time observations.\n\nSources: https://example.com/payments"
+        structured = {
+            "sections": [{"heading": "Regional payment options", "content": "Settlement time observations.", "hierarchy": 1, "source_location": "line:1"}],
+            "entities": [{"key": "network-one", "entity_type": "service", "name": "Regional network", "attributes": {"settlement_days": 2}, "evidence_references": ["https://example.com/payments"]}],
+            "findings": [{"key": "finding-one", "finding_type": "operational observation", "title": "Settlement varies", "description": "The reported settlement time differs by provider.", "related_entities": ["network-one"], "evidence_references": ["https://example.com/payments"], "scope": {"region": "US"}, "evidence_status": "unverified"}],
+            "evidence_references": [{"url": "https://example.com/payments", "title": "Payment documentation", "source_location": "line:5", "verified": False}],
+            "benchmark_dimensions": [{"key": "settlement", "name": "Settlement window", "related_entities": ["network-one"], "evidence_references": ["https://example.com/payments"], "observations": [{"entity_key": "network-one", "value": "2 days", "evidence_references": ["https://example.com/payments"]}]}],
+            "research_gaps": ["Independent measurements were not available."],
+            "po_recommendations": ["Validate against operational needs."],
+        }
+        response = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(structured)})
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = response.json()
+        self.assertEqual(saved["parse_status"], "PARSED")
+        self.assertEqual(saved["research_data"]["findings"][0]["title"], "Settlement varies")
+        report_id = saved["id"]
+        selected = self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": [{"item_type": "finding", "item_key": "finding-one"}, {"item_type": "dimension", "item_key": "settlement"}]})
+        self.assertEqual(selected.status_code, 200, selected.text)
+        reopened = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(len(reopened["benchmark_selections"]), 2)
+
+    def test_invalid_structured_json_preserves_original_and_reports_specific_extraction_error(self) -> None:
+        raw = "# Raw report\n\nKeep this text."
+        response = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": "{invalid"})
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = response.json()
+        self.assertEqual(saved["content"], raw)
+        self.assertEqual(saved["parse_status"], "PARTIAL")
+        self.assertIn("Expecting property name", saved["extraction_error"])
+
+    def test_structured_relations_must_resolve_to_report_entities_and_source_urls(self) -> None:
+        raw = "# Report\n\nSource: https://example.com/reference"
+        structured = {
+            "entities": [],
+            "findings": [{"key": "claim", "finding_type": "observation", "title": "Claim", "description": "Claim", "related_entities": ["missing"], "evidence_references": ["https://example.com/reference"]}],
+            "evidence_references": [{"url": "https://example.com/reference", "verified": False}],
+        }
+        response = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(structured)})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["parse_status"], "PARTIAL")
+        self.assertIn("unknown entity keys", response.json()["extraction_error"])
+
+    def test_benchmark_selection_rejects_unknown_items(self) -> None:
+        report_id = self.client.post("/api/v1/reports", json=self.payload()).json()["id"]
+        response = self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": [{"item_type": "finding", "item_key": "missing"}]})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "INVALID_BENCHMARK_SELECTION")
+
+    def test_unstructured_topics_are_not_mapped_to_business_taxonomies(self) -> None:
+        samples = (
+            "# Puzzle market\n\nA report about game products.",
+            "# ASMR market\n\nA report about video content.",
+            "# Drama streaming products\n\nA report about episodic services.",
+            "# Utility providers\n\nA report about software services.",
+            "# Advertising monetization\n\nA report about ad delivery.",
+            "# Municipal water operations\n\nA report about an unconfigured research topic.",
+        )
+        for sample in samples:
+            with self.subTest(topic=sample.splitlines()[0]):
+                result = self.client.post("/api/v1/reports", json=self.payload(sample)).json()
+                self.assertEqual(result["research_data"]["sections"][0]["heading"], sample.splitlines()[0][2:])
+                self.assertEqual(result["research_data"]["findings"], [])
+                self.assertEqual(result["research_data"]["entities"], [])
+                self.assertEqual(result["research_data"]["benchmark_dimensions"], [])
 
     def test_import_does_not_change_existing_research_run(self) -> None:
         project = self.client.post("/api/v1/projects", json={"name": "Existing Project"}).json()

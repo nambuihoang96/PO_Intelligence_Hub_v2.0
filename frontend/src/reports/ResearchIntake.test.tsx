@@ -7,6 +7,8 @@ const report = {
   id: 'saved-report', question: 'How do learning apps engage children?', geo: 'US', os: 'Both' as const,
   research_period: '2025-2026', content_sha256: 'a'.repeat(64), origin: 'chatgpt_user_import' as const,
   imported_at: '2026-10-17T10:00:00Z', verification_status: 'unverified' as const,
+  parse_status: 'PARTIAL' as const, extraction_error: null, benchmark_selections: [],
+  research_data: { sections: [], entities: [], findings: [], evidence_references: [], benchmark_dimensions: [], research_gaps: [], po_recommendations: [] },
   content: '# Executive summary\n\nA sourced finding [Source](https://example.com).\n\n## Research gaps\n\nNot available.\n\n<script>alert(1)</script>',
 };
 
@@ -20,12 +22,14 @@ describe('ChatGPT research intake', () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState({}, '', '/'); });
 
   it('builds a scoped prompt with market-first and anti-inference safeguards', () => {
-    const prompt = buildResearchPrompt({ question: 'Compare puzzle games', geo: 'US', os: 'iOS', researchPeriod: '2025', type: 'Benchmark' });
-    expect(prompt).toContain('Compare puzzle games');
-    expect(prompt).toContain('Analyze the market and category first');
-    expect(prompt).toContain('Do not infer downloads, revenue, market share, or growth');
-    expect(prompt).toContain('# Benchmark candidates');
-    expect(prompt).toContain('Keep iOS and Android findings separate');
+    const prompt = buildResearchPrompt({ question: 'Compare regional payment products', geo: 'US', os: 'Web', researchPeriod: '2025' });
+    expect(prompt).toContain('Compare regional payment products');
+    expect(prompt).toContain('do not assume an industry or taxonomy');
+    expect(prompt).toContain('open taxonomy label');
+    expect(prompt).toContain('Do not force irrelevant sections');
+    expect(prompt).toContain('evidence_references');
+    expect(prompt).not.toContain('# Benchmark candidates');
+    expect(prompt).not.toContain('iOS and Android findings separate');
   });
 
   it('copies the prompt for ChatGPT without calling an AI service', async () => {
@@ -37,7 +41,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Compare kids learning apps' } });
     fireEvent.click(screen.getByRole('button', { name: /Copy prompt for ChatGPT/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
-    expect(writeText.mock.calls[0][0]).toContain('Analyze the market and category first');
+    expect(writeText.mock.calls[0][0]).toContain('do not assume an industry or taxonomy');
     expect(await screen.findByText(/Prompt đã được sao chép/)).toBeTruthy();
   });
 
@@ -92,6 +96,26 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('link', { name: 'Source' }).getAttribute('href')).toBe('https://example.com/');
     expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Mục lục' })).toBeTruthy();
+  });
+
+  it('renders domain-neutral structured data and saves a selected finding as a benchmark item', async () => {
+    const structured = {
+      ...report,
+      parse_status: 'PARSED' as const,
+      research_data: {
+        ...report.research_data,
+        entities: [{ key: 'entity-a', entity_type: 'service', name: 'Regional transfer network', attributes: { settlement_window: 'same day' }, evidence_references: ['https://example.com/'] }],
+        findings: [{ key: 'finding-a', finding_type: 'operational insight', title: 'Settlement speed differs', description: 'The two observed options report different settlement windows.', related_entities: ['entity-a'], evidence_references: ['https://example.com/'], scope: { region: 'US' }, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: 'Validate merchant needs before comparison.' }],
+        evidence_references: [{ url: 'https://example.com/', title: 'Source', source_location: 'line:3', verified: false }],
+      },
+    };
+    mockFetch((url, init) => url.includes('/benchmark-selections') ? { ...structured, benchmark_selections: JSON.parse(String(init.body)).selections } : structured);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    const checkbox = await screen.findByRole('checkbox', { name: 'Add finding Settlement speed differs to benchmark' });
+    fireEvent.click(checkbox);
+    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Add finding Settlement speed differs to benchmark' }) as HTMLInputElement).checked).toBe(true));
+    expect(await screen.findByText('Selected benchmark items (1)')).toBeTruthy();
   });
 
   it('validates missing metadata and does not send an import', async () => {
