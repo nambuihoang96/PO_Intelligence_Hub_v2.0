@@ -62,6 +62,40 @@ class ResearchAPITest(unittest.TestCase):
         self.assertEqual(response.json()["error"]["code"], "VALIDATION_ERROR")
         self.assertTrue(response.json()["error"]["details"]["errors"])
 
+    def test_plan_comparison_period_is_optional_and_edits_create_a_new_version(self) -> None:
+        project = self.create_project()
+        initial_response = self.client.post(
+            f"/api/v1/projects/{project['id']}/plans",
+            json={
+                "question": "Research without a comparison period",
+                "source_policy": {"requested_sources": ["Apple App Store", "Google Play"]},
+            },
+        )
+        self.assertEqual(initial_response.status_code, 201, initial_response.text)
+        initial = initial_response.json()
+        self.assertIsNone(initial["comparison_period_start"])
+        self.assertIsNone(initial["comparison_period_end"])
+        self.assertEqual(initial["source_policy"]["requested_sources"], ["Apple App Store", "Google Play"])
+
+        revised_response = self.client.put(
+            f"/api/v1/projects/{project['id']}/plans/{initial['version']}",
+            json={"question": "Revised research question"},
+        )
+        self.assertEqual(revised_response.status_code, 200, revised_response.text)
+        revised = revised_response.json()
+        self.assertEqual(revised["version"], initial["version"] + 1)
+        self.assertNotEqual(revised["id"], initial["id"])
+        self.assertEqual(
+            self.client.get(f"/api/v1/projects/{project['id']}/plans/{initial['version']}").json()["question"],
+            "Research without a comparison period",
+        )
+        stale_edit = self.client.put(
+            f"/api/v1/projects/{project['id']}/plans/{initial['version']}",
+            json={"question": "Must not overwrite the latest version"},
+        )
+        self.assertEqual(stale_edit.status_code, 409)
+        self.assertEqual(stale_edit.json()["error"]["code"], "STALE_PLAN_VERSION")
+
     def test_plan_validation_and_versioned_creation(self) -> None:
         project = self.create_project()
         invalid = self.client.post(

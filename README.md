@@ -1,6 +1,6 @@
 # PO Intelligence Hub V2
 
-Local-first application scaffold for PO Intelligence Hub V2. The current delivery includes the **V2-001 application shell** and **V2-002 local SQLite metadata schema**. Research behavior, AI, and source integrations are not implemented.
+Local-first application for PO Intelligence Hub V2. Current delivery includes the **V2-001 application shell**, **V2-002 local SQLite metadata schema**, **V2-003 typed research API**, **V2-004 information architecture**, and **V2-005 project setup and versioned plan editor**. Research collection, AI, and source integrations are not implemented.
 
 ## Requirements
 
@@ -62,4 +62,4 @@ The checks cover the `/health` response, default data-root location, and fronten
 
 ## UI status
 
-The navigation is a placeholder for future sections and clearly labels them `Coming later`. The current shell reports `Data chưa kết nối`.
+The Research workspace supports project setup and creating or editing versioned research plans. An edit appends a new version; older versions remain available and read-only. Primary and comparison periods are optional, and source preferences are recorded without connecting to or collecting from those sources. Explorer, Sources, Reports, and research-run execution remain future work.

@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { ResearchWorkspace } from './research/ResearchWorkspace';
 import './style.css';
 
 type Page = {
@@ -111,6 +112,11 @@ function EmptyState({ page }: { page: Page }) {
 function App() {
   const page = currentPage();
   const researchPage = page.path.startsWith('/research');
+  const projectSelected = Boolean(new URLSearchParams(window.location.search).get('projectId'));
+  const pageTitle = page.path === '/research/new' ? 'Create a research project' : projectSelected ? 'Research plan' : page.title;
+  const pageIntro = page.path === '/research/new'
+    ? 'Set up a project, then draft its first research plan.'
+    : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
 
   return (
     <div className="app-shell">
@@ -159,8 +165,8 @@ function App() {
         <div className="content-wrap">
           <section className="page-heading" aria-labelledby="page-title">
             <div className="eyebrow">{page.eyebrow}</div>
-            <h1 id="page-title">{page.title}</h1>
-            <p className="intro">{page.intro}</p>
+            <h1 id="page-title">{pageTitle}</h1>
+            <p className="intro">{pageIntro}</p>
             {page.path === '/' && (
               <div className="home-actions">
                 <a className="primary-action" href="/research">Open research workspace <span aria-hidden="true">→</span></a>
@@ -175,14 +181,15 @@ function App() {
             )}
           </section>
 
-          <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
-          <EmptyState page={page} />
-
-          <aside className="connection-note" aria-label="Data connection status">
-            <span className="connection-icon" aria-hidden="true">i</span>
-            <div><strong>No workspace data connected</strong><span>This screen does not contain sample or generated research data.</span></div>
-            <span className="note-tag">LOCAL ONLY</span>
-          </aside>
+          {researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : <>
+            <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
+            <EmptyState page={page} />
+            <aside className="connection-note" aria-label="Data connection status">
+              <span className="connection-icon" aria-hidden="true">i</span>
+              <div><strong>No workspace data connected</strong><span>This screen does not contain sample or generated research data.</span></div>
+              <span className="note-tag">LOCAL ONLY</span>
+            </aside>
+          </>}
         </div>
 
         <footer className="page-footer"><span>PO INTELLIGENCE HUB</span><span>VERSION 2.0 · LOCAL FIRST</span></footer>
