@@ -7,7 +7,7 @@ const report = {
   id: 'saved-report', question: 'How do learning apps engage children?', geo: 'US', os: 'Both' as const,
   research_period: '2025-2026', content_sha256: 'a'.repeat(64), origin: 'chatgpt_user_import' as const,
   imported_at: '2026-10-17T10:00:00Z', verification_status: 'unverified' as const,
-  parse_status: 'PARTIAL' as const, extraction_error: null, benchmark_selections: [],
+  parse_status: 'PARTIAL' as const, extraction_error: null, benchmark_selections: [], benchmark_workspace: { custom_dimensions: [], entries: [] },
   research_data: { sections: [], entities: [], findings: [], evidence_references: [], benchmark_dimensions: [], research_gaps: [], po_recommendations: [] },
   content: '# Executive summary\n\nA sourced finding [Source](https://example.com).\n\n## Research gaps\n\nNot available.\n\n<script>alert(1)</script>',
 };
@@ -91,6 +91,7 @@ describe('ChatGPT research intake', () => {
     cleanup();
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Full Report' }));
     expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Research gaps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Source' }).getAttribute('href')).toBe('https://example.com/');
@@ -109,13 +110,34 @@ describe('ChatGPT research intake', () => {
         evidence_references: [{ url: 'https://example.com/', title: 'Source', source_location: 'line:3', verified: false }],
       },
     };
-    mockFetch((url, init) => url.includes('/benchmark-selections') ? { ...structured, benchmark_selections: JSON.parse(String(init.body)).selections } : structured);
+    let persisted = structured;
+    mockFetch((url, init) => {
+      if (url.includes('/benchmark-selections')) { persisted = { ...persisted, benchmark_selections: JSON.parse(String(init.body)).selections }; return persisted; }
+      if (url.includes('/benchmark-workspace')) { persisted = { ...persisted, benchmark_workspace: JSON.parse(String(init.body)) }; return persisted; }
+      return persisted;
+    });
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    const checkbox = await screen.findByRole('checkbox', { name: 'Add finding Settlement speed differs to benchmark' });
-    fireEvent.click(checkbox);
-    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Add finding Settlement speed differs to benchmark' }) as HTMLInputElement).checked).toBe(true));
-    expect(await screen.findByText('Selected benchmark items (1)')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Insights' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark' }));
+    await waitFor(() => expect(screen.getByText('Settlement speed differs')).toBeTruthy());
+    fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
+    expect(await screen.findByText('Settlement speed differs')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('PO Assessment'), { target: { value: 'Worth validating' } });
+    fireEvent.change(screen.getByLabelText('Next Action'), { target: { value: 'Check source sample' } });
+    fireEvent.change(screen.getByLabelText('PO dimension'), { target: { value: 'Evidence quality' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add dimension' }));
+    const customValue = await screen.findByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement;
+    fireEvent.change(customValue, { target: { value: 'Moderate confidence for PO use' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO assessment and actions' }));
+    expect(await screen.findByRole('status')).toBeTruthy();
+    await waitFor(() => expect((persisted.benchmark_workspace.entries[0] as { po_assessment: string }).po_assessment).toBe('Worth validating'));
+    cleanup();
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    expect((await screen.findByLabelText('PO Assessment') as HTMLTextAreaElement).value).toBe('Worth validating');
+    expect((screen.getByLabelText('Next Action') as HTMLTextAreaElement).value).toBe('Check source sample');
+    expect((screen.getByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
   });
 
   it('validates missing metadata and does not send an import', async () => {
