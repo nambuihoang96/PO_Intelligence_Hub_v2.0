@@ -37,11 +37,25 @@ function Test-PoHubOpenApiCompatibility {
     }
 }
 
-function Test-PoHubPythonProcess {
-    param([Parameter(Mandatory = $true)][string]$ProcessName)
+function Test-PoHubLauncherOwnership {
+    param(
+        [Parameter(Mandatory = $true)]$Record,
+        [Parameter(Mandatory = $true)][int]$ListenerProcessId,
+        [Parameter(Mandatory = $true)][datetime]$ActualProcessStartTime,
+        [Parameter(Mandatory = $true)][string]$Workspace,
+        [Parameter(Mandatory = $true)][string]$PythonExecutable
+    )
 
-    # The caller only uses this after port 8000 has positively identified itself
-    # as an outdated PO Hub API through /health and /openapi.json. CIM command-line
-    # inspection is unavailable to some Windows users, so use the listener's PID.
-    return $ProcessName -match '(?i)^pythonw?(?:\.exe)?$'
+    try {
+        $recordWorkspace = [System.IO.Path]::GetFullPath([string]$Record.workspace)
+        $recordPython = [System.IO.Path]::GetFullPath([string]$Record.python_executable)
+        $expectedWorkspace = [System.IO.Path]::GetFullPath($Workspace)
+        $expectedPython = [System.IO.Path]::GetFullPath($PythonExecutable)
+        $recordStart = [DateTimeOffset]::Parse([string]$Record.process_started_utc).UtcDateTime.Ticks
+    } catch { return $false }
+
+    return ([int]$Record.process_id -eq $ListenerProcessId) -and
+        ($recordWorkspace.Equals($expectedWorkspace, [System.StringComparison]::OrdinalIgnoreCase)) -and
+        ($recordPython.Equals($expectedPython, [System.StringComparison]::OrdinalIgnoreCase)) -and
+        ($recordStart -eq $ActualProcessStartTime.ToUniversalTime().Ticks)
 }

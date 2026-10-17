@@ -33,6 +33,8 @@ if ($LASTEXITCODE -ne 0) {
 
 $backendAlreadyRunning = $false
 $frontendAlreadyRunning = $false
+$logsPath = Join-Path $workspace 'logs'
+$launcherRecordPath = Join-Path $logsPath 'backend-launch.json'
 
 function Get-PortOwnerDescription([int]$Port) {
     $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -62,26 +64,34 @@ $backendIsPoHub = $false
         $owner = Get-PortOwnerDescription 8000
         if ($backendIsPoHub) {
             $ownerIds = @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
-            $staleProcesses = @()
+            $ownedProcessIds = @()
+            $launcherRecord = $null
+            if (Test-Path -LiteralPath $launcherRecordPath) {
+                try { $launcherRecord = Get-Content -Raw -LiteralPath $launcherRecordPath | ConvertFrom-Json } catch { }
+            }
             foreach ($ownerId in $ownerIds) {
                 $processInfo = Get-Process -Id $ownerId -ErrorAction SilentlyContinue
-                if ($processInfo -and (Test-PoHubPythonProcess -ProcessName $processInfo.ProcessName)) {
-                    $staleProcesses += [int]$ownerId
-                }
+                try {
+                    if ($processInfo -and $launcherRecord -and (Test-PoHubLauncherOwnership -Record $launcherRecord -ListenerProcessId ([int]$ownerId) -ActualProcessStartTime $processInfo.StartTime -Workspace $workspace -PythonExecutable $venvPython)) {
+                        $ownedProcessIds += [int]$ownerId
+                    }
+                } catch { }
             }
 
-            if ($staleProcesses.Count -eq $ownerIds.Count -and $staleProcesses.Count -gt 0) {
-                Write-Host "Found an outdated PO Hub Python backend on port 8000 ($owner). Stopping it and starting the current backend..."
-                foreach ($processId in $staleProcesses) { Stop-Process -Id $processId -Force -ErrorAction Stop }
+            if ($ownedProcessIds.Count -eq $ownerIds.Count -and $ownedProcessIds.Count -gt 0) {
+                Write-Host "Found an outdated PO Hub backend that this workspace launcher started ($owner). Restarting it..."
+                foreach ($processId in $ownedProcessIds) { Stop-Process -Id $processId -Force -ErrorAction Stop }
+                Remove-Item -LiteralPath $launcherRecordPath -Force -ErrorAction SilentlyContinue
                 $portReleased = $false
                 for ($attempt = 0; $attempt -lt 15; $attempt++) {
                     if (-not (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)) { $portReleased = $true; break }
                     Start-Sleep -Milliseconds 500
                 }
-                if (-not $portReleased) { throw "Stopped the outdated PO Hub backend, but port 8000 did not become free. Check the process using port 8000, then run run.bat again. SQLite data was not changed." }
+                if (-not $portReleased) { throw "Stopped the outdated PO Hub backend started by this launcher, but port 8000 did not become free. Check the process using port 8000, then run run.bat again. SQLite data was not changed." }
             } else {
                 $missingOperations = if ($compatibility) { $compatibility.MissingOperations -join ', ' } else { 'OpenAPI compatibility could not be verified.' }
-                throw "Port 8000 is used by an outdated PO Intelligence Hub API ($owner). Missing: $missingOperations. Its listener could not be safely identified as a Python process, so it was left running. Stop that exact old PO Hub process, then run run.bat again. SQLite data was not changed."
+                $pidList = if ($ownerIds.Count) { $ownerIds -join ', ' } else { 'unknown' }
+                throw "Port 8000 is used by an outdated PO Intelligence Hub API ($owner). Missing: $missingOperations. PID(s): $pidList. This process has no valid ownership record from this workspace launcher, so it was left running. In PowerShell, confirm the PID belongs to this old PO Hub window, then run: Stop-Process -Id <PID>. After it stops, double-click run.bat again. SQLite data was not changed."
             }
         } else {
             throw "Port 8000 is used by $owner and does not expose the expected PO Hub API. The process was not stopped. Close it manually, then retry."
@@ -164,6 +174,16 @@ if (-not $backendAlreadyRunning) {
         if (-not $compatibility.Compatible) {
             throw "The newly started backend is missing required Results API operations: $($compatibility.MissingOperations -join ', '). See $stderrLog."
         }
+        $launcherRecord = @{
+            workspace = [System.IO.Path]::GetFullPath($workspace)
+            python_executable = [System.IO.Path]::GetFullPath($venvPython)
+            process_id = [int]$backend.Id
+            process_started_utc = $backend.StartTime.ToUniversalTime().ToString('o')
+        } | ConvertTo-Json
+        New-Item -ItemType Directory -Force -Path $logsPath | Out-Null
+        $recordTempPath = "$launcherRecordPath.tmp"
+        [System.IO.File]::WriteAllText($recordTempPath, $launcherRecord, [System.Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $recordTempPath -Destination $launcherRecordPath -Force
     } catch {
         $backend.Refresh()
         if (-not $backend.HasExited) { Stop-Process -Id $backend.Id -Force }
@@ -225,5 +245,11 @@ try {
     if ($backend -and -not $frontendAlreadyRunning) {
         $backend.Refresh()
         if (-not $backend.HasExited) { Stop-Process -Id $backend.Id -Force }
+        if (Test-Path -LiteralPath $launcherRecordPath) {
+            try {
+                $record = Get-Content -Raw -LiteralPath $launcherRecordPath | ConvertFrom-Json
+                if ([int]$record.process_id -eq [int]$backend.Id) { Remove-Item -LiteralPath $launcherRecordPath -Force }
+            } catch { }
+        }
     }
 }

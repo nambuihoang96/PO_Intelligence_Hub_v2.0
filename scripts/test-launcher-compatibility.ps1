@@ -56,8 +56,19 @@ $result = Test-PoHubOpenApiCompatibility $wrongService
 Assert-Equal $result.IsPoHub $false 'A different service occupying the port must not be identified as the Hub'
 Assert-Equal $result.Compatible $false 'A different service must be rejected'
 
-Assert-Equal (Test-PoHubPythonProcess -ProcessName 'python') $true 'A Python process serving the positively identified stale PO Hub API should be restartable'
-Assert-Equal (Test-PoHubPythonProcess -ProcessName 'python.exe') $true 'A Python executable process should be recognized'
-Assert-Equal (Test-PoHubPythonProcess -ProcessName 'node') $false 'A non-Python listener must not be stopped automatically'
+ $workspace = Split-Path -Parent $PSScriptRoot
+ $pythonExecutable = Join-Path $workspace '.venv\Scripts\python.exe'
+ $actualStartTime = [datetime]::SpecifyKind([datetime]'2026-10-18T10:00:00.1234567', [DateTimeKind]::Utc)
+ $record = [pscustomobject]@{
+    workspace = [System.IO.Path]::GetFullPath($workspace)
+    python_executable = [System.IO.Path]::GetFullPath($pythonExecutable)
+    process_id = 4567
+    process_started_utc = $actualStartTime.ToString('o')
+ }
+Assert-Equal (Test-PoHubLauncherOwnership -Record $record -ListenerProcessId 4567 -ActualProcessStartTime $actualStartTime -Workspace $workspace -PythonExecutable $pythonExecutable) $true 'A matching launcher receipt, PID, start time, and workspace should be trusted'
+Assert-Equal (Test-PoHubLauncherOwnership -Record $record -ListenerProcessId 4568 -ActualProcessStartTime $actualStartTime -Workspace $workspace -PythonExecutable $pythonExecutable) $false 'A different listener PID must not be stopped'
+Assert-Equal (Test-PoHubLauncherOwnership -Record $record -ListenerProcessId 4567 -ActualProcessStartTime $actualStartTime.AddSeconds(1) -Workspace $workspace -PythonExecutable $pythonExecutable) $false 'A reused PID with a different start time must not be stopped'
+Assert-Equal (Test-PoHubLauncherOwnership -Record $record -ListenerProcessId 4567 -ActualProcessStartTime $actualStartTime -Workspace (Join-Path $workspace 'other') -PythonExecutable $pythonExecutable) $false 'A receipt from another workspace must not be trusted'
+Assert-Equal (Test-PoHubLauncherOwnership -Record $record -ListenerProcessId 4567 -ActualProcessStartTime $actualStartTime -Workspace $workspace -PythonExecutable 'C:\Python312\python.exe') $false 'A receipt from another Python environment must not be trusted'
 
-Write-Host 'Launcher compatibility tests passed (7 cases).'
+Write-Host 'Launcher compatibility tests passed (9 cases).'

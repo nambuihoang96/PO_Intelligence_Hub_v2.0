@@ -4,6 +4,7 @@ import { extractHeadings, MarkdownReport } from './MarkdownReport';
 import { buildStructuringPrompt } from './researchPrompt';
 
 type Tab = 'overview' | 'insights' | 'entities' | 'benchmark' | 'evidence' | 'report';
+type WorkspaceSaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
 
 function excerptAtLocations(content: string, locations: string[]): string[] {
   const lines = content.split(/\r?\n/);
@@ -47,12 +48,24 @@ function preserveLocalBenchmarkDraft(server: BenchmarkWorkspace, local: Benchmar
   };
 }
 
+function workspaceFingerprint(workspace: BenchmarkWorkspace): string {
+  const sortRecord = (value: Record<string, string | string[]> = {}) => Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
+  const entries = [...workspace.entries].filter((entry) => Boolean(entry.po_assessment || entry.notes || entry.next_action || Object.keys(entry.dimension_assessments || {}).length || Object.keys(entry.observation_finding_links || {}).length)).map((entry) => ({
+    ...entry,
+    dimension_assessments: sortRecord(entry.dimension_assessments),
+    observation_finding_links: sortRecord(entry.observation_finding_links ?? {}),
+  })).sort((a, b) => `${a.item_type}:${a.item_key}`.localeCompare(`${b.item_type}:${b.item_key}`));
+  return JSON.stringify({ custom_dimensions: workspace.custom_dimensions, entries });
+}
+
 export function ReportViewer({ reportId }: { reportId: string }) {
   const [report, setReport] = useState<ImportedReport | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>('saved');
+  const [workspaceSaveError, setWorkspaceSaveError] = useState('');
   const [tab, setTab] = useState<Tab>('overview');
   const [structureResponse, setStructureResponse] = useState('');
   const [structurePrompt, setStructurePrompt] = useState('');
@@ -63,17 +76,45 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const [itemFeedback, setItemFeedback] = useState<Record<string, { kind: 'success' | 'error'; text: string; diagnostics?: string }>>({});
   const reportRef = useRef<ImportedReport | null>(null);
   const workspaceRef = useRef<BenchmarkWorkspace>(blankWorkspace());
+  const confirmedWorkspaceRef = useRef<BenchmarkWorkspace>(blankWorkspace());
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mutationSequenceRef = useRef(0);
   const latestItemMutationRef = useRef<Record<string, number>>({});
+  const reportLoadSequenceRef = useRef(0);
   const headings = useMemo(() => report ? extractHeadings(report.content) : [], [report]);
   const imported = new URLSearchParams(window.location.search).has('imported');
 
   useEffect(() => {
+    let active = true;
+    const loadSequence = ++reportLoadSequenceRef.current;
     reportApi.get(reportId).then((value) => {
-      applyLocalState(value, includeSelectedEntries(value.benchmark_workspace || blankWorkspace(), value.benchmark_selections));
-    }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Không mở được báo cáo.')).finally(() => setLoading(false));
+      if (!active || loadSequence !== reportLoadSequenceRef.current) return;
+      const initialWorkspace = includeSelectedEntries(value.benchmark_workspace || blankWorkspace(), value.benchmark_selections);
+      confirmedWorkspaceRef.current = initialWorkspace;
+      applyLocalState(value, initialWorkspace);
+      setWorkspaceSaveState('saved');
+    }).catch((reason: unknown) => { if (active && loadSequence === reportLoadSequenceRef.current) setError(reason instanceof Error ? reason.message : 'Không mở được báo cáo.'); }).finally(() => { if (active && loadSequence === reportLoadSequenceRef.current) setLoading(false); });
+    return () => { active = false; };
   }, [reportId]);
+
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedWorkspace()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [reportId]);
+
+  function hasUnsavedWorkspace(): boolean {
+    return workspaceFingerprint(workspaceRef.current) !== workspaceFingerprint(confirmedWorkspaceRef.current);
+  }
+
+  function updateWorkspaceSaveCheckpoint(serverWorkspace: BenchmarkWorkspace) {
+    confirmedWorkspaceRef.current = serverWorkspace;
+    setWorkspaceSaveState(workspaceFingerprint(workspaceRef.current) === workspaceFingerprint(serverWorkspace) ? 'saved' : 'unsaved');
+  }
 
   function applyLocalState(nextReport: ImportedReport, nextWorkspace: BenchmarkWorkspace) {
     reportRef.current = nextReport;
@@ -123,7 +164,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   async function toggleSelection(item: BenchmarkSelection) {
     const current = reportRef.current;
     const key = `${item.item_type}:${item.item_key}`;
-    if (!current || pendingItems[key]) return;
+    if (!current) return;
     const exists = current.benchmark_selections.some((entry) => entry.item_type === item.item_type && entry.item_key === item.item_key);
     const selections = exists ? current.benchmark_selections.filter((entry) => entry.item_type !== item.item_type || entry.item_key !== item.item_key) : [...current.benchmark_selections, item];
     // Workspace entries are intentionally retained when membership changes so PO notes can be restored.
@@ -138,7 +179,11 @@ export function ReportViewer({ reportId }: { reportId: string }) {
       try {
         const saved = await reportApi.updateBenchmarkState(current.id, selections, nextWorkspace);
         if (sequence === mutationSequenceRef.current) {
-          applyLocalState(saved, preserveLocalBenchmarkDraft(saved.benchmark_workspace || blankWorkspace(), workspaceRef.current));
+          const serverWorkspace = includeSelectedEntries(saved.benchmark_workspace || blankWorkspace(), saved.benchmark_selections);
+          const mergedWorkspace = preserveLocalBenchmarkDraft(serverWorkspace, workspaceRef.current);
+          confirmedWorkspaceRef.current = serverWorkspace;
+          applyLocalState(saved, mergedWorkspace);
+          updateWorkspaceSaveCheckpoint(serverWorkspace);
         }
         if (latestItemMutationRef.current[key] === sequence) setItemFeedback((values) => ({ ...values, [key]: { kind: 'success', text: exists ? 'Removed from Benchmark. PO notes are preserved and can be restored.' : 'Added to Benchmark.' } }));
       } catch (reason) {
@@ -146,8 +191,14 @@ export function ReportViewer({ reportId }: { reportId: string }) {
           try {
             const latest = await reportApi.get(current.id);
             const serverWorkspace = includeSelectedEntries(latest.benchmark_workspace || blankWorkspace(), latest.benchmark_selections);
-            applyLocalState(latest, preserveLocalBenchmarkDraft(serverWorkspace, workspaceRef.current));
-          } catch { /* Keep the last locally known server state if refresh also fails. */ }
+            const mergedWorkspace = preserveLocalBenchmarkDraft(serverWorkspace, workspaceRef.current);
+            confirmedWorkspaceRef.current = serverWorkspace;
+            applyLocalState(latest, mergedWorkspace);
+            updateWorkspaceSaveCheckpoint(serverWorkspace);
+          } catch {
+            setWorkspaceSaveState('unsaved');
+            setWorkspaceSaveError('Could not refresh the confirmed server state. Your local PO draft remains on this page; retry when the connection is available.');
+          }
         }
         if (latestItemMutationRef.current[key] === sequence) {
           const failure = reason as Error & { diagnostics?: string };
@@ -171,6 +222,8 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     const next = updater(workspaceRef.current);
     workspaceRef.current = next;
     setWorkspace(next);
+    setWorkspaceSaveState(workspaceFingerprint(next) === workspaceFingerprint(confirmedWorkspaceRef.current) ? 'saved' : 'unsaved');
+    setWorkspaceSaveError('');
   }
 
   function updateObservationFindingLink(item: BenchmarkSelection, dimensionKey: string, findingKey: string) {
@@ -188,12 +241,44 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     void saveWorkspace(next);
   }
 
-  async function saveWorkspace(next = workspace) {
+  async function saveWorkspace(next?: BenchmarkWorkspace) {
     if (!reportRef.current) return;
+    const snapshot = next || workspaceRef.current;
+    const sequence = ++mutationSequenceRef.current;
+    setWorkspaceSaveState('saving');
+    setWorkspaceSaveError('');
     const persist = mutationQueueRef.current.then(async () => {
       const current = reportRef.current;
       if (!current) return;
-      await applyReportUpdate(() => reportApi.updateBenchmarkState(current.id, current.benchmark_selections, next), 'Đã lưu PO Assessment, Notes và Next Action.');
+      try {
+        const updated = await reportApi.updateBenchmarkState(current.id, current.benchmark_selections, snapshot);
+        if (sequence === mutationSequenceRef.current) {
+          const serverWorkspace = updated.benchmark_workspace || snapshot;
+          const mergedWorkspace = preserveLocalBenchmarkDraft(serverWorkspace, workspaceRef.current);
+          confirmedWorkspaceRef.current = serverWorkspace;
+          applyLocalState(updated, mergedWorkspace);
+          updateWorkspaceSaveCheckpoint(serverWorkspace);
+          setWorkspaceSaveError('');
+          if (workspaceFingerprint(mergedWorkspace) === workspaceFingerprint(serverWorkspace)) setNotice('Đã lưu PO Assessment, Notes và Next Action.');
+        }
+      } catch (reason) {
+        if (sequence === mutationSequenceRef.current) {
+          const message = reason instanceof Error ? reason.message : 'Không lưu được PO work. Hãy thử lại.';
+          try {
+            const latest = await reportApi.get(current.id);
+            if (sequence === mutationSequenceRef.current) {
+              const serverWorkspace = includeSelectedEntries(latest.benchmark_workspace || blankWorkspace(), latest.benchmark_selections);
+              const mergedWorkspace = preserveLocalBenchmarkDraft(serverWorkspace, workspaceRef.current);
+              confirmedWorkspaceRef.current = serverWorkspace;
+              applyLocalState(latest, mergedWorkspace);
+            }
+          } catch { /* Keep the local draft and latest confirmed selection when reconciliation is unavailable. */ }
+          if (sequence === mutationSequenceRef.current) {
+            setWorkspaceSaveState('failed');
+            setWorkspaceSaveError(message);
+          }
+        }
+      }
     });
     mutationQueueRef.current = persist.then(() => undefined);
     await persist;
@@ -202,7 +287,8 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   async function addCustomDimension() {
     const value = newDimension.trim();
     if (!value || workspace.custom_dimensions.some((item) => item.toLocaleLowerCase() === value.toLocaleLowerCase())) return;
-    const next = { ...workspace, custom_dimensions: [...workspace.custom_dimensions, value] };
+    const next = { ...workspaceRef.current, custom_dimensions: [...workspaceRef.current.custom_dimensions, value] };
+    updateWorkspace(() => next);
     setNewDimension('');
     await saveWorkspace(next);
   }
@@ -230,6 +316,14 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   });
   const selectedEntityKeys = new Set(selected.filter((item) => item.item_type === 'entity').map((item) => item.item_key));
   const selectedEntityRows = data.entities.filter((item) => selectedEntityKeys.has(item.key));
+  const selectedDimensions = selected.filter((item) => item.item_type === 'dimension').flatMap((selection) => {
+    const dimension = data.benchmark_dimensions.find((entry) => entry.key === selection.item_key);
+    return dimension ? [{ selection, dimension }] : [];
+  });
+  const legacyDimensions = data.benchmark_dimensions.filter((dimension) => Boolean(dimension.po_notes) || selected.some((item) => item.item_type === 'dimension' && item.item_key === dimension.key) || workspace.entries.some((entry) => entry.item_type === 'dimension' && entry.item_key === dimension.key));
+  const orphanedDimensionEntries = workspace.entries.filter((entry) => entry.item_type === 'dimension' && !data.benchmark_dimensions.some((dimension) => dimension.key === entry.item_key));
+  const orphanedDimensionKeys = [...new Set([...orphanedDimensionEntries.map((entry) => entry.item_key), ...selected.filter((item) => item.item_type === 'dimension' && !data.benchmark_dimensions.some((dimension) => dimension.key === item.item_key)).map((item) => item.item_key)])];
+  const inactiveWorkspaceEntries = workspace.entries.filter((entry) => entry.item_type !== 'dimension' && !selected.some((item) => item.item_type === entry.item_type && item.item_key === entry.item_key) && Boolean(entry.po_assessment || entry.notes || entry.next_action || Object.keys(entry.dimension_assessments || {}).length || Object.keys(entry.observation_finding_links || {}).length));
   const dimensions = [...data.benchmark_dimensions.map((dimension) => ({ key: dimension.key, name: dimension.name, custom: false })), ...workspace.custom_dimensions.map((name) => ({ key: `po:${name}`, name, custom: true }))];
 
   function isSelected(item: BenchmarkSelection): boolean {
@@ -246,7 +340,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     const hasSavedEntry = workspace.entries.some((entry) => entry.item_type === item.item_type && entry.item_key === item.item_key);
     const actionText = isActive ? 'Remove from Benchmark' : hasSavedEntry ? 'Restore to Benchmark' : 'Add to Benchmark';
     return <div className="benchmark-card-actions">
-      <button className={isActive ? 'text-button' : 'secondary-action'} disabled={Boolean(pending)} aria-label={`${actionText}${label ? `: ${label}` : ''}`} onClick={() => void toggleSelection(item)}>{pending ? (pending === 'adding' ? 'Adding…' : 'Removing…') : actionText}</button>
+      <button className={isActive ? 'text-button' : 'secondary-action'} aria-label={`${actionText}${label ? `: ${label}` : ''}`} onClick={() => void toggleSelection(item)}>{pending ? (pending === 'adding' ? 'Adding…' : 'Removing…') : actionText}</button>
       {isActive && <button className="text-button" onClick={() => setTab('benchmark')}>Xem Benchmark</button>}
       {feedback && <span className={feedback.kind === 'error' ? 'inline-action-error' : 'inline-action-success'} role={feedback.kind === 'error' ? 'alert' : 'status'}>{feedback.text}{feedback.diagnostics && <details className="inline-diagnostics"><summary>Technical details</summary><code>{feedback.diagnostics}</code></details>}</span>}
     </div>;
@@ -286,6 +380,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     const entry = workspace.entries.find((candidate) => candidate.item_type === item.item_type && candidate.item_key === item.item_key);
     if (!entry) return null;
     return <div className="benchmark-po-fields">
+      {item.item_type === 'dimension' && Object.entries(entry.dimension_assessments || {}).filter(([dimension]) => !workspace.custom_dimensions.includes(dimension)).map(([dimension, value]) => <label className="intake-field legacy-dimension-assessment" key={dimension}><span className="field-label">Legacy dimension assessment · {dimension}</span><textarea aria-label={`Legacy dimension assessment ${dimension} for ${label}`} value={value} onChange={(event) => changeDimensionAssessment(item, dimension, event.target.value)} /></label>)}
       {workspace.custom_dimensions.map((dimension) => <label className="intake-field" key={dimension}><span className="field-label">{dimension}</span><textarea aria-label={`${dimension} assessment for ${label}`} value={entry.dimension_assessments?.[dimension] || ''} onChange={(event) => changeDimensionAssessment(item, dimension, event.target.value)} /></label>)}
       <label className="intake-field"><span className="field-label">PO Assessment</span><textarea aria-label={`PO Assessment for ${label}`} value={entry.po_assessment} onChange={(event) => changeEntry(item, 'po_assessment', event.target.value)} /></label>
       <label className="intake-field"><span className="field-label">Notes</span><textarea aria-label={`Notes for ${label}`} value={entry.notes} onChange={(event) => changeEntry(item, 'notes', event.target.value)} /></label>
@@ -309,6 +404,10 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     return null;
   }
 
+  function confirmWorkspaceNavigation(event: { preventDefault: () => void }) {
+    if (hasUnsavedWorkspace() && !window.confirm('PO draft có thay đổi chưa lưu. Rời trang sẽ làm mất thay đổi này. Bạn có muốn tiếp tục không?')) event.preventDefault();
+  }
+
   function findingMetrics(findingKey: string): { dimension: string; value: string; urls: string[] }[] {
     return data.benchmark_dimensions.flatMap((dimension) => dimension.observations
       .filter((observation) => observation.entity_key && supportingFindings(observation.entity_key, dimension.key).includes(findingKey) && observation.value !== null && observation.value !== undefined && observation.value !== '')
@@ -317,7 +416,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
 
   return <article className="report-viewer">
     {imported && <div className="research-success" role="status">{new URLSearchParams(window.location.search).has('duplicate') ? 'Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.' : 'Đã nhập báo cáo.'}</div>}
-    <header className="research-panel report-meta"><a className="text-button" href="/">← Quay lại Research</a><span className="field-label">RESEARCH RESULTS · {researchStatus}</span><h2>{report.question}</h2><dl><div><dt>Scope</dt><dd>{report.geo} · {report.os}</dd></div><div><dt>Research period</dt><dd>{report.research_period || 'Not provided'}</dd></div><div><dt>Import status</dt><dd>{researchStatus} · Imported, unverified</dd></div><div><dt>Imported</dt><dd>{new Date(report.imported_at).toLocaleString()}</dd></div></dl><a className="text-button" href="/reports">Mở History</a></header>
+    <header className="research-panel report-meta"><a className="text-button" href="/" onClick={confirmWorkspaceNavigation}>← Quay lại Research</a><span className="field-label">RESEARCH RESULTS · {researchStatus}</span><h2>{report.question}</h2><dl><div><dt>Scope</dt><dd>{report.geo} · {report.os}</dd></div><div><dt>Research period</dt><dd>{report.research_period || 'Not provided'}</dd></div><div><dt>Import status</dt><dd>{researchStatus} · Imported, unverified</dd></div><div><dt>Imported</dt><dd>{new Date(report.imported_at).toLocaleString()}</dd></div></dl><a className="text-button" href="/reports" onClick={confirmWorkspaceNavigation}>Mở History</a></header>
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     {(report.orphaned_benchmark_selections?.length || report.orphaned_benchmark_entries?.length) ? <div className="research-alert" role="alert">Có {(report.orphaned_benchmark_selections?.length || 0) + (report.orphaned_benchmark_entries?.length || 0)} benchmark reference/PO note đang trỏ tới keys không còn trong structured data. Dữ liệu được giữ nguyên; xem tab Benchmark để xử lý references khi cần.</div> : null}
     {!hasStructured && <section className="research-panel structuring-callout"><strong>{report.research_status || 'TEXT_ONLY'} · cần cấu trúc ngữ nghĩa</strong><p>Đây là nội dung báo cáo gốc. Hệ thống không tự biến heading hoặc văn bản thành insight. Dùng ChatGPT Plus để cấu trúc report hiện có; báo cáo gốc và ghi chú PO sẽ được giữ nguyên.</p><div className="intake-actions"><button className="secondary-action" type="button" disabled={busy} onClick={reprocess}>Reprocess deterministic</button><button className="secondary-action" type="button" disabled={busy} onClick={copyStructuringPrompt}>Chuẩn hóa bằng ChatGPT Plus</button></div>{structurePrompt && <label className="intake-field"><span className="field-label">Prompt cho ChatGPT Plus</span><textarea rows={10} readOnly value={structurePrompt} onFocus={(event) => event.currentTarget.select()} /></label>}<label className="intake-field"><span className="field-label">Dán câu trả lời ChatGPT đầy đủ</span><textarea rows={12} value={structureResponse} onChange={(event) => setStructureResponse(event.target.value)} placeholder="Dán toàn bộ câu trả lời có marker PO_RESEARCH_V1 và JSON payload." /></label><button className="primary-action" type="button" disabled={busy || !structureResponse.trim()} onClick={() => void applyStructuringResponse()}>{busy ? 'Đang cập nhật…' : 'Cập nhật báo cáo hiện tại'}</button>{report.extraction_error && <p className="field-error">Không thể áp dụng cấu trúc trước đó: {report.extraction_error}</p>}</section>}
@@ -332,8 +431,13 @@ export function ReportViewer({ reportId }: { reportId: string }) {
         <section className="benchmark-assessments"><h4>PO assessment and decisions</h4>{selectedEntityRows.map((entity) => { const item: BenchmarkSelection = { item_type: 'entity', item_key: entity.key }; return <details className="benchmark-po-entry" key={entity.key}><summary><strong>{entity.name}</strong><span>Assessment, notes and next action</span></summary><div className="benchmark-assessment-entry-actions">{benchmarkAction(item, entity.name)}</div>{poAssessmentFields(item, entity.name)}</details>; })}</section>
       </>}
       {selectedFindings.length > 0 && <section className="benchmark-assessments"><h4>{selectedEntityRows.length > 0 ? 'Supporting insights' : 'Contextual insight assessment'}</h4>{selectedFindings.map(({ selection, finding }) => <details className="benchmark-po-entry" key={finding.key}><summary><strong>{finding.title}</strong><span>{finding.finding_type} · {finding.evidence_status}</span></summary><div className="insight-result-detail"><p>{finding.description}</p>{scopeLabel(finding.scope) && <p><strong>Scope:</strong> {scopeLabel(finding.scope)}</p>}{finding.uncertainty && <p><strong>Uncertainty:</strong> {finding.uncertainty}</p>}<EvidenceLinks urls={finding.evidence_references} references={data.evidence_references} />{poAssessmentFields(selection, finding.title)}</div></details>)}</section>}
-      {selectedEntityRows.length === 0 && selectedFindings.length === 0 && <p className="report-history-state">Select an entity or add an insight from its evidence details to begin.</p>}
-      {(selectedEntityRows.length > 0 || selectedFindings.length > 0) && <button className="primary-action" disabled={busy} onClick={() => void saveWorkspace()}>{busy ? 'Saving…' : 'Save assessments and next actions'}</button>}
+      {(legacyDimensions.length > 0 || orphanedDimensionEntries.length > 0) && <section className="benchmark-assessments legacy-dimension-section"><h4>Legacy dimension assessments and notes</h4><p>Historical dimension notes stay under their original keys. Removing a dimension from the active Benchmark does not delete its historical notes.</p>
+        {legacyDimensions.map((dimension) => { const item: BenchmarkSelection = { item_type: 'dimension', item_key: dimension.key }; const entry = workspace.entries.find((candidate) => candidate.item_type === 'dimension' && candidate.item_key === dimension.key); return <details className="benchmark-po-entry" key={dimension.key}><summary><strong>{dimension.name}</strong><span>{isSelected(item) ? 'Active in Benchmark' : 'Not active'} · legacy dimension</span></summary><p className="legacy-stored-key">Stored dimension key: <code>{dimension.key}</code></p>{dimension.po_notes && <section className="legacy-historical-notes"><h5>Historical legacy PO notes · preserved</h5><p>{dimension.po_notes}</p></section>}{benchmarkAction(item, dimension.name)}{(isSelected(item) || entry) && <section><h5>Current PO workspace fields</h5>{entry ? poAssessmentFields(item, dimension.name) : <p>Adding this legacy dimension creates a separate PO workspace entry; its historical notes stay unchanged.</p>}</section>}</details>; })}
+        {orphanedDimensionKeys.map((key) => { const item: BenchmarkSelection = { item_type: 'dimension', item_key: key }; const entry = workspace.entries.find((candidate) => candidate.item_type === 'dimension' && candidate.item_key === key); return <details className="benchmark-po-entry" key={`orphan:${key}`}><summary><strong>Unavailable legacy dimension</strong><span>Historical entry · key preserved</span></summary><p className="legacy-stored-key">Stored dimension key: <code>{key}</code>. It was not mapped to a different dimension.</p>{isSelected(item) && benchmarkAction(item, key)}{entry && <><h5>Historical PO workspace fields</h5>{poAssessmentFields(entry, key)}</>}</details>; })}
+      </section>}
+      {inactiveWorkspaceEntries.length > 0 && <section className="benchmark-assessments inactive-po-drafts"><h4>Saved PO drafts · not active in Benchmark</h4><p>These notes are preserved after removing their item from the active comparison.</p>{inactiveWorkspaceEntries.map((entry) => { const item: BenchmarkSelection = { item_type: entry.item_type, item_key: entry.item_key }; const label = entry.item_type === 'entity' ? data.entities.find((entity) => entity.key === entry.item_key)?.name : data.findings.find((finding) => finding.key === entry.item_key)?.title; return <details className="benchmark-po-entry" key={`${entry.item_type}:${entry.item_key}`}><summary><strong>{label || entry.item_key}</strong><span>Saved PO draft · inactive</span></summary>{benchmarkAction(item, label || entry.item_key)}{poAssessmentFields(item, label || entry.item_key)}</details>; })}</section>}
+      {selectedEntityRows.length === 0 && selectedFindings.length === 0 && selectedDimensions.length === 0 && inactiveWorkspaceEntries.length === 0 && <p className="report-history-state">Select an entity or add an insight from its evidence details to begin.</p>}
+      {(selectedEntityRows.length > 0 || selectedFindings.length > 0 || selectedDimensions.length > 0 || orphanedDimensionEntries.length > 0 || inactiveWorkspaceEntries.length > 0) && <div className="benchmark-save-controls"><p className={`benchmark-save-state is-${workspaceSaveState}`} role="status" aria-live="polite">{workspaceSaveState === 'saved' ? 'Saved · all PO edits are confirmed on the server.' : workspaceSaveState === 'unsaved' ? 'Unsaved changes · PO edits are still only on this page.' : workspaceSaveState === 'saving' ? 'Saving · saving PO edits…' : 'Save failed · PO edits remain on this page. Retry when ready.'}</p>{workspaceSaveError && <p className="research-alert" role="alert">{workspaceSaveError}</p>}<button className="primary-action" disabled={workspaceSaveState === 'saving' || !hasUnsavedWorkspace()} onClick={() => void saveWorkspace()}>{workspaceSaveState === 'failed' ? 'Retry save' : workspaceSaveState === 'saving' ? 'Saving…' : 'Save assessments and next actions'}</button></div>}
     </section>}
     {tab === 'evidence' && <section className="research-panel results-panel"><h3>Evidence</h3><p>Imported sources are references supplied in the report. URLs and ChatGPT-provided data are not independently verified.</p><ul className="evidence-results">{data.evidence_references.map((source) => <li key={source.url}><strong>{source.title || source.url}</strong><a href={source.url} target="_blank" rel="noopener noreferrer">{source.url}</a><span>{source.source_location || 'No source location provided'} · Unverified</span></li>)}</ul></section>}
     {tab === 'report' && <section className="research-panel report-body full-report"><div className="panel-heading"><div><span className="field-label">ORIGINAL REPORT</span><h3>Full Report</h3></div><span className="unverified-chip">Verbatim</span></div>{headings.length > 0 && <nav className="report-toc" aria-label="Mục lục"><strong>Contents</strong><ol>{headings.map((heading, index) => <li key={`${heading.id}-${index}`} style={{ marginLeft: `${Math.max(0, heading.level - 1) * 8}px` }}><a href={`#${heading.id}`}>{heading.text}</a></li>)}</ol></nav>}<MarkdownReport markdown={report.content} /></section>}
