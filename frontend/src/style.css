@@ -285,18 +285,27 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .results-panel h3 { margin: 0; color: #2d423a; }
 .results-panel h4 { color: #3c5148; }
 .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 10px; }
-.insight-card { display: grid; justify-items: start; gap: 8px; padding: 14px; border: 1px solid #e5eae6; border-radius: 10px; background: #fff; color: #586962; text-align: left; cursor: pointer; }
+.insight-card { display: block; padding: 14px; border: 1px solid #e5eae6; border-radius: 10px; background: #fff; color: #586962; text-align: left; }
+.insight-card summary { display: grid; justify-items: start; gap: 8px; cursor: pointer; list-style: none; }
+.insight-card summary::-webkit-details-marker, .insight-result summary::-webkit-details-marker, .benchmark-po-entry summary::-webkit-details-marker { display: none; }
+.insight-card summary::after { content: 'View details'; color: #667f53; font-size: 10px; }
+.insight-card[open] summary::after { content: 'Hide details'; }
 .insight-card strong { color: #354a40; font-size: 12px; }
-.insight-card span:last-child { font-size: 10px; line-height: 1.6; }
+.insight-card summary > span:last-child { font-size: 10px; line-height: 1.6; }
+.insight-card-detail, .insight-result-detail { display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf0ed; font-size: 10px; line-height: 1.6; }
+.insight-card-detail p, .insight-result-detail p { margin: 0; }
+.benchmark-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .insight-list { display: grid; gap: 12px; }
 .insight-result, .benchmark-po-entry { display: grid; gap: 11px; padding: 16px; border: 1px solid #e5eae6; border-radius: 10px; background: #fff; }
+.insight-result summary, .benchmark-po-entry summary { display: flex; align-items: start; justify-content: space-between; gap: 14px; cursor: pointer; list-style: none; }
+.insight-result summary h4 { margin: 4px 0; }
+.insight-result summary > div, .benchmark-po-entry summary > span { display: grid; gap: 4px; }
+.benchmark-po-entry summary > span { color: #89938e; font-size: 9px; }
 .insight-result .panel-heading, .benchmark-po-entry .panel-heading { margin-bottom: 0; }
 .insight-result h4, .benchmark-po-entry h4 { margin: 4px 0; }
 .support-excerpt { padding: 10px; border-left: 3px solid #b8c99d; background: #f8faf5; }
 .support-excerpt pre { overflow-x: auto; margin: 0; white-space: pre-wrap; color: #506158; font: 10px/1.6 Consolas, monospace; }
-.benchmark-add { display: flex; align-items: end; gap: 9px; }
-.benchmark-add .intake-field { flex: 1; }
-.benchmark-add select, .dimension-add input { width: 100%; min-height: 40px; border: 1px solid #dfe6e2; border-radius: 7px; padding: 9px 11px; color: #43534f; background: #fff; font: inherit; font-size: 10px; }
+.dimension-add input { width: 100%; min-height: 40px; border: 1px solid #dfe6e2; border-radius: 7px; padding: 9px 11px; color: #43534f; background: #fff; font: inherit; font-size: 10px; }
 .dimension-add { display: flex; gap: 8px; }
 .dimension-add input { flex: 1; }
 .benchmark-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid #e5eae6; border-radius: 9px; }
@@ -304,10 +313,12 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .benchmark-table th, .benchmark-table td { min-width: 155px; max-width: 320px; padding: 10px; border: 1px solid #e5eae6; text-align: left; vertical-align: top; white-space: normal; }
 .benchmark-table th { color: #42564c; background: #f6f8f5; }
 .benchmark-table td { color: #68766f; }
+.benchmark-table td textarea { width: 100%; min-height: 60px; border: 1px solid #e2e8e4; border-radius: 6px; padding: 7px; resize: vertical; font: inherit; }
 .benchmark-table td small, .benchmark-table tbody th small { display: block; margin-top: 5px; color: #8b9690; font-weight: 400; }
 .benchmark-table td a { display: inline-block; margin: 5px 5px 0 0; color: #617e49; }
 .benchmark-po-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .benchmark-po-fields textarea { min-height: 76px; resize: vertical; }
+.benchmark-assessments { display: grid; gap: 10px; }
 .evidence-results { display: grid; gap: 10px; padding: 0; list-style: none; }
 .evidence-results li { display: grid; gap: 5px; padding: 12px; border: 1px solid #e6ebe7; border-radius: 8px; overflow-wrap: anywhere; }
 .evidence-results a, .evidence-link-list a { color: #577640; }
@@ -322,7 +333,7 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .structured-update p { color: #66736d; font-size: 10px; line-height: 1.6; }
 .field-error { color: #9c4e42 !important; }
 @media (max-width: 760px) { .intake-scope-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-content-layout { grid-template-columns: minmax(0, 1fr); }.report-toc { position: static; max-height: none; } }
-@media (max-width: 760px) { .benchmark-po-fields { grid-template-columns: minmax(0, 1fr); }.benchmark-add { align-items: stretch; flex-direction: column; }.dimension-add { align-items: stretch; flex-direction: column; } }
+@media (max-width: 760px) { .benchmark-po-fields { grid-template-columns: minmax(0, 1fr); }.dimension-add { align-items: stretch; flex-direction: column; } }
 @media (max-width: 560px) { .intake-workspace, .report-viewer { margin-top: 25px; }.intake-scope-grid, .report-meta dl { grid-template-columns: minmax(0, 1fr); }.intake-actions { align-items: stretch; flex-direction: column; }.intake-actions button { width: 100%; }.report-history-row { align-items: flex-start; flex-wrap: wrap; }.report-date { margin-left: auto; }.report-meta { padding: 16px; }.report-body { padding: 16px; } }
 @media (max-width: 560px) {
   .research-panel { padding: 16px; }

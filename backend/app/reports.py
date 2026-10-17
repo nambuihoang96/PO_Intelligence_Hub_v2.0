@@ -12,6 +12,7 @@ from backend.app.models import ImportedResearchReport
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
+    BenchmarkStateUpdate,
     BenchmarkWorkspaceRead,
     BenchmarkWorkspaceUpdate,
     ImportedReportCreate,
@@ -291,6 +292,43 @@ def update_benchmark_workspace(report_id: str, payload: BenchmarkWorkspaceUpdate
     if invalid:
         raise HTTPException(status_code=422, detail={"code": "INVALID_BENCHMARK_ITEM", "message": "Benchmark entries must reference an item in this report.", "invalid_items": invalid})
     report.benchmark_workspace_json = payload.model_dump(mode="json")
+    session.commit()
+    session.refresh(report)
+    return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+
+
+@router.put("/{report_id}/benchmark-state", response_model=ImportedReportRead)
+def update_benchmark_state(report_id: str, payload: BenchmarkStateUpdate, session: SessionDependency) -> ImportedReportRead:
+    """Atomically persist benchmark membership and its PO-owned workspace."""
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+
+    available = _available_keys(report)
+    previous_selections = report.benchmark_selections_json or []
+    previous_entries = (report.benchmark_workspace_json or {}).get("entries", [])
+    invalid_selections = [
+        selection.model_dump()
+        for selection in payload.selections
+        if selection.item_key not in available[selection.item_type]
+        and not any(item.get("item_type") == selection.item_type and item.get("item_key") == selection.item_key for item in previous_selections)
+    ]
+    invalid_entries = [
+        entry.model_dump()
+        for entry in payload.entries
+        if entry.item_key not in available[entry.item_type]
+        and not any(item.get("item_type") == entry.item_type and item.get("item_key") == entry.item_key for item in previous_entries)
+    ]
+    if invalid_selections or invalid_entries:
+        raise HTTPException(status_code=422, detail={
+            "code": "INVALID_BENCHMARK_STATE",
+            "message": "Benchmark selections and notes must reference report items. Existing orphan references may be retained unchanged.",
+            "invalid_selections": invalid_selections,
+            "invalid_entries": invalid_entries,
+        })
+
+    report.benchmark_selections_json = [selection.model_dump() for selection in payload.selections]
+    report.benchmark_workspace_json = payload.model_dump(mode="json", exclude={"selections"})
     session.commit()
     session.refresh(report)
     return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))

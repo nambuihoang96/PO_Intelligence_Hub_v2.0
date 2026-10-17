@@ -517,6 +517,19 @@ class BenchmarkWorkspaceRead(BenchmarkWorkspaceUpdate):
     pass
 
 
+class BenchmarkStateUpdate(BenchmarkWorkspaceUpdate):
+    """Update report selections and PO workspace in one transaction."""
+
+    selections: list[BenchmarkSelection] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_selections(self) -> "BenchmarkStateUpdate":
+        pairs = [(selection.item_type, selection.item_key) for selection in self.selections]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("benchmark selections must be unique")
+        return self
+
+
 class ImportedReportRead(ImportedReportSummary):
     content: str
     parse_status: str

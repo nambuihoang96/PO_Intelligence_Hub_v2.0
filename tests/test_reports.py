@@ -426,6 +426,28 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "INVALID_BENCHMARK_SELECTION")
 
+    def test_benchmark_state_saves_membership_and_po_workspace_atomically(self) -> None:
+        raw = "# Context\n\nA supported observation.\n\nSource: https://example.com/\n"
+        research = self._structured_payload()
+        saved = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(research)}).json()
+        report_id = saved["id"]
+        state = {
+            "selections": [{"item_type": "finding", "item_key": "finding-entity-a"}],
+            "custom_dimensions": ["Decision fit"],
+            "entries": [{"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Compare in context", "notes": "Evidence is limited", "next_action": "Review source", "dimension_assessments": {}}],
+        }
+        response = self.client.put(f"/api/v1/reports/{report_id}/benchmark-state", json=state)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["benchmark_selections"], state["selections"])
+        self.assertEqual(response.json()["benchmark_workspace"]["entries"][0]["notes"], "Evidence is limited")
+
+        invalid = {**state, "selections": [{"item_type": "finding", "item_key": "missing"}], "entries": [{**state["entries"][0], "notes": "Must not partially save"}]}
+        rejected = self.client.put(f"/api/v1/reports/{report_id}/benchmark-state", json=invalid)
+        self.assertEqual(rejected.status_code, 422)
+        after = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(after["benchmark_selections"], state["selections"])
+        self.assertEqual(after["benchmark_workspace"]["entries"][0]["notes"], "Evidence is limited")
+
     def test_unstructured_topics_are_not_mapped_to_business_taxonomies(self) -> None:
         samples = (
             "# Puzzle market\n\nA report about game products.",

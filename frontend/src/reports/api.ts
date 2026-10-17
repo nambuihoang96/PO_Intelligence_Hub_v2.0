@@ -91,5 +91,6 @@ export const reportApi = {
   reprocess: (id: string) => request<ImportedReport & { reprocessed: boolean; message: string }>(`/api/v1/reports/${encodeURIComponent(id)}/reprocess`, { method: 'POST' }),
   updateStructuredData: (id: string, research_data: ResearchData) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/structured-data`, { method: 'PUT', body: JSON.stringify({ research_data }) }),
   structureFromResponse: (id: string, response: string) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/structure-from-response`, { method: 'PUT', body: JSON.stringify({ response }) }),
+  updateBenchmarkState: (id: string, selections: BenchmarkSelection[], workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-state`, { method: 'PUT', body: JSON.stringify({ ...workspace, selections }) }),
   updateBenchmarkWorkspace: (id: string, workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-workspace`, { method: 'PUT', body: JSON.stringify(workspace) }),
 };

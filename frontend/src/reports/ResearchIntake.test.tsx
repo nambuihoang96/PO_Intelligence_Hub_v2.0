@@ -122,10 +122,16 @@ describe('ChatGPT research intake', () => {
         entities: [{ key: 'entity-a', entity_type: 'service', name: 'Regional transfer network', attributes: { settlement_window: 'same day' }, evidence_references: ['https://example.com/'] }],
         findings: [{ key: 'finding-a', finding_type: 'operational insight', title: 'Settlement speed differs', description: 'The two observed options report different settlement windows.', related_entities: ['entity-a'], evidence_references: ['https://example.com/'], scope: { region: 'US' }, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: 'Validate merchant needs before comparison.' }],
         evidence_references: [{ url: 'https://example.com/', title: 'Source', source_location: 'line:3', verified: false }],
+        benchmark_dimensions: [{ key: 'settlement-window', name: 'Settlement window', related_entities: ['entity-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'entity-a', value: 'Same day', evidence_references: ['https://example.com/'], source_locations: [], evidence_status: 'unverified', uncertainty: null }], po_notes: null }],
       },
     };
     let persisted = structured;
     mockFetch((url, init) => {
+      if (url.includes('/benchmark-state')) {
+        const body = JSON.parse(String(init.body));
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+        return persisted;
+      }
       if (url.includes('/benchmark-selections')) { persisted = { ...persisted, benchmark_selections: JSON.parse(String(init.body)).selections }; return persisted; }
       if (url.includes('/benchmark-workspace')) { persisted = { ...persisted, benchmark_workspace: JSON.parse(String(init.body)) }; return persisted; }
       return persisted;
@@ -133,24 +139,30 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Insights' }));
+    fireEvent.click(screen.getByText('Settlement speed differs').closest('summary')!);
     fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark' }));
-    await waitFor(() => expect(screen.getByText('Settlement speed differs')).toBeTruthy());
-    fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
+    expect(await screen.findByRole('button', { name: 'Đã thêm' })).toBeTruthy();
+    expect(persisted.benchmark_selections).toContainEqual({ item_type: 'entity', item_key: 'entity-a' });
+    fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
+    const table = await screen.findByRole('table');
+    expect(table.querySelector('tbody tr th')?.textContent).toContain('Regional transfer network');
+    expect(screen.getAllByText('Settlement speed differs').length).toBeGreaterThan(0);
+    expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(1);
     expect(await screen.findByText('Settlement speed differs')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('PO Assessment'), { target: { value: 'Worth validating' } });
-    fireEvent.change(screen.getByLabelText('Next Action'), { target: { value: 'Check source sample' } });
+    fireEvent.change(screen.getByLabelText('PO Assessment for Settlement speed differs'), { target: { value: 'Worth validating' } });
+    fireEvent.change(screen.getByLabelText('Next Action for Settlement speed differs'), { target: { value: 'Check source sample' } });
     fireEvent.change(screen.getByLabelText('PO dimension'), { target: { value: 'Evidence quality' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add dimension' }));
     const customValue = await screen.findByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement;
     fireEvent.change(customValue, { target: { value: 'Moderate confidence for PO use' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO assessment and actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
     expect(await screen.findByRole('status')).toBeTruthy();
     await waitFor(() => expect((persisted.benchmark_workspace.entries[0] as { po_assessment: string }).po_assessment).toBe('Worth validating'));
     cleanup();
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
-    expect((await screen.findByLabelText('PO Assessment') as HTMLTextAreaElement).value).toBe('Worth validating');
-    expect((screen.getByLabelText('Next Action') as HTMLTextAreaElement).value).toBe('Check source sample');
+    expect((await screen.findByLabelText('PO Assessment for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Worth validating');
+    expect((screen.getByLabelText('Next Action for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Check source sample');
     expect((screen.getByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
   });
 
@@ -172,13 +184,13 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Guided setup is documented; outcome impact is not measured.')).toBeTruthy();
-    const card = await screen.findByRole('button', { name: /Guidance precedes first action/ });
-    fireEvent.click(card);
+    const card = await screen.findByText('Guidance precedes first action');
+    fireEvent.click(card.closest('summary')!);
     expect(await screen.findByText('Validate the flow with first-time users.')).toBeTruthy();
     expect(screen.getByText(/guided steps/)).toBeTruthy();
     expect(screen.getByText(/Setup time reported:/)).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
-    expect(screen.getByText('needs_review · unverified')).toBeTruthy();
+    expect(screen.getByText('workflow observation · needs_review')).toBeTruthy();
   });
 
   it('explains an outdated backend and keeps the full ChatGPT response after a 404', async () => {
