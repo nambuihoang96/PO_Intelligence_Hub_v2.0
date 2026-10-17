@@ -78,7 +78,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
     fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
     expect(await screen.findByText(/2 heading · 1 URL nhận diện/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Import report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
     expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST')).toBe(true);
   });
@@ -149,5 +149,162 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: '   ' } });
     expect(screen.getByText('Cần có câu hỏi nghiên cứu.')).toBeTruthy();
     expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
+  });
+
+  it('shows missing report content clearly and rejects structured JSON without report text', async () => {
+    const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Research question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByText('Structured JSON (tùy chọn)'));
+    fireEvent.change(screen.getByLabelText('Universal research data JSON'), { target: { value: '{"findings":[]}' } });
+    expect(screen.getByText(/Chưa có nội dung báo cáo để import/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Structured JSON không thay thế cho báo cáo gốc');
+    expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
+  });
+
+  it('validates malformed structured JSON immediately and blocks import', async () => {
+    const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Universal research data JSON'), { target: { value: '{bad json' } });
+    expect((await screen.findByRole('alert')).textContent).toContain('Structured JSON không hợp lệ');
+    expect(screen.getByText(/Structured JSON: Không hợp lệ/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Original report text' } });
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
+  });
+
+  it('shows loading only while an import request is pending, then navigates on success', async () => {
+    let finishImport!: (response: Response) => void;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/reports?')) return Promise.resolve(new Response(JSON.stringify({ items: [], next_cursor: null, limit: 10 })));
+      if (init.method === 'POST') return new Promise<Response>((resolve) => { finishImport = resolve; });
+      throw new Error(`Unexpected request ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
+    const save = screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' });
+    fireEvent.click(save);
+    expect((await screen.findByRole('status')).textContent).toContain('Đang lưu báo cáo...');
+    expect((screen.getByRole('button', { name: 'Đang lưu báo cáo...' }) as HTMLButtonElement).disabled).toBe(true);
+    finishImport(new Response(JSON.stringify(report)));
+    await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
+    expect(screen.queryByText('Đang lưu báo cáo...')).toBeNull();
+  });
+
+  it('turns loading off and shows a useful backend error after import failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/reports?')) return new Response(JSON.stringify({ items: [], next_cursor: null, limit: 10 }));
+      if (init.method === 'POST') return new Response(JSON.stringify({ error: { message: 'Báo cáo không hợp lệ.' } }), { status: 422 });
+      throw new Error(`Unexpected request ${String(input)}`);
+    }));
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Report body' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Báo cáo không hợp lệ.');
+    expect(screen.queryByText('Đang lưu báo cáo...')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('opens the existing report and shows the duplicate notice after duplicate import', async () => {
+    mockFetch((url, init) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (init.method === 'POST') return { ...report, duplicate: true };
+      if (url.includes('/reports/saved-report')) return report;
+      throw new Error('Unexpected request');
+    });
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
+    expect(window.location.search).toContain('duplicate=1');
+    cleanup();
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByText('Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.')).toBeTruthy();
+  });
+
+  it('renders the default GEO and searches country options', async () => {
+    mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
+    render(<ResearchIntake />);
+    const geo = await screen.findByRole('combobox', { name: 'GEO' }) as HTMLInputElement;
+    expect(geo.value).toBe('Global / not specified');
+    fireEvent.click(geo);
+    fireEvent.change(geo, { target: { value: 'Uni' } });
+    expect(screen.getByRole('option', { name: 'United States (US)' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'United Kingdom (GB)' })).toBeTruthy();
+  });
+
+  it('submits selected GEO code and supports custom GEO entry', async () => {
+    let submitted: Record<string, unknown> | undefined;
+    mockFetch((url, init) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (init.method === 'POST') { submitted = JSON.parse(String(init.body)); return report; }
+      throw new Error('Unexpected request');
+    });
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Report body' } });
+    const geo = screen.getByRole('combobox', { name: 'GEO' });
+    fireEvent.click(geo);
+    fireEvent.change(geo, { target: { value: 'Vie' } });
+    fireEvent.click(screen.getByRole('option', { name: 'Vietnam (VN)' }));
+    expect((screen.getByRole('combobox', { name: 'GEO' }) as HTMLInputElement).value).toBe('Vietnam (VN)');
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    await waitFor(() => expect(submitted?.geo).toBe('VN'));
+
+    cleanup();
+    window.history.replaceState({}, '', '/');
+    mockFetch((url, init) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (init.method === 'POST') { submitted = JSON.parse(String(init.body)); return report; }
+      throw new Error('Unexpected request');
+    });
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Report body' } });
+    fireEvent.click(screen.getByRole('combobox', { name: 'GEO' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Other / custom' }));
+    fireEvent.change(screen.getByLabelText('GEO tùy chỉnh'), { target: { value: 'Special Market' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    await waitFor(() => expect(submitted?.geo).toBe('Special Market'));
+  });
+
+  it('does not send multiple import requests on a rapid double click', async () => {
+    let finishImport!: (response: Response) => void;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/reports?')) return Promise.resolve(new Response(JSON.stringify({ items: [], next_cursor: null, limit: 10 })));
+      if (init.method === 'POST') return new Promise<Response>((resolve) => { finishImport = resolve; });
+      throw new Error('Unexpected request');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
+    const save = screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));
+    finishImport(new Response(JSON.stringify(report)));
   });
 });

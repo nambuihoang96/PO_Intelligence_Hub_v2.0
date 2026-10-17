@@ -27,12 +27,20 @@ export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; l
 export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { content: string; structured_json?: string };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body?.error?.message ?? 'Không thể kết nối tới kho báo cáo.');
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    });
+  } catch {
+    throw new Error('Không kết nối được tới backend. Kiểm tra ứng dụng local rồi thử lại.');
+  }
+  let body: any;
+  try { body = await response.json(); } catch { body = null; }
+  const detail = body?.error?.message ?? body?.detail?.[0]?.msg ?? body?.detail ?? body?.message;
+  if (!response.ok) throw new Error(typeof detail === 'string' ? detail : 'Backend không thể lưu báo cáo. Kiểm tra dữ liệu và thử lại.');
+  if (body === null) throw new Error('Backend trả về phản hồi không đọc được. Vui lòng thử lại.');
   return body as T;
 }
 
