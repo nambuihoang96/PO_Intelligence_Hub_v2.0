@@ -88,7 +88,10 @@ if ($backendAlreadyRunning -and $frontendAlreadyRunning) {
     Write-Host 'Frontend: http://127.0.0.1:5173'
     Write-Host 'Backend:  http://127.0.0.1:8000'
     Write-Host 'API docs: http://127.0.0.1:8000/docs'
+    Write-Host 'This launcher did not start the existing services, so it will not stop them.'
+    Write-Host 'Press any key to close this launcher window. The existing services will keep running.'
     Start-Process 'http://127.0.0.1:5173'
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     return
 }
 
