@@ -104,6 +104,21 @@ class ResearchRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class ResearchRunManifest(Base):
+    __tablename__ = "research_run_manifests"
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_research_run_manifests_version_positive"),
+        CheckConstraint("length(checksum_sha256) = 64", name="ck_research_run_manifests_checksum_length"),
+        ForeignKeyConstraint(["run_id"], ["research_runs.id"], ondelete="RESTRICT", name="fk_research_run_manifests_run"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class SourceRegistry(Base):
     __tablename__ = "source_registry"
     __table_args__ = (

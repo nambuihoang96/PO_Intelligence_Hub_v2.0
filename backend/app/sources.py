@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.api import ErrorResponses, LIMIT, SessionDependency, _commit, _run_or_404
+from backend.app.api import ErrorResponses, LIMIT, SessionDependency, TERMINAL_RUN_STATES, _commit, _run_or_404
 from backend.app.models import Evidence, ResearchRun, SourceRecord, SourceRegistry
 from backend.app.schemas import (
     ErrorEnvelope,
@@ -84,7 +84,9 @@ def update_source(source_id: str, payload: SourceRegistryUpdate, session: Sessio
     responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 422: {"model": ErrorEnvelope}},
 )
 def add_manual_evidence(run_id: str, payload: ManualEvidenceCreate, session: SessionDependency) -> ManualEvidenceRead:
-    _run_or_404(session, run_id)
+    run = _run_or_404(session, run_id)
+    if run.state in TERMINAL_RUN_STATES:
+        raise HTTPException(status_code=409, detail={"code": "RUN_FINALIZED", "message": "Evidence cannot be added after the run is finalized."})
     registry = None
     if payload.source_registry_id:
         registry = _source_or_404(session, payload.source_registry_id)

@@ -128,6 +128,23 @@ class SourceRegistryAPITest(unittest.TestCase):
         self.assertEqual(updated.json()["collection_mode"], "manual")
         self.assertFalse(updated.json()["enabled"])
 
+    def test_cannot_add_manual_evidence_to_a_finalized_run(self) -> None:
+        run = self.create_run()
+        for state in ("collecting", "validating", "synthesizing", "completed"):
+            response = self.client.patch(f"/api/v1/runs/{run['id']}/state", json={"state": state})
+            self.assertEqual(response.status_code, 200, response.text)
+        response = self.client.post(
+            f"/api/v1/runs/{run['id']}/evidence",
+            json={
+                "source_name": "Manual source",
+                "source_type": "reference",
+                "source_url": "https://example.com/story",
+                "excerpt_or_ref": "Too late to add",
+            },
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "RUN_FINALIZED")
+
 
 if __name__ == "__main__":
     unittest.main()

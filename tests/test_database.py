@@ -1,4 +1,6 @@
 import os
+import hashlib
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -13,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.app.db import create_database_engine, get_database_path
 
 
-CORE_TABLES = {"research_projects", "research_plans", "research_runs", "source_registry", "source_records", "evidence"}
+CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence"}
 
 
 class DatabaseMigrationTest(unittest.TestCase):
@@ -91,6 +93,92 @@ class DatabaseMigrationTest(unittest.TestCase):
                     )
         finally:
             engine.dispose()
+
+    def test_database_enforces_run_state_transitions(self) -> None:
+        command.upgrade(self.config, "head")
+        engine = create_database_engine(get_database_path())
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "INSERT INTO research_projects (id, name, created_at, updated_at) "
+                    "VALUES ('project', 'Project', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO research_plans "
+                    "(id, project_id, version, question, geos, platforms, goals, keywords, source_policy, created_at) "
+                    "VALUES ('plan', 'project', 1, 'Question?', '[]', '[]', '[]', '[]', '{}', CURRENT_TIMESTAMP)"
+                )
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "INSERT INTO research_runs "
+                        "(id, project_id, plan_id, plan_version, state, coverage_summary, created_at) "
+                        "VALUES ('terminal-run', 'project', 'plan', 1, 'completed', '{}', CURRENT_TIMESTAMP)"
+                    )
+                connection.exec_driver_sql(
+                    "INSERT INTO research_runs "
+                    "(id, project_id, plan_id, plan_version, state, coverage_summary, created_at) "
+                    "VALUES ('run', 'project', 'plan', 1, 'queued', '{}', CURRENT_TIMESTAMP)"
+                )
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "INSERT INTO research_run_manifests (run_id, version, content, checksum_sha256, created_at) "
+                        "VALUES ('run', 1, '{}', ?, CURRENT_TIMESTAMP)",
+                        ("0" * 64,),
+                    )
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql("UPDATE research_runs SET state='completed' WHERE id='run'")
+                connection.exec_driver_sql("UPDATE research_runs SET state='collecting' WHERE id='run'")
+        finally:
+            engine.dispose()
+
+    def test_upgrade_backfills_manifest_for_an_existing_terminal_run(self) -> None:
+        command.upgrade(self.config, "20261017_0001")
+        engine = create_database_engine(get_database_path())
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "INSERT INTO research_projects (id, name, created_at, updated_at) "
+                    "VALUES ('project', 'Project', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO research_plans "
+                    "(id, project_id, version, question, geos, platforms, goals, keywords, source_policy, created_at) "
+                    "VALUES ('plan', 'project', 1, 'Frozen question', '[\"US\"]', '[\"ios\"]', '[]', '[]', '{}', CURRENT_TIMESTAMP)"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO research_runs "
+                    "(id, project_id, plan_id, plan_version, state, coverage_summary, created_at) "
+                    "VALUES ('run', 'project', 'plan', 1, 'queued', '{}', CURRENT_TIMESTAMP)"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO source_records "
+                    "(id, run_id, source_name, source_type, collection_mode, retrieved_at, scope) "
+                    "VALUES ('source-record', 'run', 'Manual', 'reference', 'manual', CURRENT_TIMESTAMP, '{}')"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO evidence "
+                    "(id, run_id, source_record_id, excerpt_or_ref, method, scope, created_at) "
+                    "VALUES ('evidence', 'run', 'source-record', 'Frozen note', 'manual_user_note', '{}', CURRENT_TIMESTAMP)"
+                )
+                connection.exec_driver_sql(
+                    "UPDATE research_runs SET state='completed', finished_at=CURRENT_TIMESTAMP WHERE id='run'"
+                )
+        finally:
+            engine.dispose()
+
+        command.upgrade(self.config, "head")
+        connection = sqlite3.connect(get_database_path())
+        try:
+            content_raw, checksum = connection.execute(
+                "SELECT content, checksum_sha256 FROM research_run_manifests WHERE run_id='run'"
+            ).fetchone()
+        finally:
+            connection.close()
+        content = json.loads(content_raw)
+        canonical = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        self.assertEqual(content["plan"]["question"], "Frozen question")
+        self.assertEqual([entry["id"] for entry in content["evidence"]], ["evidence"])
+        self.assertEqual(checksum, hashlib.sha256(canonical.encode("utf-8")).hexdigest())
 
     def test_source_registry_defaults_to_disabled_manual_mode(self) -> None:
         command.upgrade(self.config, "head")
