@@ -152,6 +152,14 @@ class ResearchRunRead(APIModel):
     created_at: datetime
 
 
+class ResearchRunManifestRead(APIModel):
+    run_id: str
+    version: int
+    content: dict[str, Any]
+    checksum_sha256: str
+    created_at: datetime
+
+
 class SourceLicenseStatus(StrEnum):
     UNKNOWN = "unknown"
     MANUAL_ONLY = "manual_only"

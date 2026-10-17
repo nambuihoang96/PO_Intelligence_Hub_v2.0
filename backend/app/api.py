@@ -1,12 +1,15 @@
+import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.models import ResearchPlan, ResearchProject, ResearchRun
+from backend.app.models import Evidence, ResearchPlan, ResearchProject, ResearchRun, ResearchRunManifest, SourceRecord
 from backend.app.schemas import (
     ErrorEnvelope,
     Page,
@@ -17,8 +20,11 @@ from backend.app.schemas import (
     ResearchProjectUpdate,
     ResearchRunCreate,
     ResearchRunRead,
+    ResearchRunManifestRead,
     ResearchRunState,
     ResearchRunStateUpdate,
+    EvidenceRead,
+    SourceRecordRead,
 )
 
 
@@ -71,6 +77,29 @@ def _run_or_404(session: Session, run_id: str) -> ResearchRun:
     if run is None:
         raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND", "message": "Research run was not found."})
     return run
+
+
+def _canonical_json(value: dict) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _build_run_manifest(session: Session, run: ResearchRun) -> ResearchRunManifest:
+    plan = session.get(ResearchPlan, run.plan_id)
+    if plan is None:
+        raise HTTPException(status_code=409, detail={"code": "PLAN_VERSION_MISSING", "message": "The run's plan version is unavailable."})
+    source_records = list(
+        session.scalars(select(SourceRecord).where(SourceRecord.run_id == run.id).order_by(SourceRecord.id))
+    )
+    evidence_rows = list(session.scalars(select(Evidence).where(Evidence.run_id == run.id).order_by(Evidence.id)))
+    content = {
+        "schema_version": 1,
+        "run": jsonable_encoder(ResearchRunRead.model_validate(run)),
+        "plan": jsonable_encoder(ResearchPlanRead.model_validate(plan)),
+        "source_records": [jsonable_encoder(SourceRecordRead.model_validate(item)) for item in source_records],
+        "evidence": [jsonable_encoder(EvidenceRead.model_validate(item)) for item in evidence_rows],
+    }
+    checksum = hashlib.sha256(_canonical_json(content).encode("utf-8")).hexdigest()
+    return ResearchRunManifest(run_id=run.id, version=1, content=content, checksum_sha256=checksum)
 
 
 def _create_plan_version(session: Session, project_id: str, payload: ResearchPlanCreate, version: int) -> ResearchPlan:
@@ -230,6 +259,18 @@ def get_run(run_id: str, session: SessionDependency) -> ResearchRun:
     return _run_or_404(session, run_id)
 
 
+@router.get("/runs/{run_id}/manifest", response_model=ResearchRunManifestRead, responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 500: {"model": ErrorEnvelope}})
+def get_run_manifest(run_id: str, session: SessionDependency) -> ResearchRunManifest:
+    _run_or_404(session, run_id)
+    manifest = session.get(ResearchRunManifest, run_id)
+    if manifest is None:
+        raise HTTPException(status_code=409, detail={"code": "RUN_NOT_FINALIZED", "message": "The run manifest is available after the run reaches a terminal state."})
+    actual = hashlib.sha256(_canonical_json(manifest.content).encode("utf-8")).hexdigest()
+    if actual != manifest.checksum_sha256:
+        raise HTTPException(status_code=500, detail={"code": "MANIFEST_CHECKSUM_MISMATCH", "message": "The stored run manifest failed its integrity check."})
+    return manifest
+
+
 @router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT, responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}})
 def delete_run(run_id: str, session: SessionDependency) -> Response:
     run = _run_or_404(session, run_id)
@@ -252,6 +293,13 @@ def update_run_state(run_id: str, payload: ResearchRunStateUpdate, session: Sess
         run.started_at = now
     if next_state in TERMINAL_RUN_STATES:
         run.finished_at = now
+        try:
+            # Persist the terminal run state before snapshotting its plan, sources, and evidence.
+            session.flush()
+        except IntegrityError as exc:
+            session.rollback()
+            raise HTTPException(status_code=409, detail={"code": "INVALID_STATE_TRANSITION", "message": "Run state update conflicts with the persisted lifecycle."}) from exc
+        session.add(_build_run_manifest(session, run))
     _commit(session, "Run state update conflicts with existing data.")
     session.refresh(run)
     return run

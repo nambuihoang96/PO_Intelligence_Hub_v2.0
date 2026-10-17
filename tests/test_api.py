@@ -1,4 +1,6 @@
 import os
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,7 +9,9 @@ from unittest.mock import patch
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
+from backend.app.db import create_database_engine, get_database_path
 from backend.app.main import create_app
 
 
@@ -173,6 +177,99 @@ class ResearchAPITest(unittest.TestCase):
         self.assertEqual(blocked_delete.status_code, 409)
         self.assertEqual(blocked_delete.json()["error"]["code"], "CONFLICT")
 
+    def finalize_run(self, run_id: str) -> None:
+        for state in ("collecting", "validating", "synthesizing", "completed"):
+            response = self.client.patch(f"/api/v1/runs/{run_id}/state", json={"state": state})
+            self.assertEqual(response.status_code, 200, response.text)
+
+    def add_run_evidence(self, run_id: str, note: str) -> str:
+        response = self.client.post(
+            f"/api/v1/runs/{run_id}/evidence",
+            json={
+                "source_name": "Manual source",
+                "source_type": "reference",
+                "source_url": "https://example.com/research",
+                "excerpt_or_ref": note,
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        return response.json()["evidence"]["id"]
+
+    def test_finalized_runs_keep_independent_plan_and_evidence_snapshots(self) -> None:
+        project = self.create_project()
+        first_plan = self.create_plan(project["id"], "Original question")
+        first_run = self.client.post(
+            f"/api/v1/projects/{project['id']}/runs", json={"plan_version": first_plan["version"]}
+        ).json()
+        not_ready = self.client.get(f"/api/v1/runs/{first_run['id']}/manifest")
+        self.assertEqual(not_ready.status_code, 409)
+        self.assertEqual(not_ready.json()["error"]["code"], "RUN_NOT_FINALIZED")
+        first_evidence_id = self.add_run_evidence(first_run["id"], "Evidence belonging only to R1")
+        self.finalize_run(first_run["id"])
+
+        first_manifest_response = self.client.get(f"/api/v1/runs/{first_run['id']}/manifest")
+        self.assertEqual(first_manifest_response.status_code, 200, first_manifest_response.text)
+        first_manifest = first_manifest_response.json()
+        first_content = first_manifest["content"]
+        self.assertEqual(first_content["plan"]["question"], "Original question")
+        self.assertEqual(first_content["run"]["state"], "completed")
+        self.assertEqual([entry["id"] for entry in first_content["evidence"]], [first_evidence_id])
+        canonical = json.dumps(first_content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        self.assertEqual(first_manifest["checksum_sha256"], hashlib.sha256(canonical.encode("utf-8")).hexdigest())
+
+        second_plan_response = self.client.put(
+            f"/api/v1/projects/{project['id']}/plans/{first_plan['version']}",
+            json={"question": "Updated question"},
+        )
+        self.assertEqual(second_plan_response.status_code, 200, second_plan_response.text)
+        second_plan = second_plan_response.json()
+        second_run = self.client.post(
+            f"/api/v1/projects/{project['id']}/runs", json={"plan_version": second_plan["version"]}
+        ).json()
+        second_evidence_id = self.add_run_evidence(second_run["id"], "Evidence belonging only to R2")
+        self.finalize_run(second_run["id"])
+
+        second_manifest = self.client.get(f"/api/v1/runs/{second_run['id']}/manifest").json()
+        first_manifest_again = self.client.get(f"/api/v1/runs/{first_run['id']}/manifest").json()
+        self.assertEqual(first_manifest_again, first_manifest)
+        self.assertEqual(second_manifest["content"]["plan"]["question"], "Updated question")
+        self.assertEqual(second_manifest["content"]["run"]["plan_version"], second_plan["version"])
+        self.assertEqual([entry["id"] for entry in second_manifest["content"]["evidence"]], [second_evidence_id])
+        self.assertNotEqual(first_manifest["checksum_sha256"], second_manifest["checksum_sha256"])
+
+    def test_finalized_run_manifest_and_evidence_are_immutable_in_sqlite(self) -> None:
+        project = self.create_project()
+        plan = self.create_plan(project["id"])
+        run = self.client.post(f"/api/v1/projects/{project['id']}/runs", json={"plan_version": plan["version"]}).json()
+        self.add_run_evidence(run["id"], "Snapshot note")
+        self.finalize_run(run["id"])
+
+        engine = create_database_engine(get_database_path())
+        try:
+            with engine.begin() as connection:
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "UPDATE research_run_manifests SET checksum_sha256=? WHERE run_id=?", ("0" * 64, run["id"])
+                    )
+            with engine.begin() as connection:
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql("UPDATE research_runs SET coverage_summary='{}' WHERE id=?", (run["id"],))
+            with engine.begin() as connection:
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "UPDATE evidence SET excerpt_or_ref='changed' WHERE run_id=?", (run["id"],)
+                    )
+            with engine.begin() as connection:
+                with self.assertRaises(IntegrityError):
+                    connection.exec_driver_sql(
+                        "INSERT INTO source_records "
+                        "(id, run_id, source_name, source_type, collection_mode, retrieved_at, scope) "
+                        "VALUES ('late-source', ?, 'Late', 'reference', 'manual', CURRENT_TIMESTAMP, '{}')",
+                        (run["id"],),
+                    )
+        finally:
+            engine.dispose()
+
     def test_openapi_exposes_typed_contracts_and_error_responses(self) -> None:
         response = self.client.get("/openapi.json")
         self.assertEqual(response.status_code, 200)
@@ -181,9 +278,11 @@ class ResearchAPITest(unittest.TestCase):
         self.assertIn("ResearchProjectCreate", spec["components"]["schemas"])
         self.assertIn("ResearchPlanRead", spec["components"]["schemas"])
         self.assertIn("ResearchRunRead", spec["components"]["schemas"])
+        self.assertIn("ResearchRunManifestRead", spec["components"]["schemas"])
         self.assertIn("422", spec["paths"]["/api/v1/projects"]["post"]["responses"])
         self.assertIn("put", spec["paths"]["/api/v1/projects/{project_id}/plans/{version}"])
         self.assertIn("delete", spec["paths"]["/api/v1/runs/{run_id}"])
+        self.assertIn("/api/v1/runs/{run_id}/manifest", spec["paths"])
 
 
 if __name__ == "__main__":
