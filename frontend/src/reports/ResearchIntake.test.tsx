@@ -181,6 +181,23 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByText('needs_review · unverified')).toBeTruthy();
   });
 
+  it('explains an outdated backend and keeps the full ChatGPT response after a 404', async () => {
+    const textOnlyReport = { ...report, research_status: 'TEXT_ONLY' as const };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).endsWith('/structure-from-response') && init.method === 'PUT') return new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 });
+      if (String(input).includes('/api/v1/reports/saved-report')) return new Response(JSON.stringify(textOnlyReport));
+      throw new Error(`Unexpected request ${String(input)}`);
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    const response = '{"schema_version":"po_research_v1","research_data":{}}';
+    fireEvent.change(await screen.findByLabelText('Dán câu trả lời ChatGPT đầy đủ'), { target: { value: response } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật báo cáo hiện tại' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Backend local đang chạy phiên bản cũ');
+    expect((screen.getByLabelText('Dán câu trả lời ChatGPT đầy đủ') as HTMLTextAreaElement).value).toBe(response);
+  });
+
   it('validates missing metadata and does not send an import', async () => {
     const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);

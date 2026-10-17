@@ -67,6 +67,9 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): 
   const apiError = body?.error;
   const detail = apiError?.message ?? body?.detail?.[0]?.msg ?? body?.detail ?? body?.message;
   if (!response.ok) {
+    if (response.status === 404 && url.endsWith('/structure-from-response')) {
+      throw new Error('Backend local đang chạy phiên bản cũ, chưa có chức năng cấu trúc báo cáo. Hãy đóng cửa sổ/terminal PO Intelligence Hub đang chạy, rồi mở lại run.bat. Câu trả lời vừa dán vẫn được giữ để thử lại.');
+    }
     const validation = readableValidationErrors(apiError?.details?.errors ?? body?.detail?.errors);
     const reason = validation.length ? `\n${validation.map((item) => `• ${item}`).join('\n')}` : '';
     const headline = validation.length && detail === 'Request validation failed.' ? 'Hãy sửa các trường chưa hợp lệ:' : (typeof detail === 'string' ? detail : 'Backend không thể lưu báo cáo. Kiểm tra dữ liệu và thử lại.');

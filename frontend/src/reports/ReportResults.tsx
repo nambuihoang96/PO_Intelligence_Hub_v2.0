@@ -55,14 +55,15 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Không mở được báo cáo.')).finally(() => setLoading(false));
   }, [reportId]);
 
-  async function applyReportUpdate(action: () => Promise<ImportedReport>, successMessage: string) {
+  async function applyReportUpdate(action: () => Promise<ImportedReport>, successMessage: string): Promise<boolean> {
     setBusy(true); setError(''); setNotice('');
     try {
       const updated = await action();
       setReport(updated);
       setWorkspace(updated.benchmark_workspace || blankWorkspace());
       setNotice(successMessage);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không cập nhật được báo cáo.'); }
+      return true;
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không cập nhật được báo cáo.'); return false; }
     finally { setBusy(false); }
   }
 
@@ -89,8 +90,8 @@ export function ReportViewer({ reportId }: { reportId: string }) {
 
   async function applyStructuringResponse() {
     if (!structureResponse.trim()) { setError('Dán toàn bộ câu trả lời ChatGPT có payload po_research_v1.'); return; }
-    await applyReportUpdate(() => reportApi.structureFromResponse(reportId, structureResponse), 'Đã cấu trúc báo cáo. Báo cáo gốc, Benchmark và PO notes được giữ nguyên.');
-    setStructureResponse('');
+    const updated = await applyReportUpdate(() => reportApi.structureFromResponse(reportId, structureResponse), 'Đã cấu trúc báo cáo. Báo cáo gốc, Benchmark và PO notes được giữ nguyên.');
+    if (updated) setStructureResponse('');
   }
 
   async function toggleSelection(item: BenchmarkSelection) {

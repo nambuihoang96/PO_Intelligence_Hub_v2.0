@@ -50,7 +50,10 @@ if (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyCont
         $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2
         $openApi = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/openapi.json' -TimeoutSec 3
         $backendIsOlderHub = $health.status -eq 'ok' -and $openApi.info.title -eq 'PO Intelligence Hub API'
-        $backendCompatible = $backendIsOlderHub -and $openApi.paths.PSObject.Properties.Name -contains '/api/v1/reports'
+        $reportPaths = @($openApi.paths.PSObject.Properties.Name)
+        $backendSupportsReports = $reportPaths -contains '/api/v1/reports'
+        $backendSupportsStructuring = $reportPaths -contains '/api/v1/reports/{report_id}/structure-from-response'
+        $backendCompatible = $backendIsOlderHub -and $backendSupportsReports -and $backendSupportsStructuring
     } catch { }
     if ($backendCompatible) {
         $backendAlreadyRunning = $true
@@ -58,7 +61,7 @@ if (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyCont
     } else {
         $owner = Get-PortOwnerDescription 8000
         if ($backendIsOlderHub) {
-            throw "Port 8000 is used by an older PO Intelligence Hub API ($owner) without the B-001 report endpoints. Stop that older API, then rerun this launcher. The process was not stopped automatically."
+            throw "Port 8000 is used by a PO Intelligence Hub API ($owner) that does not support the current report workflow. Close the running PO Hub window/terminal, then open run.bat again. The process was not stopped automatically."
         }
         throw "Port 8000 is used by $owner and does not expose the expected PO Hub API. The process was not stopped. Close it manually, then retry."
     }
