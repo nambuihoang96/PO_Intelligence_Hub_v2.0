@@ -37,20 +37,11 @@ function Test-PoHubOpenApiCompatibility {
     }
 }
 
-function Test-PoHubProcessFromWorkspace {
-    param(
-        [Parameter(Mandatory = $true)][string]$ExecutablePath,
-        [Parameter(Mandatory = $true)][string]$CommandLine,
-        [Parameter(Mandatory = $true)][string]$Workspace
-    )
+function Test-PoHubPythonProcess {
+    param([Parameter(Mandatory = $true)][string]$ProcessName)
 
-    $workspacePrefix = [System.IO.Path]::GetFullPath($Workspace).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
-    $fullExecutablePath = $null
-    try { $fullExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath) } catch { return $false }
-    $isWorkspacePython = $fullExecutablePath.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase) -and
-        $fullExecutablePath -match '[\\/]\.venv[\\/]Scripts[\\/]pythonw?\.exe$'
-    $isUvicornBackend = $CommandLine -match '(?i)(?:-m\s+uvicorn|uvicorn(?:\.exe)?)' -and
-        $CommandLine -match '(?i)backend\.app\.main:app'
-
-    return $isWorkspacePython -and $isUvicornBackend
+    # The caller only uses this after port 8000 has positively identified itself
+    # as an outdated PO Hub API through /health and /openapi.json. CIM command-line
+    # inspection is unavailable to some Windows users, so use the listener's PID.
+    return $ProcessName -match '(?i)^pythonw?(?:\.exe)?$'
 }

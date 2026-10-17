@@ -64,14 +64,14 @@ $backendIsPoHub = $false
             $ownerIds = @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
             $staleProcesses = @()
             foreach ($ownerId in $ownerIds) {
-                $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $ownerId" -ErrorAction SilentlyContinue
-                if ($processInfo -and (Test-PoHubProcessFromWorkspace -ExecutablePath $processInfo.ExecutablePath -CommandLine $processInfo.CommandLine -Workspace $workspace)) {
+                $processInfo = Get-Process -Id $ownerId -ErrorAction SilentlyContinue
+                if ($processInfo -and (Test-PoHubPythonProcess -ProcessName $processInfo.ProcessName)) {
                     $staleProcesses += [int]$ownerId
                 }
             }
 
             if ($staleProcesses.Count -eq $ownerIds.Count -and $staleProcesses.Count -gt 0) {
-                Write-Host "Found an outdated PO Hub backend from this workspace on port 8000 ($owner). Stopping it and starting the current backend..."
+                Write-Host "Found an outdated PO Hub Python backend on port 8000 ($owner). Stopping it and starting the current backend..."
                 foreach ($processId in $staleProcesses) { Stop-Process -Id $processId -Force -ErrorAction Stop }
                 $portReleased = $false
                 for ($attempt = 0; $attempt -lt 15; $attempt++) {
@@ -81,7 +81,7 @@ $backendIsPoHub = $false
                 if (-not $portReleased) { throw "Stopped the outdated PO Hub backend, but port 8000 did not become free. Check the process using port 8000, then run run.bat again. SQLite data was not changed." }
             } else {
                 $missingOperations = if ($compatibility) { $compatibility.MissingOperations -join ', ' } else { 'OpenAPI compatibility could not be verified.' }
-                throw "Port 8000 is used by an outdated PO Intelligence Hub API ($owner). Missing: $missingOperations. I could not verify that its Python process belongs to this workspace, so it was left running. Stop that exact old PO Hub process, then run run.bat again. SQLite data was not changed."
+                throw "Port 8000 is used by an outdated PO Intelligence Hub API ($owner). Missing: $missingOperations. Its listener could not be safely identified as a Python process, so it was left running. Stop that exact old PO Hub process, then run run.bat again. SQLite data was not changed."
             }
         } else {
             throw "Port 8000 is used by $owner and does not expose the expected PO Hub API. The process was not stopped. Close it manually, then retry."
