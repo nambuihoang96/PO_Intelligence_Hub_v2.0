@@ -29,6 +29,22 @@ export type ResearchPlan = ResearchPlanPayload & {
   created_at: string;
 };
 
+export type ResearchRunState = 'queued' | 'collecting' | 'validating' | 'synthesizing' | 'completed' | 'completed_with_gaps' | 'partial' | 'failed' | 'cancelled';
+
+export type ResearchRun = {
+  id: string;
+  project_id: string;
+  plan_id: string;
+  plan_version: number;
+  state: ResearchRunState;
+  started_at: string | null;
+  finished_at: string | null;
+  coverage_summary: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ResearchRunWithProject = ResearchRun & { project_name: string };
+
 export type Page<T> = {
   items: T[];
   next_cursor: string | null;
@@ -102,6 +118,34 @@ export const researchApi = {
     } while (cursor);
     return plans;
   },
+  listRuns(projectId: string, cursor?: string): Promise<Page<ResearchRun>> {
+    const params = new URLSearchParams({ limit: '100' });
+    if (cursor) params.set('cursor', cursor);
+    return request(`/projects/${encodeURIComponent(projectId)}/runs?${params.toString()}`);
+  },
+  async getRuns(projectId: string): Promise<ResearchRun[]> {
+    const runs: ResearchRun[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listRuns(projectId, cursor);
+      runs.push(...page.items);
+      cursor = page.next_cursor ?? undefined;
+    } while (cursor);
+    return runs;
+  },
+  async listAllRuns(): Promise<ResearchRunWithProject[]> {
+    const projects: ResearchProject[] = [];
+    let projectCursor: string | undefined;
+    do {
+      const page = await this.listProjects(projectCursor);
+      projects.push(...page.items);
+      projectCursor = page.next_cursor ?? undefined;
+    } while (projectCursor);
+    const runsByProject = await Promise.all(projects.map(async (project) =>
+      (await this.getRuns(project.id)).map((run) => ({ ...run, project_name: project.name })),
+    ));
+    return runsByProject.flat().sort((left, right) => right.created_at.localeCompare(left.created_at));
+  },
   createProject(payload: Pick<ResearchProject, 'name' | 'owner' | 'category'>): Promise<ResearchProject> {
     return request('/projects', { method: 'POST', body: JSON.stringify(payload) });
   },
@@ -110,5 +154,11 @@ export const researchApi = {
   },
   revisePlan(projectId: string, latestVersion: number, payload: ResearchPlanPayload): Promise<ResearchPlan> {
     return request(`/projects/${encodeURIComponent(projectId)}/plans/${latestVersion}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  createRun(projectId: string, planVersion: number): Promise<ResearchRun> {
+    return request(`/projects/${encodeURIComponent(projectId)}/runs`, { method: 'POST', body: JSON.stringify({ plan_version: planVersion }) });
+  },
+  getRun(runId: string): Promise<ResearchRun> {
+    return request(`/runs/${encodeURIComponent(runId)}`);
   },
 };

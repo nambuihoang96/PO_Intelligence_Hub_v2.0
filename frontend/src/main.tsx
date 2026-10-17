@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { ExplorerWorkspace } from './explorer/ExplorerWorkspace';
 import { ResearchWorkspace } from './research/ResearchWorkspace';
+import { ResearchRunsWorkspace } from './research/ResearchRunsWorkspace';
 import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import './style.css';
 
@@ -114,11 +115,18 @@ function EmptyState({ page }: { page: Page }) {
 function App() {
   const page = currentPage();
   const researchPage = page.path.startsWith('/research');
-  const projectSelected = Boolean(new URLSearchParams(window.location.search).get('projectId'));
-  const pageTitle = page.path === '/research/new' ? 'Create a research project' : projectSelected ? 'Research plan' : page.title;
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('projectId');
+  const runId = params.get('runId');
+  const projectSelected = Boolean(projectId);
+  const pageTitle = page.path === '/research/new' ? 'Create a research project'
+    : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
+      : page.path === '/sources' && runId ? 'Run evidence' : projectSelected ? 'Research plan' : page.title;
   const pageIntro = page.path === '/research/new'
     ? 'Set up a project, then draft its first research plan.'
-    : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
+    : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Browse saved research sessions and their selected plan versions.'
+      : page.path === '/sources' && runId ? 'Add and review manual evidence linked to this research run.'
+        : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
 
   return (
     <div className="app-shell">
@@ -183,7 +191,7 @@ function App() {
             )}
           </section>
 
-          {researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
+          {page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

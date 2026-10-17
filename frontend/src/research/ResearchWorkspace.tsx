@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError, researchApi } from './api';
-import type { ResearchPlan, ResearchPlanPayload, ResearchProject } from './api';
+import type { ResearchPlan, ResearchPlanPayload, ResearchProject, ResearchRun } from './api';
 
 type PlanForm = {
   question: string;
@@ -163,6 +163,10 @@ function NewProjectForm() {
 function PlanEditor({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ResearchProject | null>(null);
   const [plans, setPlans] = useState<ResearchPlan[]>([]);
+  const [runs, setRuns] = useState<ResearchRun[]>([]);
+  const [runPlanVersion, setRunPlanVersion] = useState('');
+  const [creatingRun, setCreatingRun] = useState(false);
+  const [runNotice, setRunNotice] = useState('');
   const [viewVersion, setViewVersion] = useState<number | null>(null);
   const [form, setForm] = useState<PlanForm>(emptyPlan);
   const [loading, setLoading] = useState(true);
@@ -174,11 +178,13 @@ function PlanEditor({ projectId }: { projectId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [loadedProject, loadedPlans] = await Promise.all([
-        researchApi.getProject(projectId), researchApi.getPlans(projectId),
+      const [loadedProject, loadedPlans, loadedRuns] = await Promise.all([
+        researchApi.getProject(projectId), researchApi.getPlans(projectId), researchApi.getRuns(projectId),
       ]);
       setProject(loadedProject);
       setPlans(loadedPlans);
+      setRuns(loadedRuns);
+      setRunPlanVersion((current) => current || String(loadedPlans.at(-1)?.version ?? ''));
       setViewVersion(loadedPlans.at(-1)?.version ?? null);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : new ApiError('The project could not be loaded.', 0, 'REQUEST_FAILED', {}));
@@ -213,6 +219,23 @@ function PlanEditor({ projectId }: { projectId: string }) {
       setError(cause instanceof ApiError ? cause : new ApiError('The research plan could not be saved.', 0, 'REQUEST_FAILED', {}));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function createRun() {
+    const selectedVersion = Number(runPlanVersion);
+    if (!Number.isInteger(selectedVersion) || selectedVersion < 1) return;
+    setCreatingRun(true);
+    setError(null);
+    setRunNotice('');
+    try {
+      const run = await researchApi.createRun(projectId, selectedVersion);
+      setRuns((current) => [run, ...current]);
+      setRunNotice(`Run created with plan version ${run.plan_version}. Research does not run automatically.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause : new ApiError('The research run could not be created.', 0, 'REQUEST_FAILED', {}));
+    } finally {
+      setCreatingRun(false);
     }
   }
 
@@ -267,6 +290,25 @@ function PlanEditor({ projectId }: { projectId: string }) {
         {plans.length === 0 ? <p>No plan has been saved yet.</p> : <div className="version-list">{[...plans].reverse().map((plan) => <button className={`version-item${plan.version === activePlan?.version ? ' selected' : ''}`} type="button" key={plan.id} onClick={() => setViewVersion(plan.version)}><span>Version {plan.version}</span><small>{new Date(plan.created_at).toLocaleDateString()}</small></button>)}</div>}
         <span>Saved versions remain available to research runs.</span>
       </aside>
+      <section className="research-panel research-run-section" aria-labelledby="project-runs-title">
+        <div className="panel-heading"><div><span className="state-label">RESEARCH SESSIONS</span><h2 id="project-runs-title">Runs for this project</h2></div><span className="manual-chip">MANUAL WORKFLOW</span></div>
+        {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
+        {runNotice && <div className="research-success" role="status">{runNotice}</div>}
+        <div className="run-create-controls">
+          <label className="field-label" htmlFor="run-plan-version">Plan version for new run</label>
+          <select id="run-plan-version" value={runPlanVersion} onChange={(event) => setRunPlanVersion(event.target.value)} disabled={!plans.length || creatingRun}>
+            {plans.length === 0 && <option value="">Save a plan before creating a run</option>}
+            {[...plans].reverse().map((plan) => <option value={plan.version} key={plan.id}>Version {plan.version} · {new Date(plan.created_at).toLocaleDateString()}</option>)}
+          </select>
+          <button type="button" className="primary-action" disabled={!plans.length || creatingRun || !runPlanVersion} onClick={() => void createRun()}>{creatingRun ? 'Creating…' : 'Create run'}</button>
+        </div>
+        {runs.length === 0 ? <p className="state-message">No runs yet. Creating a run records the selected plan version; no research is started automatically.</p> : <div className="research-run-list">
+          {[...runs].sort((left, right) => right.created_at.localeCompare(left.created_at)).map((run) => <article className="research-run-row" key={run.id}>
+            <div><strong>{run.state.replaceAll('_', ' ')}</strong><span>Plan version {run.plan_version} · {new Date(run.created_at).toLocaleString()}</span></div>
+            <a className="text-button" href={`/research/runs?runId=${encodeURIComponent(run.id)}&projectId=${encodeURIComponent(projectId)}`}>View run →</a>
+          </article>)}
+        </div>}
+      </section>
     </div>
   );
 }

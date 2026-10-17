@@ -36,12 +36,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const sourcesApi = {
-  listSources: () => request<Page<SourceRegistry>>('/sources'),
+  listSources: (cursor?: string) => {
+    const params = new URLSearchParams({ limit: '20' });
+    if (cursor) params.set('cursor', cursor);
+    return request<Page<SourceRegistry>>(`/sources?${params.toString()}`);
+  },
   createSource: (payload: { name: string; source_type: string; url_domain?: string; license_status: LicenseStatus }) =>
     request<SourceRegistry>('/sources', { method: 'POST', body: JSON.stringify(payload) }),
   updateSource: (id: string, payload: { license_status: LicenseStatus }) =>
     request<SourceRegistry>(`/sources/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
-  listEvidence: (runId: string) => request<Page<ManualEvidence>>(`/runs/${encodeURIComponent(runId)}/evidence`),
+  listEvidence: (runId: string, cursor?: string) => {
+    const params = new URLSearchParams({ limit: '20' });
+    if (cursor) params.set('cursor', cursor);
+    return request<Page<ManualEvidence>>(`/runs/${encodeURIComponent(runId)}/evidence?${params.toString()}`);
+  },
   addEvidence: (runId: string, payload: Record<string, unknown>) =>
     request<ManualEvidence>(`/runs/${encodeURIComponent(runId)}/evidence`, { method: 'POST', body: JSON.stringify(payload) }),
 };
