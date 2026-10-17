@@ -138,6 +138,27 @@ class AppStoreListing(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class ImportedResearchReport(Base):
+    """A verbatim report explicitly imported by the local user."""
+
+    __tablename__ = "imported_research_reports"
+    __table_args__ = (
+        UniqueConstraint("content_sha256", name="uq_imported_research_reports_content_sha256"),
+        CheckConstraint("origin = 'chatgpt_user_import'", name="ck_imported_research_reports_origin"),
+        Index("ix_imported_research_reports_imported_id", "imported_at", "id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    geo: Mapped[str] = mapped_column(String(100), nullable=False)
+    os: Mapped[str] = mapped_column(String(20), nullable=False)
+    research_period: Mapped[str | None] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin: Mapped[str] = mapped_column(String(40), nullable=False, default="chatgpt_user_import", server_default=text("'chatgpt_user_import'"))
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class SourceRegistry(Base):
     __tablename__ = "source_registry"
     __table_args__ = (

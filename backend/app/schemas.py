@@ -411,3 +411,52 @@ class ErrorDetail(APIModel):
 
 class ErrorEnvelope(APIModel):
     error: ErrorDetail
+
+
+class ImportedReportCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=2000)
+    geo: str = Field(min_length=1, max_length=100)
+    os: str = Field(pattern="^(iOS|Android|Both)$")
+    research_period: str | None = Field(default=None, max_length=200)
+    content: str = Field(min_length=1, max_length=2_000_000)
+
+    @field_validator("research_period")
+    @classmethod
+    def trim_report_metadata(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+    @field_validator("question", "geo")
+    @classmethod
+    def required_metadata_not_blank(cls, value: str) -> str:
+        if value is None or not value.strip():
+            raise ValueError("value must not be blank")
+        return value.strip()
+
+    @field_validator("content")
+    @classmethod
+    def report_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("report content must not be blank")
+        return value
+
+
+class ImportedReportSummary(APIModel):
+    id: str
+    question: str
+    geo: str
+    os: str
+    research_period: str | None
+    content_sha256: str
+    origin: str
+    imported_at: datetime
+    verification_status: str = "unverified"
+
+
+class ImportedReportRead(ImportedReportSummary):
+    content: str
+
+
+class ImportedReportCreated(ImportedReportRead):
+    duplicate: bool = False

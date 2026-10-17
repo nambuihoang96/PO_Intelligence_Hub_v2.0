@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ExplorerWorkspace } from './explorer/ExplorerWorkspace';
 import { ResearchWorkspace } from './research/ResearchWorkspace';
 import { ResearchRunsWorkspace } from './research/ResearchRunsWorkspace';
 import { SourcesWorkspace } from './sources/SourcesWorkspace';
+import { ReportHistory, ReportViewer, ResearchIntake } from './reports/ResearchIntake';
 import './style.css';
 
 type Page = {
@@ -21,11 +23,11 @@ const pages: Page[] = [
     path: '/',
     label: 'Home',
     icon: '⌂',
-    eyebrow: 'PRODUCT RESEARCH WORKSPACE',
-    title: 'A clear place to start product research.',
-    intro: 'Organize research work, evidence, and decisions in one workspace.',
+    eyebrow: 'CHATGPT RESEARCH + LOCAL WORKSPACE',
+    title: 'Turn research questions into reusable reports.',
+    intro: 'Build a research prompt, use ChatGPT Plus, then bring the report back here.',
     emptyTitle: 'Your workspace is ready',
-    emptyCopy: 'There are no research projects here yet. Start by exploring the research workspace.',
+    emptyCopy: 'Start with a research question.',
   },
   {
     path: '/research',
@@ -94,8 +96,9 @@ const secondaryPages: Page[] = [
 
 const allPages = [...pages, ...secondaryPages];
 
-function currentPage(): Page {
-  const path = window.location.pathname.replace(/\/$/, '') || '/';
+function currentPage(pathname: string): Page {
+  const path = pathname.replace(/\/$/, '') || '/';
+  if (path.startsWith('/reports/')) return pages.find((page) => page.path === '/reports')!;
   return allPages.find((page) => page.path === path) ?? pages[0];
 }
 
@@ -113,13 +116,19 @@ function EmptyState({ page }: { page: Page }) {
 }
 
 function App() {
-  const page = currentPage();
+  const [pathname, setPathname] = useState(window.location.pathname);
+  useEffect(() => {
+    const syncPath = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', syncPath);
+    return () => window.removeEventListener('popstate', syncPath);
+  }, []);
+  const page = currentPage(pathname);
   const researchPage = page.path.startsWith('/research');
   const params = new URLSearchParams(window.location.search);
   const projectId = params.get('projectId');
   const runId = params.get('runId');
   const projectSelected = Boolean(projectId);
-  const pageTitle = page.path === '/research/new' ? 'Create a research project'
+  const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : page.path === '/research/new' ? 'Create a research project'
     : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
       : page.path === '/sources' && runId ? 'Run evidence' : projectSelected ? 'Research plan' : page.title;
   const pageIntro = page.path === '/research/new'
@@ -177,12 +186,6 @@ function App() {
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>
             <p className="intro">{pageIntro}</p>
-            {page.path === '/' && (
-              <div className="home-actions">
-                <a className="primary-action" href="/research">Open research workspace <span aria-hidden="true">→</span></a>
-                <a className="secondary-action" href="/explorer">Explore evidence</a>
-              </div>
-            )}
             {page.path === '/research' && (
               <div className="home-actions">
                 <a className="primary-action" href="/research/new">View project setup <span aria-hidden="true">→</span></a>
@@ -191,7 +194,7 @@ function App() {
             )}
           </section>
 
-          {page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
+          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

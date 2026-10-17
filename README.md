@@ -69,3 +69,7 @@ The checks cover the `/health` response, default data-root location, and fronten
 ## UI status
 
 The Research workspace supports project setup and creating or editing versioned research plans. An edit appends a new version; older versions remain available and read-only. Primary and comparison periods are optional, and source preferences are recorded without connecting to or collecting from those sources. Explorer supports manually registered store listing metadata with OS/GEO filters and cursor pagination; URLs are stored as references and are never fetched. Listing data is user-provided, with no fixture or market data seeded into the workspace.
+
+## ChatGPT report intake
+
+Home provides a research-question prompt builder for manual use with ChatGPT Plus. The app does not call ChatGPT or another AI service. Paste a returned Markdown report or upload a `.md`/`.txt` file (up to 2 MB); the original text and scope metadata are saved in SQLite with origin `chatgpt_user_import` and remain explicitly unverified. Reports are deduplicated by SHA-256 content hash. OpenAPI includes `POST /api/v1/reports`, paginated `GET /api/v1/reports`, and `GET /api/v1/reports/{report_id}`. The Reports navigation shows imported history. This feature uses an additive migration and does not modify existing research runs, plans, manifests, evidence, or source records.
