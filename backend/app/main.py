@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from backend.app.api import router
 from backend.app.config import get_data_root
 from backend.app.db import create_database_engine
+from backend.app.sources import router as sources_router
 
 
 @asynccontextmanager
@@ -69,6 +70,7 @@ async def http_error_handler(_request: Request, exc: HTTPException) -> JSONRespo
 def create_app() -> FastAPI:
     application = FastAPI(title="PO Intelligence Hub API", version="2.0.0", lifespan=lifespan)
     application.include_router(router)
+    application.include_router(sources_router)
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(HTTPException, http_error_handler)
 

@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { ResearchWorkspace } from './research/ResearchWorkspace';
+import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import './style.css';
 
 type Page = {
@@ -181,7 +182,7 @@ function App() {
             )}
           </section>
 
-          {researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : <>
+          {researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">
