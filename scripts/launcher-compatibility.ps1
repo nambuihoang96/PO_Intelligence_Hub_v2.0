@@ -36,3 +36,21 @@ function Test-PoHubOpenApiCompatibility {
         Reason = if ($missing.Count -eq 0) { 'All Results workflow operations are available.' } else { "Missing required API operation(s): $($missing -join ', ')" }
     }
 }
+
+function Test-PoHubProcessFromWorkspace {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$CommandLine,
+        [Parameter(Mandatory = $true)][string]$Workspace
+    )
+
+    $workspacePrefix = [System.IO.Path]::GetFullPath($Workspace).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $fullExecutablePath = $null
+    try { $fullExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath) } catch { return $false }
+    $isWorkspacePython = $fullExecutablePath.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase) -and
+        $fullExecutablePath -match '[\\/]\.venv[\\/]Scripts[\\/]pythonw?\.exe$'
+    $isUvicornBackend = $CommandLine -match '(?i)(?:-m\s+uvicorn|uvicorn(?:\.exe)?)' -and
+        $CommandLine -match '(?i)backend\.app\.main:app'
+
+    return $isWorkspacePython -and $isUvicornBackend
+}

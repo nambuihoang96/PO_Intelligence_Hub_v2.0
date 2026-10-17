@@ -56,4 +56,11 @@ $result = Test-PoHubOpenApiCompatibility $wrongService
 Assert-Equal $result.IsPoHub $false 'A different service occupying the port must not be identified as the Hub'
 Assert-Equal $result.Compatible $false 'A different service must be rejected'
 
-Write-Host 'Launcher compatibility tests passed (4 cases).'
+$workspace = Split-Path -Parent $PSScriptRoot
+$workspacePython = Join-Path $workspace '.venv\Scripts\python.exe'
+$oldHubCommand = '"' + $workspacePython + '" -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000'
+Assert-Equal (Test-PoHubProcessFromWorkspace -ExecutablePath $workspacePython -CommandLine $oldHubCommand -Workspace $workspace) $true 'An outdated backend started from this workspace should be safe to restart'
+Assert-Equal (Test-PoHubProcessFromWorkspace -ExecutablePath 'C:\Python312\python.exe' -CommandLine $oldHubCommand -Workspace $workspace) $false 'A Python process outside this workspace must not be stopped automatically'
+Assert-Equal (Test-PoHubProcessFromWorkspace -ExecutablePath $workspacePython -CommandLine 'python -m http.server 8000' -Workspace $workspace) $false 'A non-PO process must not be stopped automatically'
+
+Write-Host 'Launcher compatibility tests passed (7 cases).'
