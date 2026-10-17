@@ -1,6 +1,6 @@
 # PO Intelligence Hub V2
 
-Local-first application scaffold for PO Intelligence Hub V2. The current delivery is **V2-001 only**: a React + TypeScript + Vite shell, a FastAPI health endpoint, and local data-root configuration. Research, AI, database, and source integrations are not implemented.
+Local-first application scaffold for PO Intelligence Hub V2. The current delivery includes the **V2-001 application shell** and **V2-002 local SQLite metadata schema**. Research behavior, AI, and source integrations are not implemented.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 .\scripts\setup.ps1
 ```
 
-The setup script creates a project-local Python virtual environment and installs the pinned backend and frontend dependencies. Direct dependency versions are exact-pinned in the manifests.
+The setup script creates a project-local Python virtual environment and installs the pinned backend and frontend dependencies from `backend/requirements.lock` and `frontend/package-lock.json`.
 
 ## Run in development
 
@@ -30,6 +30,16 @@ The setup script creates a project-local Python virtual environment and installs
 ```
 
 The API listens on `http://127.0.0.1:8000` and the UI on `http://127.0.0.1:5173`. Open the UI in a browser. The API health check is `http://127.0.0.1:8000/health` and returns `{"status":"ok"}`.
+
+## Initialize the local database
+
+V2-002 adds versioned SQLite migrations. Apply the schema after installing dependencies:
+
+```powershell
+.\.venv\Scripts\alembic.exe upgrade head
+```
+
+The database file is stored as `po_intelligence_hub.sqlite3` under `APP_DATA_ROOT` (default `<workspace>\data`). The initial schema creates metadata tables only; no research behavior or source connections are included.
 
 ## Run smoke checks
 

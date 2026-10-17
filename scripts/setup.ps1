@@ -11,10 +11,15 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $workspace '.venv\Scripts
 }
 if ($LASTEXITCODE -ne 0) { throw 'Creating the Python virtual environment failed.' }
 $venvPython = Join-Path $workspace '.venv\Scripts\python.exe'
-& $venvPython -m pip install --disable-pip-version-check -r (Join-Path $workspace 'backend\requirements.txt')
-if ($LASTEXITCODE -ne 0) { throw 'Installing backend dependencies failed.' }
+& $venvPython -m pip install --disable-pip-version-check -r (Join-Path $workspace 'backend\requirements.lock')
+if ($LASTEXITCODE -ne 0) {
+    $pip = Get-Command pip -ErrorAction SilentlyContinue
+    if (-not $pip) { throw 'pip is unavailable for the project virtual environment.' }
+    & $pip.Source --python $venvPython install --disable-pip-version-check -r (Join-Path $workspace 'backend\requirements.lock')
+    if ($LASTEXITCODE -ne 0) { throw 'Installing backend dependencies failed.' }
+}
 Push-Location (Join-Path $workspace 'frontend')
 try {
-    npm install --no-audit --no-fund
+    npm ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'Installing frontend dependencies failed.' }
 } finally { Pop-Location }
