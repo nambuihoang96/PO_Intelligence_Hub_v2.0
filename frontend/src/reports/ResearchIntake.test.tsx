@@ -275,17 +275,18 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByText('Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.')).toBeTruthy();
   });
 
-  it('renders the default GEO in a native dropdown with common country options', async () => {
+  it('renders the default GEO with common choices in a multiselect dropdown', async () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
-    const geo = await screen.findByRole('combobox', { name: 'GEO' }) as HTMLSelectElement;
-    expect(geo.value).toBe('Global / not specified');
-    expect(screen.getByRole('option', { name: 'United States (US)' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'United Kingdom (GB)' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Other / custom' })).toBeTruthy();
+    const geo = await screen.findByRole('button', { name: 'GEO' });
+    expect(geo.textContent).toContain('Global / not specified');
+    fireEvent.click(geo);
+    expect(screen.getByLabelText('United States (US)')).toBeTruthy();
+    expect(screen.getByLabelText('United Kingdom (GB)')).toBeTruthy();
+    expect(screen.getByLabelText('Other / custom')).toBeTruthy();
   });
 
-  it('submits selected GEO code and supports custom GEO entry', async () => {
+  it('submits multiple GEOs and environments and supports custom values', async () => {
     let submitted: Record<string, unknown> | undefined;
     mockFetch((url, init) => {
       if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
@@ -297,11 +298,15 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
-    const geo = screen.getByRole('combobox', { name: 'GEO' });
-    fireEvent.change(geo, { target: { value: 'VN' } });
-    expect((screen.getByRole('combobox', { name: 'GEO' }) as HTMLSelectElement).value).toBe('VN');
+    fireEvent.click(screen.getByRole('button', { name: 'GEO' }));
+    fireEvent.click(screen.getByLabelText('Vietnam (VN)'));
+    fireEvent.click(screen.getByLabelText('United States (US)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Environment' }));
+    fireEvent.click(screen.getByLabelText('iOS'));
+    fireEvent.click(screen.getByLabelText('Android'));
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
-    await waitFor(() => expect(submitted?.geo).toBe('VN'));
+    await waitFor(() => expect(submitted?.geo).toBe('VN, US'));
+    expect(submitted?.os).toBe('iOS, Android');
 
     cleanup();
     window.history.replaceState({}, '', '/');
@@ -315,10 +320,16 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
-    fireEvent.change(screen.getByRole('combobox', { name: 'GEO' }), { target: { value: 'Other / custom' } });
+    fireEvent.click(screen.getByRole('button', { name: 'GEO' }));
+    fireEvent.click(screen.getByLabelText('Other / custom'));
     fireEvent.change(screen.getByLabelText('GEO tùy chỉnh'), { target: { value: 'Special Market' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Environment' }));
+    fireEvent.click(screen.getByLabelText('Web'));
+    fireEvent.click(screen.getByLabelText('Other / custom'));
+    fireEvent.change(screen.getByLabelText('Environment name'), { target: { value: 'AR device' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     await waitFor(() => expect(submitted?.geo).toBe('Special Market'));
+    expect(submitted?.os).toBe('Web, AR device');
   });
 
   it('does not send multiple import requests on a rapid double click', async () => {

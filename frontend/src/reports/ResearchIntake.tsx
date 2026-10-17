@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { reportApi, type ReportInput, type ReportSummary } from './api';
+import { reportApi, type ReportSummary } from './api';
 import { extractHeadings } from './MarkdownReport';
 
 export function buildResearchPrompt(input: { question: string; geo: string; os: string; researchPeriod: string; focus?: string }): string {
@@ -47,24 +47,70 @@ const GEO_COUNTRIES: GeoOption[] = [
 ].map(([name, code]) => ({ label: `${name} (${code})`, value: code, code }));
 const GEO_OPTIONS = [...PRIORITY_GEOS, ...GEO_COUNTRIES.filter((country) => !PRIORITY_GEOS.some((priority) => priority.code === country.code))];
 
-function GeoDropdown({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const isCustom = value === 'Other / custom' || value.startsWith('custom:');
-  return <div className="geo-dropdown">
-    <label className="intake-field"><span className="field-label">GEO</span>
-      <select aria-label="GEO" value={isCustom && value.startsWith('custom:') ? 'Other / custom' : value} onChange={(event) => onChange(event.target.value)}>
-        {GEO_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        <option value="Other / custom">Other / custom</option>
-      </select>
-    </label>
-    {isCustom && <label className="intake-field"><span className="field-label">GEO tùy chỉnh</span><input aria-label="GEO tùy chỉnh" value={value.startsWith('custom:') ? value.slice(7) : ''} onChange={(event) => onChange(event.target.value ? `custom:${event.target.value}` : 'Other / custom')} placeholder="Nhập GEO hoặc market" /></label>}
+type ChoiceOption = { label: string; value: string };
+const ENVIRONMENT_OPTIONS: ChoiceOption[] = [
+  { label: 'Unknown', value: 'Unknown' }, { label: 'Not applicable', value: 'Not applicable' },
+  { label: 'iOS', value: 'iOS' }, { label: 'Android', value: 'Android' }, { label: 'Web', value: 'Web' },
+  { label: 'Desktop', value: 'Desktop' }, { label: 'Cross-platform', value: 'Cross-platform' },
+  { label: 'Other / custom', value: 'Other / custom' },
+];
+
+function toggleChoice(values: string[], value: string, exclusiveValues: string[]): string[] {
+  if (values.includes(value)) return values.filter((item) => item !== value);
+  if (exclusiveValues.includes(value)) return [value];
+  return [...values.filter((item) => !exclusiveValues.includes(item)), value];
+}
+
+function MultiChoiceDropdown({ label, values, options, onChange, exclusiveValues, customFieldLabel, customPlaceholder }: {
+  label: string;
+  values: string[];
+  options: ChoiceOption[];
+  onChange: (values: string[]) => void;
+  exclusiveValues: string[];
+  customFieldLabel: string;
+  customPlaceholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const isCustom = values.some((value) => value === 'Other / custom' || value.startsWith('custom:'));
+  const customValue = values.find((value) => value.startsWith('custom:'))?.slice(7) ?? '';
+  const selectedLabels = values.map((value) => value.startsWith('custom:') ? value.slice(7) : options.find((option) => option.value === value)?.label ?? value);
+  function updateCustom(value: string) {
+    const rest = values.filter((item) => item !== 'Other / custom' && !item.startsWith('custom:'));
+    onChange(value.trim() ? [...rest, `custom:${value}`] : [...rest, 'Other / custom']);
+  }
+  function toggleOption(value: string) {
+    if (value === 'Other / custom' && values.some((item) => item.startsWith('custom:'))) {
+      onChange(values.filter((item) => !item.startsWith('custom:')));
+      return;
+    }
+    onChange(toggleChoice(values, value, exclusiveValues));
+  }
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!dropdownRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('click', closeOnOutsideClick);
+    return () => document.removeEventListener('click', closeOnOutsideClick);
+  }, [open]);
+  return <div className="intake-field multi-choice-field" ref={dropdownRef}>
+    <span className="field-label">{label}</span>
+    <button type="button" className="multi-choice-trigger" aria-label={label} aria-expanded={open} aria-haspopup="true" onClick={() => setOpen((current) => !current)}>
+      <span>{selectedLabels.length ? selectedLabels.join(', ') : `Chọn ${label.toLocaleLowerCase()}`}</span><span aria-hidden="true">⌄</span>
+    </button>
+    {open && <div className="multi-choice-menu" role="group" aria-label={`${label} options`}>
+      {options.map((option) => <label key={option.value} className="multi-choice-option"><input type="checkbox" checked={values.includes(option.value) || (option.value === 'Other / custom' && values.some((value) => value.startsWith('custom:')))} onChange={() => toggleOption(option.value)} /><span>{option.label}</span></label>)}
+    </div>}
+    {values.length > 1 && <span className="multi-choice-hint">Đã chọn {values.length} mục</span>}
+    {isCustom && <label className="intake-field"><span className="field-label">{customFieldLabel}</span><input aria-label={customFieldLabel} value={customValue} onChange={(event) => updateCustom(event.target.value)} placeholder={customPlaceholder} /></label>}
   </div>;
 }
 
 export function ResearchIntake() {
   const [question, setQuestion] = useState('');
-  const [geo, setGeo] = useState('Global / not specified');
-  const [os, setOs] = useState<ReportInput['os']>('Unknown');
-  const [customEnvironment, setCustomEnvironment] = useState('');
+  const [geos, setGeos] = useState<string[]>(['Global / not specified']);
+  const [environments, setEnvironments] = useState<string[]>(['Unknown']);
   const [researchFocus, setResearchFocus] = useState('');
   const [researchPeriod, setResearchPeriod] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -82,7 +128,9 @@ export function ResearchIntake() {
   const [fileName, setFileName] = useState('');
   const importInFlight = useRef(false);
   const contentInspection = useMemo(() => inspectResearchContent(reportContent), [reportContent]);
-  const prompt = useMemo(() => buildResearchPrompt({ question, geo, os, researchPeriod, focus: researchFocus }), [question, geo, os, researchPeriod, researchFocus]);
+  const promptGeo = geos.map((value) => value.startsWith('custom:') ? value.slice(7) : value).join(', ');
+  const promptEnvironment = environments.map((value) => value.startsWith('custom:') ? value.slice(7) : value).join(', ');
+  const prompt = useMemo(() => buildResearchPrompt({ question, geo: promptGeo, os: promptEnvironment, researchPeriod, focus: researchFocus }), [question, promptGeo, promptEnvironment, researchPeriod, researchFocus]);
 
   useEffect(() => {
     reportApi.list().then((page) => { setHistory(page.items); setNextCursor(page.next_cursor); })
@@ -134,8 +182,10 @@ export function ResearchIntake() {
     setError(''); setSuccess('');
     if (importInFlight.current) return;
     if (!question.trim()) { setError('Nhập câu hỏi nghiên cứu để lưu cùng báo cáo.'); return; }
-    if (!geo.trim() || geo === 'Other / custom') { setError('Chọn hoặc nhập GEO để lưu cùng báo cáo.'); return; }
-    if (os === 'Other' && !customEnvironment.trim()) { setError('Nhập environment cần nghiên cứu.'); return; }
+    if (!geos.length || geos.includes('Other / custom')) { setError('Chọn GEO hoặc nhập GEO tùy chỉnh.'); return; }
+    if (!environments.length || environments.includes('Other / custom')) { setError('Chọn Environment hoặc nhập Environment tùy chỉnh.'); return; }
+    if (geos.join(', ').length > 100) { setError('Tổng GEO đã chọn vượt giới hạn 100 ký tự. Hãy giảm số lựa chọn.'); return; }
+    if (environments.join(', ').length > 100) { setError('Tổng Environment đã chọn vượt giới hạn 100 ký tự. Hãy giảm số lựa chọn.'); return; }
     if (!reportContent.trim()) { setError('Bạn chưa dán kết quả nghiên cứu hoặc chọn file .md/.txt/.json.'); return; }
     if (reportContent.length > 2_000_000) { setError('Nội dung vượt giới hạn 2.000.000 ký tự. Hãy rút gọn báo cáo rồi thử lại.'); return; }
     if (contentInspection.jsonError) { setError(contentInspection.jsonError); return; }
@@ -144,8 +194,9 @@ export function ResearchIntake() {
     importInFlight.current = true;
     const slowTimer = window.setTimeout(() => setImportSlow(true), 8000);
     try {
-      const environment = os === 'Other' ? customEnvironment.trim() : os;
-      const report = await reportApi.import({ question, geo: geo.startsWith('custom:') ? geo.slice(7).trim() : geo.trim(), os: environment, research_period: researchPeriod.trim() || null, content: reportContent });
+      const geo = geos.map((value) => value.startsWith('custom:') ? value.slice(7).trim() : value.trim()).join(', ');
+      const environment = environments.map((value) => value.startsWith('custom:') ? value.slice(7).trim() : value.trim()).join(', ');
+      const report = await reportApi.import({ question, geo, os: environment, research_period: researchPeriod.trim() || null, content: reportContent });
       window.history.pushState({}, '', `/reports/${report.id}?imported=1${report.duplicate ? '&duplicate=1' : ''}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không lưu được báo cáo. Vui lòng thử lại.'); }
@@ -155,8 +206,8 @@ export function ResearchIntake() {
   const previewHeadings = extractHeadings(reportContent);
   const validation = [
     { label: 'Research question', valid: Boolean(question.trim()), error: 'Cần có câu hỏi nghiên cứu.' },
-    { label: 'GEO', valid: Boolean(geo.trim()) && geo !== 'Other / custom', error: 'Cần chọn hoặc nhập GEO.' },
-    { label: 'Environment', valid: os !== 'Other' || Boolean(customEnvironment.trim()), error: 'Cần chọn hoặc nhập Environment.' },
+    { label: 'GEO', valid: geos.length > 0 && !geos.includes('Other / custom') && geos.join(', ').length <= 100, error: geos.join(', ').length > 100 ? 'Tổng GEO đã chọn vượt giới hạn 100 ký tự.' : 'Cần chọn hoặc nhập GEO.' },
+    { label: 'Environment', valid: environments.length > 0 && !environments.includes('Other / custom') && environments.join(', ').length <= 100, error: environments.join(', ').length > 100 ? 'Tổng Environment đã chọn vượt giới hạn 100 ký tự.' : 'Cần chọn hoặc nhập Environment.' },
     { label: 'Research result', valid: Boolean(reportContent.trim()) && reportContent.length <= 2_000_000 && !contentInspection.jsonError, error: contentInspection.jsonError || (reportContent.length > 2_000_000 ? 'Nội dung vượt 2.000.000 ký tự.' : 'Bạn chưa dán kết quả nghiên cứu hoặc chọn file .md/.txt/.json.') },
   ];
   const validationMessage = validation.every((item) => item.valid) ? 'Thông tin hợp lệ để xem trước và nhập.' : validation.filter((item) => !item.valid).map((item) => item.error).join(' ');
@@ -166,11 +217,10 @@ export function ResearchIntake() {
       <div className="panel-heading"><div><span className="field-label">CHATGPT PLUS + LOCAL WORKSPACE</span><h2 id="intake-title">Bắt đầu với câu hỏi sản phẩm</h2></div></div>
       <label className="intake-field"><span className="field-label">Bạn muốn nghiên cứu gì?</span><textarea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ví dụ: Các app học tiếng Anh cho trẻ em tại Mỹ đang tạo động lực học tập như thế nào?" /></label>
       <div className="intake-scope-grid">
-        <GeoDropdown value={geo} onChange={setGeo} />
-        <label className="intake-field"><span className="field-label">Environment</span><select value={os} onChange={(event) => setOs(event.target.value)}><option>Unknown</option><option>Not applicable</option><option>iOS</option><option>Android</option><option>Both</option><option>Web</option><option>Desktop</option><option>Cross-platform</option><option value="Other">Other</option></select></label>
+        <MultiChoiceDropdown label="GEO" values={geos} options={[...GEO_OPTIONS, { label: 'Other / custom', value: 'Other / custom' }]} onChange={setGeos} exclusiveValues={['Global / not specified', 'Worldwide']} customFieldLabel="GEO tùy chỉnh" customPlaceholder="Nhập GEO hoặc market" />
+        <MultiChoiceDropdown label="Environment" values={environments} options={ENVIRONMENT_OPTIONS} onChange={setEnvironments} exclusiveValues={['Unknown', 'Not applicable']} customFieldLabel="Environment name" customPlaceholder="Môi trường nghiên cứu" />
         <label className="intake-field"><span className="field-label">Research focus (optional)</span><input value={researchFocus} onChange={(event) => setResearchFocus(event.target.value)} maxLength={200} placeholder="Nhập lĩnh vực hoặc trọng tâm theo cách của bạn" /></label>
         <label className="intake-field"><span className="field-label">Kỳ nghiên cứu</span><input value={researchPeriod} onChange={(event) => setResearchPeriod(event.target.value)} maxLength={200} placeholder="Ví dụ: 2025–2026" /></label>
-        {os === 'Other' && <label className="intake-field"><span className="field-label">Environment name</span><input value={customEnvironment} onChange={(event) => setCustomEnvironment(event.target.value)} maxLength={100} placeholder="Môi trường nghiên cứu" /></label>}
       </div>
       <div className="intake-actions">
         <button className="primary-action" type="button" onClick={copyPrompt}>Copy prompt for ChatGPT <span aria-hidden="true">↗</span></button>
