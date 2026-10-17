@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport
-from backend.app.research_data import extract_unstructured, normalize_report
+from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
     BenchmarkWorkspaceRead,
@@ -69,7 +69,17 @@ def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured
 @router.post("", response_model=ImportedReportCreated, status_code=status.HTTP_201_CREATED, responses={422: {"description": "Invalid report input"}})
 def import_report(payload: ImportedReportCreate, response: Response, session: SessionDependency) -> ImportedReportCreated:
     digest = hashlib.sha256(payload.content.encode("utf-8")).hexdigest()
-    research_data, parse_status, extraction_error = normalize_report(payload.content, payload.structured_json)
+    try:
+        research_data, parse_status, extraction_error = normalize_report(payload.content, payload.structured_json)
+    except ResearchInputValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_RESEARCH_INPUT",
+                "message": str(exc),
+                "errors": exc.errors,
+            },
+        ) from exc
     existing = session.scalar(select(ImportedResearchReport).where(ImportedResearchReport.content_sha256 == digest))
     if existing is not None:
         available = False
@@ -206,10 +216,16 @@ def update_structured_data(report_id: str, payload: StructuredResearchDataUpdate
     report = session.get(ImportedResearchReport, report_id)
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
-    normalized, normalized_status, extraction_error = normalize_report(
-        report.content,
-        json.dumps(payload.research_data.model_dump(mode="json")),
-    )
+    try:
+        normalized, normalized_status, extraction_error = normalize_report(
+            report.content,
+            json.dumps(payload.research_data.model_dump(mode="json")),
+        )
+    except ResearchInputValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_STRUCTURED_RESEARCH_DATA", "message": str(exc), "errors": exc.errors},
+        ) from exc
     if normalized_status != "PARSED":
         raise HTTPException(status_code=422, detail={"code": "INVALID_STRUCTURED_RESEARCH_DATA", "message": "Structured data must reference URLs and source locations present in the original report.", "reason": extraction_error})
     report.research_data_json = normalized.model_dump(mode="json")

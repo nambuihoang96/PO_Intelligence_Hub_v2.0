@@ -56,9 +56,21 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
     const file = new File([report.content], 'market-report.md', { type: 'text/markdown' });
-    fireEvent.change(screen.getByLabelText('Chọn file .md hoặc .txt'), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText('Chọn file .md, .txt hoặc .json'), { target: { files: [file] } });
     expect(await screen.findByText('market-report.md')).toBeTruthy();
-    await waitFor(() => expect((screen.getByLabelText('Nội dung báo cáo') as HTMLTextAreaElement).value).toBe(report.content));
+    await waitFor(() => expect((screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT') as HTMLTextAreaElement).value).toBe(report.content));
+  });
+
+  it('accepts a JSON file into the same single research result input', async () => {
+    mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    const content = JSON.stringify({ sections: [], entities: [], findings: [] });
+    fireEvent.change(screen.getByLabelText('Chọn file .md, .txt hoặc .json'), { target: { files: [new File([content], 'research.json', { type: 'application/json' })] } });
+    expect(await screen.findByText('research.json')).toBeTruthy();
+    await waitFor(() => expect((screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT') as HTMLTextAreaElement).value).toBe(content));
+    expect(screen.getByText(/Định dạng: JSON/)).toBeTruthy();
   });
 
   it('previews pasted Markdown, imports once and navigates to the saved report', async () => {
@@ -76,8 +88,8 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
-    expect(await screen.findByText(/2 heading · 1 URL nhận diện/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
+    expect(await screen.findByText(/2 heading.*Định dạng: Markdown/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
     expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST')).toBe(true);
@@ -145,36 +157,40 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: '# Report\nContent' } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: '# Report\nContent' } });
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: '   ' } });
     expect(screen.getByText('Cần có câu hỏi nghiên cứu.')).toBeTruthy();
     expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
   });
 
-  it('shows missing report content clearly and rejects structured JSON without report text', async () => {
-    const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
+  it('imports JSON-only content from the single research result field', async () => {
+    const content = JSON.stringify({ sections: [], entities: [], findings: [], evidence_references: [], benchmark_dimensions: [], research_gaps: [], po_recommendations: [] });
+    let payload: Record<string, unknown> | undefined;
+    mockFetch((url, init) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (init.method === 'POST') { payload = JSON.parse(String(init.body)); return report; }
+      throw new Error(`Unexpected request ${url}`);
+    });
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Research question' } });
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Structured research intake test' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.click(screen.getByText('Structured JSON (tùy chọn)'));
-    fireEvent.change(screen.getByLabelText('Universal research data JSON'), { target: { value: '{"findings":[]}' } });
-    expect(screen.getByText(/Chưa có nội dung báo cáo để import/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: content } });
+    expect(screen.getByText(/Định dạng: JSON/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('Structured JSON không thay thế cho báo cáo gốc');
-    expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
+    await waitFor(() => expect(payload?.content).toBe(content));
+    expect(payload?.structured_json).toBeUndefined();
   });
 
-  it('validates malformed structured JSON immediately and blocks import', async () => {
+  it('validates malformed inline JSON immediately and blocks import without losing text', async () => {
     const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Universal research data JSON'), { target: { value: '{bad json' } });
-    expect((await screen.findByRole('alert')).textContent).toContain('Structured JSON không hợp lệ');
-    expect(screen.getByText(/Structured JSON: Không hợp lệ/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Original report text' } });
-    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
+    const raw = '# Research\n\n```json\n{bad json\n```';
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: raw } });
+    expect((await screen.findByRole('alert')).textContent).toContain('JSON không hợp lệ tại dòng 1');
+    expect((screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT') as HTMLTextAreaElement).value).toBe(raw);
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
   });
@@ -191,7 +207,7 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     const save = screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' });
     fireEvent.click(save);
     expect((await screen.findByRole('status')).textContent).toContain('Đang lưu báo cáo...');
@@ -211,11 +227,32 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Report body' } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Báo cáo không hợp lệ.');
     expect(screen.queryByText('Đang lưu báo cáo...')).toBeNull();
     expect((screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('shows backend 422 field, reason and retry guidance while preserving entered content', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/reports?')) return new Response(JSON.stringify({ items: [], next_cursor: null, limit: 10 }));
+      if (init.method === 'POST') return new Response(JSON.stringify({ error: { message: 'Request validation failed.', details: { errors: [{ location: ['body', 'geo'], message: 'String should have at most 100 characters', type: 'string_too_long' }] } } }), { status: 422 });
+      throw new Error(`Unexpected request ${String(input)}`);
+    }));
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    const raw = '# Detailed research\n\nReport body stays available after a backend error.';
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: raw } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('GEO');
+    expect(alert.textContent).toContain('100 ký tự');
+    expect(alert.textContent).toContain('thử lại');
+    expect((screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT') as HTMLTextAreaElement).value).toBe(raw);
+    expect(screen.queryByText('Đang lưu báo cáo...')).toBeNull();
   });
 
   it('opens the existing report and shows the duplicate notice after duplicate import', async () => {
@@ -229,7 +266,7 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
     expect(window.location.search).toContain('duplicate=1');
@@ -260,7 +297,7 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Report body' } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     const geo = screen.getByRole('combobox', { name: 'GEO' });
     fireEvent.click(geo);
     fireEvent.change(geo, { target: { value: 'Vie' } });
@@ -280,7 +317,7 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: 'Report body' } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     fireEvent.click(screen.getByRole('combobox', { name: 'GEO' }));
     fireEvent.click(screen.getByRole('option', { name: 'Other / custom' }));
     fireEvent.change(screen.getByLabelText('GEO tùy chỉnh'), { target: { value: 'Special Market' } });
@@ -300,7 +337,7 @@ describe('ChatGPT research intake', () => {
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
-    fireEvent.change(screen.getByLabelText('Nội dung báo cáo'), { target: { value: report.content } });
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     const save = screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' });
     fireEvent.click(save);
     fireEvent.click(save);

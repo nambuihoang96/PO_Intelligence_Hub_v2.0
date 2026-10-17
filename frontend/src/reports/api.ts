@@ -11,7 +11,7 @@ export type ReportSummary = {
 };
 
 export type ResearchData = {
-  sections: { heading: string; content: string; hierarchy: number; source_location: string; lists: { ordered: boolean; items: string[]; source_location?: string | null }[]; tables: { columns: string[]; rows: string[][]; source_location?: string | null }[] }[];
+  sections: { heading: string; content: string; hierarchy: number; source_location: string | null; lists: { ordered: boolean; items: string[]; source_location?: string | null }[]; tables: { columns: string[]; rows: string[][]; source_location?: string | null }[] }[];
   entities: { key: string; entity_type: string; name: string; attributes: Record<string, unknown>; evidence_references: string[] }[];
   findings: { key: string; finding_type: string; title: string; description: string; related_entities: string[]; evidence_references: string[]; source_locations: string[]; scope: Record<string, unknown>; evidence_status: string; confidence: number | null; uncertainty: string | null; po_implications: string | null }[];
   evidence_references: { url: string; title: string | null; source_location: string | null; verified: boolean }[];
@@ -26,20 +26,50 @@ export type ImportedReport = ReportSummary & { content: string; parse_status: 'P
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };
 export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { content: string; structured_json?: string };
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+function readableValidationErrors(errors: unknown): string[] {
+  if (!Array.isArray(errors)) return [];
+  return errors.map((entry) => {
+    const item = entry as { location?: unknown[]; message?: string; msg?: string };
+    const location = (item.location ?? []).filter((part) => part !== 'body').join('.');
+    const fieldNames: Record<string, string> = { content: 'Nội dung báo cáo', question: 'Câu hỏi nghiên cứu', geo: 'GEO', os: 'Environment', research_period: 'Kỳ nghiên cứu', structured_json: 'Structured JSON' };
+    const field = location.split('.')[0];
+    const label = fieldNames[field] ?? (location || 'Dữ liệu');
+    let reason = item.message ?? item.msg ?? 'Giá trị không hợp lệ.';
+    const maximum = /at most ([\d,]+) characters/i.exec(reason)?.[1];
+    if (maximum) reason = `vượt giới hạn ${Number(maximum.replaceAll(',', '')).toLocaleString('vi-VN')} ký tự. Hãy rút ngắn nội dung rồi thử lại.`;
+    else if (/at least 1 character|must not be blank/i.test(reason)) reason = 'không được để trống. Hãy bổ sung giá trị.';
+    else if (/valid string/i.test(reason)) reason = 'phải là văn bản hợp lệ. Hãy kiểm tra nội dung trường này.';
+    else if (/extra inputs are not permitted/i.test(reason)) reason = 'chứa trường không được hỗ trợ. Hãy xóa trường đó và thử lại.';
+    return `${label}: ${reason}`;
+  });
+}
+
+async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
     response = await fetch(url, {
       ...init,
+      signal: controller.signal,
       headers: { 'Content-Type': 'application/json', ...init?.headers },
     });
-  } catch {
-    throw new Error('Không kết nối được tới backend. Kiểm tra ứng dụng local rồi thử lại.');
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw new Error('Yêu cầu quá thời gian chờ 30 giây. Nội dung vẫn được giữ; hãy kiểm tra backend rồi bấm thử lại. Hệ thống không tự gửi lại.');
+    throw new Error('Không kết nối được tới backend. Nội dung vẫn được giữ; hãy kiểm tra ứng dụng local rồi thử lại. Hệ thống không tự gửi lại.');
+  } finally {
+    window.clearTimeout(timeout);
   }
-  let body: any;
+  let body: Record<string, any> | null;
   try { body = await response.json(); } catch { body = null; }
-  const detail = body?.error?.message ?? body?.detail?.[0]?.msg ?? body?.detail ?? body?.message;
-  if (!response.ok) throw new Error(typeof detail === 'string' ? detail : 'Backend không thể lưu báo cáo. Kiểm tra dữ liệu và thử lại.');
+  const apiError = body?.error;
+  const detail = apiError?.message ?? body?.detail?.[0]?.msg ?? body?.detail ?? body?.message;
+  if (!response.ok) {
+    const validation = readableValidationErrors(apiError?.details?.errors ?? body?.detail?.errors);
+    const reason = validation.length ? `\n${validation.map((item) => `• ${item}`).join('\n')}` : '';
+    const headline = validation.length && detail === 'Request validation failed.' ? 'Hãy sửa các trường chưa hợp lệ:' : (typeof detail === 'string' ? detail : 'Backend không thể lưu báo cáo. Kiểm tra dữ liệu và thử lại.');
+    throw new Error(`${headline}${reason}\nNội dung nhập vẫn được giữ. Bạn có thể sửa lỗi và thử lại.`);
+  }
   if (body === null) throw new Error('Backend trả về phản hồi không đọc được. Vui lòng thử lại.');
   return body as T;
 }

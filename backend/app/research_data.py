@@ -46,7 +46,7 @@ class ResearchSection(ResearchModel):
     heading: str
     content: str = ""
     hierarchy: int = Field(ge=1, le=6)
-    source_location: str
+    source_location: str | None = None
     lists: list[ResearchList] = Field(default_factory=list)
     tables: list[ResearchTable] = Field(default_factory=list)
 
@@ -243,41 +243,82 @@ def extract_unstructured(markdown: str) -> tuple[UniversalResearchData, str]:
     return data, "PARTIAL" if sections or references else "NEEDS_STRUCTURING"
 
 
-def normalize_report(markdown: str, structured_json: str | None) -> tuple[UniversalResearchData, str, str | None]:
+class ResearchInputValidationError(ValueError):
+    def __init__(self, message: str, errors: list[dict[str, Any]]):
+        super().__init__(message)
+        self.errors = errors
+
+
+def _structured_candidate(content: str, explicit_json: str | None) -> tuple[str | None, str, str]:
+    if explicit_json is not None and explicit_json.strip():
+        return explicit_json, "structured_json", content
+    fenced = re.search(r"(?is)```json\s*\r?\n?(.*?)\r?\n?```", content)
+    if fenced:
+        prose = content[:fenced.start()] + content[fenced.end():]
+        return fenced.group(1), ("inline_json" if prose.strip() else "json_only"), prose
+    stripped = content.strip()
+    if stripped.startswith(("{", "[")):
+        return content, "json_only", ""
+    if re.search(r"(?is)```json\b", content):
+        raise ResearchInputValidationError(
+            "The fenced JSON block is not closed.",
+            [{"location": ["body", "content"], "message": "JSON code fence must end with ```.", "type": "json_fence_unclosed"}],
+        )
+    return None, "text", content
+
+
+def normalize_report(content: str, structured_json: str | None) -> tuple[UniversalResearchData, str, str | None]:
+    candidate, input_kind, markdown = _structured_candidate(content, structured_json)
     data, status = extract_unstructured(markdown)
-    if not structured_json:
-        fenced = re.search(r"(?is)^\s*```json\s*\n(.*?)\n```\s*$", markdown.strip())
-        if not fenced:
-            fenced = re.search(r"(?is)```json\s*\n(.*?)\n```", markdown)
-        if fenced:
-            structured_json = fenced.group(1)
-    if not structured_json or not structured_json.strip():
+    if candidate is None or not candidate.strip():
         return data, status, None
+    field_path = "structured_json" if input_kind == "structured_json" else "content"
     try:
-        payload = json.loads(structured_json)
+        payload = json.loads(candidate)
+    except json.JSONDecodeError as exc:
+        detail = f"JSON syntax error at line {exc.lineno}, column {exc.colno}: {exc.msg}."
+        raise ResearchInputValidationError(
+            detail,
+            [{"location": ["body", field_path, "line", exc.lineno, "column", exc.colno], "message": detail, "type": "json_invalid"}],
+        ) from exc
+    try:
         structured = UniversalResearchData.model_validate(payload)
-        # URLs and sections are grounded in the verbatim report; accept supplied
-        # structured content only when its source references can be found there.
+    except ValidationError as exc:
+        errors = [
+            {"location": ["body", field_path, *error.get("loc", ())], "message": error.get("msg", "Invalid value"), "type": error.get("type", "value_error")}
+            for error in exc.errors(include_input=False)
+        ]
+        raise ResearchInputValidationError("Structured research data does not match the research results schema.", errors) from exc
+
+    # Legacy callers that send a second JSON field must keep its citations tied
+    # to the report text. Inline and JSON-only input validate references inside
+    # the supplied JSON envelope and remain explicitly unverified.
+    if input_kind == "structured_json":
         report_urls = {item.url for item in data.evidence_references}
         supplied_urls = {item.url for item in structured.evidence_references}
         if missing := supplied_urls - report_urls:
-            raise ValueError("source URLs are absent from the original report: " + ", ".join(sorted(missing)))
-        lines = markdown.splitlines()
-        for source in structured.evidence_references:
-            if source.source_location:
-                match = re.fullmatch(r"line:(\d+)", source.source_location)
-                if not match or int(match.group(1)) > len(lines) or source.url not in lines[int(match.group(1)) - 1]:
-                    raise ValueError(f"source location does not point to its URL in the report: {source.source_location}")
-        locations = [section.source_location for section in structured.sections]
-        locations += [item.source_location for section in structured.sections for item in section.lists if item.source_location]
-        locations += [item.source_location for section in structured.sections for item in section.tables if item.source_location]
-        locations += [location for item in structured.findings for location in item.source_locations]
-        locations += [location for dimension in structured.benchmark_dimensions for observation in dimension.observations for location in observation.source_locations]
-        for location in locations:
-            match = re.fullmatch(r"line:(\d+)", location)
-            if not match or not 1 <= int(match.group(1)) <= len(lines):
-                raise ValueError(f"source location is not a valid line in the original report: {location}")
-        return structured, "PARSED", None
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        message = str(exc)
-        return data, status, message[:2000]
+            message = "Source URLs in structured_json must also appear in the Markdown/TXT report: " + ", ".join(sorted(missing))
+            raise ResearchInputValidationError(message, [{"location": ["body", "structured_json", "evidence_references"], "message": message, "type": "reference_not_in_report"}])
+
+    lines = content.splitlines()
+    for source in structured.evidence_references:
+        if source.source_location:
+            match = re.fullmatch(r"line:(\d+)", source.source_location)
+            if not match or int(match.group(1)) > len(lines) or source.url not in lines[int(match.group(1)) - 1]:
+                # A location from a JSON-only document is not necessarily a
+                # Markdown line citation. Keep it only if it maps to the input.
+                if input_kind != "json_only":
+                    message = f"Source location {source.source_location} does not point to its URL in the original input."
+                    raise ResearchInputValidationError(message, [{"location": ["body", field_path, "evidence_references", "source_location"], "message": message, "type": "invalid_source_location"}])
+    locations = [section.source_location for section in structured.sections if section.source_location]
+    locations += [item.source_location for section in structured.sections for item in section.lists if item.source_location]
+    locations += [item.source_location for section in structured.sections for item in section.tables if item.source_location]
+    locations += [location for item in structured.findings for location in item.source_locations]
+    locations += [location for dimension in structured.benchmark_dimensions for observation in dimension.observations for location in observation.source_locations]
+    for location in locations:
+        match = re.fullmatch(r"line:(\d+)", location)
+        if not match or not 1 <= int(match.group(1)) <= len(lines):
+            if input_kind != "json_only":
+                message = f"Source location {location} is not a valid line in the original input."
+                raise ResearchInputValidationError(message, [{"location": ["body", field_path, "source_location"], "message": message, "type": "invalid_source_location"}])
+    return structured, "PARSED", None

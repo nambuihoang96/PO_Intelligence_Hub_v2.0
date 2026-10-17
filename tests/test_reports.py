@@ -157,9 +157,10 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(imported["parse_status"], "PARSED")
         forged = self._structured_payload(url="https://example.com/source")
         forged["evidence_references"][0]["source_location"] = "line:1"
-        invalid = self.client.post("/api/v1/reports", json={**self.payload("# Other\n\nSource: https://example.com/source"), "structured_json": json.dumps(forged)}).json()
-        self.assertNotEqual(invalid["parse_status"], "PARSED")
-        self.assertIn("source location does not point", invalid["extraction_error"])
+        invalid = self.client.post("/api/v1/reports", json={**self.payload("# Other\n\nSource: https://example.com/source"), "structured_json": json.dumps(forged)})
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.json()["error"]["code"], "INVALID_RESEARCH_INPUT")
+        self.assertIn("does not point to its URL", invalid.json()["error"]["message"])
 
     def test_benchmark_workspace_round_trips_and_rejects_unknown_items(self) -> None:
         raw = "# Context\n\nObservation here.\n\nSource: https://example.com/\n"
@@ -308,11 +309,10 @@ class ImportedReportsAPITest(unittest.TestCase):
     def test_invalid_structured_json_preserves_original_and_reports_specific_extraction_error(self) -> None:
         raw = "# Raw report\n\nKeep this text."
         response = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": "{invalid"})
-        self.assertEqual(response.status_code, 201, response.text)
-        saved = response.json()
-        self.assertEqual(saved["content"], raw)
-        self.assertEqual(saved["parse_status"], "PARTIAL")
-        self.assertIn("Expecting property name", saved["extraction_error"])
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(response.json()["error"]["code"], "INVALID_RESEARCH_INPUT")
+        self.assertIn("line 1, column 2", response.json()["error"]["message"])
+        self.assertEqual(response.json()["error"]["details"]["errors"][0]["location"][:2], ["body", "structured_json"])
 
     def test_structured_relations_must_resolve_to_report_entities_and_source_urls(self) -> None:
         raw = "# Report\n\nSource: https://example.com/reference"
@@ -322,9 +322,10 @@ class ImportedReportsAPITest(unittest.TestCase):
             "evidence_references": [{"url": "https://example.com/reference", "verified": False}],
         }
         response = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(structured)})
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["parse_status"], "PARTIAL")
-        self.assertIn("unknown entity keys", response.json()["extraction_error"])
+        self.assertEqual(response.status_code, 422)
+        error = response.json()["error"]
+        self.assertEqual(error["code"], "INVALID_RESEARCH_INPUT")
+        self.assertTrue(any("unknown entity keys" in item["message"] for item in error["details"]["errors"]))
 
     def test_benchmark_selection_rejects_unknown_items(self) -> None:
         report_id = self.client.post("/api/v1/reports", json=self.payload()).json()["id"]
@@ -375,6 +376,72 @@ class ImportedReportsAPITest(unittest.TestCase):
         evidence_after = self.client.get(f"/api/v1/runs/{run['id']}/evidence").json()
         self.assertEqual(len(evidence_after["items"]), 1)
         self.assertEqual(evidence_after["items"][0]["evidence"]["excerpt_or_ref"], "Existing evidence note")
+
+    def test_long_markdown_with_embedded_json_reproduces_content_limit_422(self) -> None:
+        long_markdown = "# Long market report\n\n" + ("Detailed source-backed discussion of a market observation. " * 40_000)
+        raw = long_markdown + "\n```json\n" + json.dumps({"sections": [], "entities": [], "findings": []}) + "\n```\n"
+        self.assertGreater(len(raw), 2_000_000)
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 422)
+        error = response.json()["error"]
+        self.assertEqual(error["message"], "Request validation failed.")
+        content_error = next(item for item in error["details"]["errors"] if item["location"] == ["body", "content"])
+        self.assertEqual(content_error["type"], "string_too_long")
+        self.assertEqual(content_error["message"], "String should have at most 2000000 characters")
+
+    def test_json_only_import_creates_results_and_keeps_the_verbatim_input(self) -> None:
+        raw = json.dumps({
+            "sections": [{"heading": "Field notes", "content": "A supplied description.", "hierarchy": 1}],
+            "entities": [{"key": "entity-a", "entity_type": "organization", "name": "Example organization", "attributes": {"region": "VN"}, "evidence_references": ["https://example.org/source"]}],
+            "findings": [{"key": "finding-a", "finding_type": "observation", "title": "Reported operating pattern", "description": "The report states this pattern; it has not been independently checked.", "related_entities": ["entity-a"], "evidence_references": ["https://example.org/source"], "evidence_status": "unverified", "uncertainty": "Source not independently checked"}],
+            "evidence_references": [{"url": "https://example.org/source", "title": "Supplied reference", "verified": False}],
+            "benchmark_dimensions": [{"key": "dimension-a", "name": "Service model", "related_entities": ["entity-a"], "evidence_references": ["https://example.org/source"], "observations": [{"entity_key": "entity-a", "value": "Reported", "evidence_references": ["https://example.org/source"]}]}],
+        }, ensure_ascii=False)
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = response.json()
+        self.assertEqual(saved["content"], raw)
+        self.assertEqual(saved["parse_status"], "PARSED")
+        self.assertEqual(saved["research_data"]["findings"][0]["title"], "Reported operating pattern")
+        self.assertEqual(saved["research_data"]["entities"][0]["name"], "Example organization")
+        self.assertFalse(saved["research_data"]["evidence_references"][0]["verified"])
+
+    def test_one_field_markdown_with_fenced_json_imports_structured_results(self) -> None:
+        structured = self._structured_payload(url="https://example.com/fenced")
+        structured["sections"][0]["source_location"] = None
+        structured["evidence_references"][0]["source_location"] = None
+        structured["findings"][0]["source_locations"] = []
+        structured["benchmark_dimensions"][0]["observations"][0]["source_locations"] = []
+        raw = "# Research summary\n\nThe report contains its structured results below.\n\n```json\n" + json.dumps(structured) + "\n```\n"
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["content"], raw)
+        self.assertEqual(response.json()["parse_status"], "PARSED")
+        self.assertEqual(response.json()["research_data"]["findings"][0]["title"], "Observation entity-a")
+
+    def test_malformed_json_in_one_field_returns_line_and_column_and_is_not_saved(self) -> None:
+        raw = "# Research\n\n```json\n{\n  \"findings\": [}\n```"
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 422)
+        error = response.json()["error"]
+        self.assertEqual(error["code"], "INVALID_RESEARCH_INPUT")
+        self.assertIn("line 2, column 16", error["message"])
+        self.assertEqual(error["details"]["errors"][0]["type"], "json_invalid")
+        self.assertEqual(self.client.get("/api/v1/reports").json()["items"], [])
+
+    def test_json_research_results_are_domain_agnostic(self) -> None:
+        domains = ("Puzzle", "ASMR", "Drama", "Utilities", "Ad Monetization", "Municipal water")
+        for index, domain in enumerate(domains):
+            with self.subTest(domain=domain):
+                structured = self._structured_payload(key=f"entity-{index}", url=f"https://example.org/{index}")
+                structured["sections"][0]["source_location"] = None
+                structured["evidence_references"][0]["source_location"] = None
+                structured["findings"][0]["source_locations"] = []
+                structured["benchmark_dimensions"][0]["observations"][0]["source_locations"] = []
+                structured["entities"][0]["name"] = f"{domain} research subject"
+                response = self.client.post("/api/v1/reports", json=self.payload(json.dumps(structured)))
+                self.assertEqual(response.status_code, 201, response.text)
+                self.assertEqual(response.json()["research_data"]["entities"][0]["name"], f"{domain} research subject")
 
 
 if __name__ == "__main__":

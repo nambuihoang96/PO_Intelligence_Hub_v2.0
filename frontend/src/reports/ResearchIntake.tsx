@@ -6,6 +6,23 @@ export function buildResearchPrompt(input: { question: string; geo: string; os: 
   return `# Product research request\n\n## Research question\n${input.question.trim()}\n\n## Scope\n- Research focus: ${input.focus?.trim() || 'Determine an appropriate scope from the question; do not assume an industry or taxonomy.'}\n- GEO: ${input.geo.trim() || 'Not specified'}\n- Platform or environment: ${input.os || 'Not specified'}\n- Research period: ${input.researchPeriod.trim() || 'State the available period and exact dates for each source when known.'}\n\n## Instructions\n1. Answer the research question directly, then organize the analysis around the evidence and concepts actually present in this research.\n2. Choose headings, entities, finding types, and comparison dimensions that fit this subject. Do not force irrelevant sections, categories, products, metrics, or benchmark dimensions.\n3. Identify possible comparison candidates only when relevant, explain inclusion criteria, and never imply a ranking without a cited source and explicit scope.\n4. Link real source URLs to the claims they support. Never invent citations, URLs, entities, IDs, rankings, or measurements.\n5. State GEO, platform/environment, and time scope only where applicable; distinguish unknown scope from known values.\n6. Do not infer downloads, revenue, market share, growth, or other measurements from indirect proxies such as review counts or search results.\n7. Distinguish sourced observations, interpretation, and hypotheses. Include confidence only with a reason; otherwise state that confidence was not assessed.\n8. Describe research gaps and practical next steps for a Product Owner where the evidence supports them.\n9. Preserve uncertainty and say explicitly when reliable evidence is unavailable.\n\n## Output\nReturn a readable Markdown report with headings that fit the subject, plus a JSON object in a fenced \`json\` block using this envelope:\n{\n  \"sections\": [{\"heading\": \"...\", \"content\": \"...\", \"hierarchy\": 1, \"source_location\": \"...\"}],\n  \"entities\": [{\"key\": \"stable-local-key\", \"entity_type\": \"open taxonomy label\", \"name\": \"...\", \"attributes\": {}, \"evidence_references\": [\"URL present in report\"]}],\n  \"findings\": [{\"key\": \"stable-local-key\", \"finding_type\": \"open label\", \"title\": \"...\", \"description\": \"...\", \"related_entities\": [], \"evidence_references\": [], \"scope\": {}, \"evidence_status\": \"unverified\", \"confidence\": null, \"uncertainty\": null, \"po_implications\": null}],\n  \"evidence_references\": [{\"url\": \"URL present in report\", \"title\": null, \"source_location\": null, \"verified\": false}],\n  \"benchmark_dimensions\": [{\"key\": \"stable-local-key\", \"name\": \"dimension grounded in this research\", \"related_entities\": [], \"evidence_references\": [], \"observations\": [], \"po_notes\": null}],\n  \"research_gaps\": [], \"po_recommendations\": []\n}\nUse only source URLs included in the Markdown report. Related-entity values must use entity keys above. Do not create IDs for external products or add unsupported values. If a field is not supported, leave its list empty or value null. The JSON is structured user-provided content; it is not independently verified.`;
 }
 
+export function inspectResearchContent(content: string): { format: 'Markdown/TXT' | 'JSON' | 'Markdown + JSON'; jsonError: string | null } {
+  const fenced = /```json\s*\r?\n([\s\S]*?)(?:\r?\n```|$)/i.exec(content);
+  const trimmed = content.trim();
+  const candidate = fenced?.[1] ?? (/^[\[{]/.test(trimmed) ? trimmed : null);
+  if (candidate === null) return { format: 'Markdown/TXT', jsonError: null };
+  const format = fenced ? 'Markdown + JSON' : 'JSON';
+  try { JSON.parse(candidate); return { format, jsonError: null }; }
+  catch (error) {
+    const message = error instanceof Error ? error.message : 'JSON syntax is invalid.';
+    const position = Number(/position\s+(\d+)/i.exec(message)?.[1] ?? 0);
+    const beforeError = candidate.slice(0, position);
+    const line = beforeError.split('\n').length;
+    const column = position - beforeError.lastIndexOf('\n');
+    return { format, jsonError: `JSON không hợp lệ tại dòng ${line}, cột ${column}: ${message.replace(/\s+at position\s+\d+.*$/i, '')}` };
+  }
+}
+
 function recentTitle(report: ReportSummary): string {
   return report.question || 'Untitled research report';
 }
@@ -65,7 +82,6 @@ export function ResearchIntake() {
   const [researchPeriod, setResearchPeriod] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [reportContent, setReportContent] = useState('');
-  const [structuredJson, setStructuredJson] = useState('');
   const [history, setHistory] = useState<ReportSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -78,11 +94,7 @@ export function ResearchIntake() {
   const [showPromptFallback, setShowPromptFallback] = useState(false);
   const [fileName, setFileName] = useState('');
   const importInFlight = useRef(false);
-  const structuredJsonError = useMemo(() => {
-    if (!structuredJson.trim()) return '';
-    try { JSON.parse(structuredJson); return ''; }
-    catch { return 'Structured JSON không hợp lệ. Kiểm tra dấu ngoặc, dấu phẩy và nội dung JSON.'; }
-  }, [structuredJson]);
+  const contentInspection = useMemo(() => inspectResearchContent(reportContent), [reportContent]);
   const prompt = useMemo(() => buildResearchPrompt({ question, geo, os, researchPeriod, focus: researchFocus }), [question, geo, os, researchPeriod, researchFocus]);
 
   useEffect(() => {
@@ -104,7 +116,7 @@ export function ResearchIntake() {
   async function readFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
-    if (!/\.(md|txt)$/i.test(file.name)) { setError('Chỉ hỗ trợ file .md hoặc .txt.'); event.currentTarget.value = ''; return; }
+    if (!/\.(md|txt|json)$/i.test(file.name)) { setError('Chỉ hỗ trợ file .md, .txt hoặc .json.'); event.currentTarget.value = ''; return; }
     if (file.size > 2_000_000) { setError('File vượt quá giới hạn 2 MB.'); event.currentTarget.value = ''; return; }
     setFileName(file.name);
     setError('');
@@ -137,15 +149,16 @@ export function ResearchIntake() {
     if (!question.trim()) { setError('Nhập câu hỏi nghiên cứu để lưu cùng báo cáo.'); return; }
     if (!geo.trim() || geo === 'Other / custom') { setError('Chọn hoặc nhập GEO để lưu cùng báo cáo.'); return; }
     if (os === 'Other' && !customEnvironment.trim()) { setError('Nhập environment cần nghiên cứu.'); return; }
-    if (!reportContent.trim()) { setError('Bạn chưa dán nội dung báo cáo hoặc chọn file .md/.txt. Structured JSON không thay thế cho báo cáo gốc.'); return; }
-    if (structuredJsonError) { setError(structuredJsonError); return; }
+    if (!reportContent.trim()) { setError('Bạn chưa dán kết quả nghiên cứu hoặc chọn file .md/.txt/.json.'); return; }
+    if (reportContent.length > 2_000_000) { setError('Nội dung vượt giới hạn 2.000.000 ký tự. Hãy rút gọn báo cáo rồi thử lại.'); return; }
+    if (contentInspection.jsonError) { setError(contentInspection.jsonError); return; }
     setImportLoading(true);
     setImportSlow(false);
     importInFlight.current = true;
     const slowTimer = window.setTimeout(() => setImportSlow(true), 8000);
     try {
       const environment = os === 'Other' ? customEnvironment.trim() : os;
-      const report = await reportApi.import({ question, geo: geo.startsWith('custom:') ? geo.slice(7).trim() : geo.trim(), os: environment, research_period: researchPeriod.trim() || null, content: reportContent, ...(structuredJson.trim() ? { structured_json: structuredJson } : {}) });
+      const report = await reportApi.import({ question, geo: geo.startsWith('custom:') ? geo.slice(7).trim() : geo.trim(), os: environment, research_period: researchPeriod.trim() || null, content: reportContent });
       window.history.pushState({}, '', `/reports/${report.id}?imported=1${report.duplicate ? '&duplicate=1' : ''}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không lưu được báo cáo. Vui lòng thử lại.'); }
@@ -157,10 +170,9 @@ export function ResearchIntake() {
     { label: 'Research question', valid: Boolean(question.trim()), error: 'Cần có câu hỏi nghiên cứu.' },
     { label: 'GEO', valid: Boolean(geo.trim()) && geo !== 'Other / custom', error: 'Cần chọn hoặc nhập GEO.' },
     { label: 'Environment', valid: os !== 'Other' || Boolean(customEnvironment.trim()), error: 'Cần chọn hoặc nhập Environment.' },
-    { label: 'Report content', valid: Boolean(reportContent.trim()), error: 'Bạn chưa dán nội dung báo cáo hoặc chọn file .md/.txt.' },
+    { label: 'Research result', valid: Boolean(reportContent.trim()) && reportContent.length <= 2_000_000 && !contentInspection.jsonError, error: contentInspection.jsonError || (reportContent.length > 2_000_000 ? 'Nội dung vượt 2.000.000 ký tự.' : 'Bạn chưa dán kết quả nghiên cứu hoặc chọn file .md/.txt/.json.') },
   ];
   const validationMessage = validation.every((item) => item.valid) ? 'Thông tin hợp lệ để xem trước và nhập.' : validation.filter((item) => !item.valid).map((item) => item.error).join(' ');
-  const structuredJsonStatus = !structuredJson.trim() ? 'Chưa cung cấp' : structuredJsonError ? 'Không hợp lệ' : 'Hợp lệ';
 
   return <div className="intake-workspace">
     <section className="research-panel intake-form" aria-labelledby="intake-title">
@@ -182,11 +194,11 @@ export function ResearchIntake() {
       {error && <div className="research-alert" role="alert">{error}</div>}
       {showPromptFallback && <label className="intake-field prompt-fallback"><span className="field-label">Prompt for ChatGPT</span><textarea rows={12} readOnly value={prompt} onFocus={(event) => event.currentTarget.select()} /></label>}
       {showImport && <section className="report-import-card" aria-labelledby="import-title">
-        <div className="panel-heading"><div><span className="field-label">IMPORT REPORT</span><h2 id="import-title">Dán hoặc chọn báo cáo Markdown</h2></div><span className="unverified-chip">Sẽ lưu chưa xác minh</span></div>
-        <label className="intake-field"><span className="field-label">Nội dung báo cáo</span><textarea rows={12} value={reportContent} onChange={(event) => { setReportContent(event.target.value); setFileName(''); }} placeholder="# Executive summary&#10;&#10;Dán toàn bộ báo cáo ChatGPT tại đây…" /></label>
-        <div className="file-picker"><label className="secondary-action" htmlFor="report-file">Chọn file .md hoặc .txt</label><input id="report-file" type="file" accept=".md,.txt,text/markdown,text/plain" onChange={readFile} /><span>{fileName || 'Tối đa 2 MB'}</span></div>
-        <details className="structured-import"><summary>Structured JSON (tùy chọn)</summary><p>JSON chỉ bổ sung dữ liệu có cấu trúc, không thay thế báo cáo gốc.</p><label className="intake-field"><span className="field-label">Universal research data JSON</span><textarea rows={10} value={structuredJson} onChange={(event) => setStructuredJson(event.target.value)} placeholder="Dán object JSON theo định dạng trong prompt đã tạo" /></label>{structuredJsonError && <div className="research-alert" role="alert">{structuredJsonError}</div>}</details>
-        <div className="report-preview" aria-live="polite"><strong>Xem trước và kiểm tra</strong><ul className="import-validation">{validation.map((item) => <li key={item.label} data-valid={item.valid}>{item.valid ? '✓' : '•'} {item.label}: {item.valid ? 'Đã có' : item.error}</li>)}</ul><p>{reportContent.trim() ? validationMessage : 'Chưa có nội dung báo cáo để import.'}</p><span>{reportContent.length.toLocaleString()} ký tự · {previewHeadings.length} heading · {Array.from(reportContent.matchAll(/https?:\/\/[^\s)<>]+/g)).length} URL nhận diện · Structured JSON: {structuredJsonStatus}</span>{reportContent && <pre>{reportContent.slice(0, 700)}{reportContent.length > 700 ? '…' : ''}</pre>}</div>
+        <div className="panel-heading"><div><span className="field-label">IMPORT RESEARCH</span><h2 id="import-title">Dán một lần, xem kết quả có cấu trúc</h2></div><span className="unverified-chip">Sẽ lưu chưa xác minh</span></div>
+        <label className="intake-field"><span className="field-label">Dán kết quả nghiên cứu từ ChatGPT</span><textarea rows={16} value={reportContent} onChange={(event) => { setReportContent(event.target.value); setFileName(''); setError(''); }} placeholder="# Research summary&#10;&#10;Dán nguyên kết quả Markdown, TXT hoặc JSON tại đây…" /></label>
+        <div className="file-picker"><label className="secondary-action" htmlFor="report-file">Chọn file .md, .txt hoặc .json</label><input id="report-file" type="file" accept=".md,.txt,.json,text/markdown,text/plain,application/json" onChange={readFile} /><span>{fileName || 'Tối đa 2 MB'}</span></div>
+        {contentInspection.jsonError && <div className="research-alert" role="alert">{contentInspection.jsonError}</div>}
+        <div className="report-preview" aria-live="polite"><strong>Xem trước và kiểm tra</strong><ul className="import-validation">{validation.map((item) => <li key={item.label} data-valid={item.valid}>{item.valid ? '✓' : '•'} {item.label}: {item.valid ? 'Đã có' : item.error}</li>)}</ul><p>{reportContent.trim() ? validationMessage : 'Chưa có kết quả nghiên cứu để lưu.'}</p><span>{reportContent.length.toLocaleString()} ký tự · {previewHeadings.length} heading · {Array.from(reportContent.matchAll(/https?:\/\/[^\s)<>]+/g)).length} URL · Định dạng: {contentInspection.format}</span>{reportContent && <pre>{reportContent.slice(0, 700)}{reportContent.length > 700 ? '…' : ''}</pre>}</div>
         <div className="intake-actions"><button className="primary-action" type="button" onClick={importReport} disabled={importLoading}>{importLoading ? 'Đang lưu báo cáo...' : 'Lưu báo cáo vào workspace'}</button><button className="text-button" type="button" onClick={() => setShowImport(false)}>Hủy</button></div>
         {importLoading && <div className="research-success" role="status">Đang lưu báo cáo...{importSlow && <span> Request đang lâu hơn bình thường.</span>}</div>}
       </section>}
