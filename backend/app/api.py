@@ -73,6 +73,14 @@ def _run_or_404(session: Session, run_id: str) -> ResearchRun:
     return run
 
 
+def _create_plan_version(session: Session, project_id: str, payload: ResearchPlanCreate, version: int) -> ResearchPlan:
+    plan = ResearchPlan(project_id=project_id, version=version, **payload.model_dump())
+    session.add(plan)
+    _commit(session, "Plan version conflicts with another update.")
+    session.refresh(plan)
+    return plan
+
+
 @router.post("/projects", response_model=ResearchProjectRead, status_code=status.HTTP_201_CREATED, responses={422: {"model": ErrorEnvelope}})
 def create_project(payload: ResearchProjectCreate, session: SessionDependency) -> ResearchProject:
     project = ResearchProject(**payload.model_dump())
@@ -122,11 +130,7 @@ def create_plan(project_id: str, payload: ResearchPlanCreate, session: SessionDe
     latest_version = session.scalar(
         select(ResearchPlan.version).where(ResearchPlan.project_id == project_id).order_by(ResearchPlan.version.desc()).limit(1)
     )
-    plan = ResearchPlan(project_id=project_id, version=(latest_version or 0) + 1, **payload.model_dump())
-    session.add(plan)
-    _commit(session, "Plan version conflicts with another update.")
-    session.refresh(plan)
-    return plan
+    return _create_plan_version(session, project_id, payload, (latest_version or 0) + 1)
 
 
 @router.get("/projects/{project_id}/plans", response_model=Page[ResearchPlanRead], responses=ErrorResponses)
@@ -169,6 +173,31 @@ def get_plan(project_id: str, version: int, session: SessionDependency) -> Resea
     return plan
 
 
+@router.put("/projects/{project_id}/plans/{version}", response_model=ResearchPlanRead, responses=ErrorResponses)
+def update_plan_version(project_id: str, version: int, payload: ResearchPlanCreate, session: SessionDependency) -> ResearchPlan:
+    _project_or_404(session, project_id)
+    existing = session.scalar(select(ResearchPlan).where(ResearchPlan.project_id == project_id, ResearchPlan.version == version))
+    if existing is None:
+        raise HTTPException(status_code=404, detail={"code": "PLAN_NOT_FOUND", "message": "Research plan version was not found."})
+    latest_version = session.scalar(
+        select(ResearchPlan.version).where(ResearchPlan.project_id == project_id).order_by(ResearchPlan.version.desc()).limit(1)
+    )
+    if version != latest_version:
+        raise HTTPException(status_code=409, detail={"code": "STALE_PLAN_VERSION", "message": "Only the latest plan version can be edited; create a new version from the latest plan."})
+    return _create_plan_version(session, project_id, payload, version + 1)
+
+
+@router.delete("/projects/{project_id}/plans/{version}", status_code=status.HTTP_204_NO_CONTENT, responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 422: {"model": ErrorEnvelope}})
+def delete_plan_version(project_id: str, version: int, session: SessionDependency) -> Response:
+    _project_or_404(session, project_id)
+    plan = session.scalar(select(ResearchPlan).where(ResearchPlan.project_id == project_id, ResearchPlan.version == version))
+    if plan is None:
+        raise HTTPException(status_code=404, detail={"code": "PLAN_NOT_FOUND", "message": "Research plan version was not found."})
+    session.delete(plan)
+    _commit(session, "A plan referenced by a research run cannot be deleted.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/projects/{project_id}/runs", response_model=ResearchRunRead, status_code=status.HTTP_201_CREATED, responses=ErrorResponses)
 def create_run(project_id: str, payload: ResearchRunCreate, session: SessionDependency) -> ResearchRun:
     _project_or_404(session, project_id)
@@ -199,6 +228,16 @@ def list_runs(project_id: str, session: SessionDependency, cursor: str | None = 
 @router.get("/runs/{run_id}", response_model=ResearchRunRead, responses={404: {"model": ErrorEnvelope}})
 def get_run(run_id: str, session: SessionDependency) -> ResearchRun:
     return _run_or_404(session, run_id)
+
+
+@router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT, responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}})
+def delete_run(run_id: str, session: SessionDependency) -> Response:
+    run = _run_or_404(session, run_id)
+    if run.state != "queued":
+        raise HTTPException(status_code=409, detail={"code": "RUN_ALREADY_STARTED", "message": "Only a queued run can be deleted."})
+    session.delete(run)
+    _commit(session, "A run with source records cannot be deleted.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/runs/{run_id}/state", response_model=ResearchRunRead, responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 422: {"model": ErrorEnvelope}})

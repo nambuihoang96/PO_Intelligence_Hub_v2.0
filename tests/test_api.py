@@ -71,12 +71,25 @@ class ResearchAPITest(unittest.TestCase):
         self.assertEqual(invalid.status_code, 422)
         self.assertEqual(invalid.json()["error"]["code"], "VALIDATION_ERROR")
         first = self.create_plan(project["id"], "First version")
-        second = self.create_plan(project["id"], "Second version")
+        updated = self.client.put(
+            f"/api/v1/projects/{project['id']}/plans/{first['version']}",
+            json={"question": "Edited first version"},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        second = updated.json()
         self.assertEqual((first["version"], second["version"]), (1, 2))
-        self.assertEqual(self.client.get(f"/api/v1/projects/{project['id']}/plans/latest").json()["id"], second["id"])
+        self.assertEqual(self.client.get(f"/api/v1/projects/{project['id']}/plans/1").json()["question"], "First version")
+        third = self.create_plan(project["id"], "Third version")
+        self.assertEqual(third["version"], 3)
+        self.assertEqual(self.client.get(f"/api/v1/projects/{project['id']}/plans/latest").json()["id"], third["id"])
         page = self.client.get(f"/api/v1/projects/{project['id']}/plans", params={"limit": 1})
         self.assertEqual(page.json()["items"][0]["version"], 1)
         self.assertEqual(page.json()["next_cursor"], "1")
+        stale_update = self.client.put(
+            f"/api/v1/projects/{project['id']}/plans/1",
+            json={"question": "Stale edit"},
+        )
+        self.assertEqual(stale_update.status_code, 409)
         invalid_cursor = self.client.get(f"/api/v1/projects/{project['id']}/plans", params={"cursor": "bad"})
         self.assertEqual(invalid_cursor.status_code, 422)
 
@@ -89,6 +102,11 @@ class ResearchAPITest(unittest.TestCase):
         run = response.json()
         self.assertEqual(run["plan_id"], first["id"])
         self.assertEqual(run["plan_version"], first["version"])
+        blocked_plan_delete = self.client.delete(f"/api/v1/projects/{project['id']}/plans/1")
+        self.assertEqual(blocked_plan_delete.status_code, 409)
+        self.assertEqual(self.client.delete(f"/api/v1/runs/{run['id']}").status_code, 204)
+        self.assertEqual(self.client.get(f"/api/v1/runs/{run['id']}").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/projects/{project['id']}/plans/1").status_code, 204)
         missing_version = self.client.post(f"/api/v1/projects/{project['id']}/runs", json={"plan_version": 99})
         self.assertEqual(missing_version.status_code, 404)
         self.assertEqual(missing_version.json()["error"]["code"], "PLAN_VERSION_NOT_FOUND")
@@ -107,6 +125,8 @@ class ResearchAPITest(unittest.TestCase):
         self.assertIsNotNone(completed["finished_at"])
         terminal = self.client.patch(f"/api/v1/runs/{run['id']}/state", json={"state": "failed"})
         self.assertEqual(terminal.status_code, 409)
+        delete_terminal = self.client.delete(f"/api/v1/runs/{run['id']}")
+        self.assertEqual(delete_terminal.status_code, 409)
 
     def test_run_state_rejects_unknown_state_and_project_delete_preserves_history(self) -> None:
         project = self.create_project()
@@ -128,6 +148,8 @@ class ResearchAPITest(unittest.TestCase):
         self.assertIn("ResearchPlanRead", spec["components"]["schemas"])
         self.assertIn("ResearchRunRead", spec["components"]["schemas"])
         self.assertIn("422", spec["paths"]["/api/v1/projects"]["post"]["responses"])
+        self.assertIn("put", spec["paths"]["/api/v1/projects/{project_id}/plans/{version}"])
+        self.assertIn("delete", spec["paths"]["/api/v1/runs/{run_id}"])
 
 
 if __name__ == "__main__":
