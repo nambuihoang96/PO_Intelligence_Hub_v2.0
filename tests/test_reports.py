@@ -159,7 +159,10 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(len(self.client.get("/api/v1/reports").json()["items"]), 1)
         selected = self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": [{"item_type": "finding", "item_key": "finding-entity-a"}]})
         self.assertEqual(selected.status_code, 200)
-        workspace = {"custom_dimensions": ["PO priority"], "entries": [{"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Promising", "notes": "Check sample size", "next_action": "Review source", "dimension_assessments": {}}]}
+        workspace = {"custom_dimensions": ["PO priority"], "entries": [
+            {"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Promising", "notes": "Check sample size", "next_action": "Review source", "dimension_assessments": {}},
+            {"item_type": "entity", "item_key": "entity-a", "po_assessment": "Comparable subject", "notes": "Keep this association", "next_action": "Recheck mapping", "dimension_assessments": {}, "observation_finding_links": {"dimension-entity-a": ["finding-entity-a"]}},
+        ]}
         self.assertEqual(self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=workspace).status_code, 200)
         before = self.client.get(f"/api/v1/reports/{report_id}").json()
         invalid = self.client.put(f"/api/v1/reports/{report_id}/structured-data", json={"research_data": {"entities": [{"key": "broken"}]}})
@@ -173,9 +176,11 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(update.status_code, 200, update.text)
         saved = self.client.get(f"/api/v1/reports/{report_id}").json()
         self.assertEqual(saved["benchmark_selections"], before["benchmark_selections"])
-        self.assertEqual(saved["benchmark_workspace"], workspace)
+        self.assertEqual(saved["benchmark_workspace"]["entries"][0]["notes"], "Check sample size")
+        self.assertEqual(saved["benchmark_workspace"]["entries"][1]["observation_finding_links"], {"dimension-entity-a": ["finding-entity-a"]})
         self.assertEqual(saved["orphaned_benchmark_selections"], before["benchmark_selections"])
-        self.assertEqual(saved["orphaned_benchmark_entries"][0]["notes"], "Check sample size")
+        self.assertEqual({entry["item_key"] for entry in saved["orphaned_benchmark_entries"]}, {"finding-entity-a", "entity-a"})
+        self.assertEqual(saved["orphaned_benchmark_entries"][1]["observation_finding_links"], {"dimension-entity-a": ["finding-entity-a"]})
         self.assertEqual(saved["content"], raw)
         removed = self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": []})
         self.assertEqual(removed.status_code, 200)
@@ -262,7 +267,9 @@ class ImportedReportsAPITest(unittest.TestCase):
         workspace = {"custom_dimensions": ["PO-defined lens"], "entries": [{"item_type": "entity", "item_key": "entity-a", "po_assessment": "Keep", "notes": "Manual evaluation", "next_action": "Interview users", "dimension_assessments": {}}]}
         response = self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=workspace)
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(self.client.get(f"/api/v1/reports/{report_id}").json()["benchmark_workspace"], workspace)
+        round_trip = self.client.get(f"/api/v1/reports/{report_id}").json()["benchmark_workspace"]
+        self.assertEqual(round_trip["entries"][0]["po_assessment"], "Keep")
+        self.assertEqual(round_trip["entries"][0]["observation_finding_links"], {})
         invalid = {"custom_dimensions": [], "entries": [{"item_type": "entity", "item_key": "missing", "po_assessment": "", "notes": "", "next_action": ""}]}
         self.assertEqual(self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=invalid).status_code, 422)
 
@@ -432,14 +439,27 @@ class ImportedReportsAPITest(unittest.TestCase):
         saved = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(research)}).json()
         report_id = saved["id"]
         state = {
-            "selections": [{"item_type": "finding", "item_key": "finding-entity-a"}],
+            "selections": [{"item_type": "finding", "item_key": "finding-entity-a"}, {"item_type": "entity", "item_key": "entity-a"}],
             "custom_dimensions": ["Decision fit"],
-            "entries": [{"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Compare in context", "notes": "Evidence is limited", "next_action": "Review source", "dimension_assessments": {}}],
+            "entries": [
+                {"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Compare in context", "notes": "Evidence is limited", "next_action": "Review source", "dimension_assessments": {}},
+                {"item_type": "entity", "item_key": "entity-a", "po_assessment": "Keep", "notes": "PO confirmed", "next_action": "Review source", "dimension_assessments": {}, "observation_finding_links": {"dimension-entity-a": ["finding-entity-a"]}},
+            ],
         }
         response = self.client.put(f"/api/v1/reports/{report_id}/benchmark-state", json=state)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["benchmark_selections"], state["selections"])
         self.assertEqual(response.json()["benchmark_workspace"]["entries"][0]["notes"], "Evidence is limited")
+        self.assertEqual(response.json()["benchmark_workspace"]["entries"][1]["observation_finding_links"], {"dimension-entity-a": ["finding-entity-a"]})
+
+        invalid_link_state = {**state, "entries": [{**state["entries"][1], "observation_finding_links": {"dimension-entity-a": ["unrelated-finding"]}}]}
+        rejected_link = self.client.put(f"/api/v1/reports/{report_id}/benchmark-state", json=invalid_link_state)
+        self.assertEqual(rejected_link.status_code, 422)
+        self.assertEqual(rejected_link.json()["error"]["code"], "INVALID_BENCHMARK_STATE")
+        unchanged_after_link_error = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(unchanged_after_link_error["benchmark_selections"], state["selections"])
+        self.assertEqual(unchanged_after_link_error["benchmark_workspace"]["entries"][1]["notes"], "PO confirmed")
+        self.assertEqual(unchanged_after_link_error["benchmark_workspace"]["entries"][1]["observation_finding_links"], {"dimension-entity-a": ["finding-entity-a"]})
 
         invalid = {**state, "selections": [{"item_type": "finding", "item_key": "missing"}], "entries": [{**state["entries"][0], "notes": "Must not partially save"}]}
         rejected = self.client.put(f"/api/v1/reports/{report_id}/benchmark-state", json=invalid)

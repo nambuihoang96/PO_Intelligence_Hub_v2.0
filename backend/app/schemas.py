@@ -488,12 +488,27 @@ class BenchmarkWorkspaceEntry(APIModel):
     notes: str = Field(default="", max_length=8000)
     next_action: str = Field(default="", max_length=4000)
     dimension_assessments: dict[str, str] = Field(default_factory=dict, max_length=100)
+    observation_finding_links: dict[str, list[str]] = Field(default_factory=dict, max_length=100)
 
     @field_validator("dimension_assessments")
     @classmethod
     def validate_dimension_assessments(cls, value: dict[str, str]) -> dict[str, str]:
         if any(not key.strip() or len(key) > 120 or len(item) > 4000 for key, item in value.items()):
             raise ValueError("PO dimension assessments must have non-blank keys and values up to 4000 characters")
+        return value
+
+    @field_validator("observation_finding_links")
+    @classmethod
+    def validate_observation_finding_links(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
+        if any(
+            not dimension_key.strip()
+            or len(dimension_key) > 120
+            or len(finding_keys) > 100
+            or any(not finding_key.strip() or len(finding_key) > 120 for finding_key in finding_keys)
+            or len(finding_keys) != len(set(finding_keys))
+            for dimension_key, finding_keys in value.items()
+        ):
+            raise ValueError("confirmed observation links must use valid dimension and finding keys without duplicates")
         return value
 
 

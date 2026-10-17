@@ -290,17 +290,30 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .insight-card summary::-webkit-details-marker, .insight-result summary::-webkit-details-marker, .benchmark-po-entry summary::-webkit-details-marker { display: none; }
 .insight-card summary::after { content: 'View details'; color: #667f53; font-size: 10px; }
 .insight-card[open] summary::after { content: 'Hide details'; }
-.insight-card strong { color: #354a40; font-size: 12px; }
-.insight-card summary > span:last-child { font-size: 10px; line-height: 1.6; }
-.insight-card-detail, .insight-result-detail { display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf0ed; font-size: 10px; line-height: 1.6; }
+.insight-card strong { color: #354a40; font-size: 17px; line-height: 1.35; }
+.insight-card .field-label, .insight-result .field-label { font-size: 12px; }
+.insight-card summary > span:last-child { font-size: 14px; line-height: 1.55; }
+.insight-card-detail, .insight-result-detail { display: grid; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf0ed; font-size: 14px; line-height: 1.55; }
 .insight-card-detail p, .insight-result-detail p { margin: 0; }
 .benchmark-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.inline-action-success, .inline-action-error { flex-basis: 100%; font-size: 13px; line-height: 1.45; }
+.inline-action-success { color: #3f704d; }
+.inline-action-error { color: #a52e23; }
+.related-entity-candidates { padding: 12px; border: 1px solid #e5eae6; border-radius: 8px; background: #f8faf7; }
+.related-entity-candidates h5, .related-entity-candidates p { margin: 0 0 8px; }
+.related-entity-candidates ul { display: grid; gap: 10px; margin: 8px 0 0; padding: 0; list-style: none; }
+.related-entity-candidates li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.related-entity-candidates li > span { display: grid; gap: 3px; }
+.related-entity-candidates small { color: #64736a; font-size: 12px; }
+.observation-link-control { display: grid; gap: 5px; margin-top: 10px; color: #536459; font-size: 12px; }
+.observation-link-control select { width: 100%; min-width: 180px; padding: 7px; border: 1px solid #d8e0da; border-radius: 6px; background: #fff; color: #34483d; font: inherit; }
 .insight-list { display: grid; gap: 12px; }
 .insight-result, .benchmark-po-entry { display: grid; gap: 11px; padding: 16px; border: 1px solid #e5eae6; border-radius: 10px; background: #fff; }
 .insight-result summary, .benchmark-po-entry summary { display: flex; align-items: start; justify-content: space-between; gap: 14px; cursor: pointer; list-style: none; }
-.insight-result summary h4 { margin: 4px 0; }
+.insight-result summary h4 { margin: 4px 0; font-size: 19px; line-height: 1.35; }
+.insight-result summary span:not(.field-label) { font-size: 14px; line-height: 1.55; }
 .insight-result summary > div, .benchmark-po-entry summary > span { display: grid; gap: 4px; }
-.benchmark-po-entry summary > span { color: #89938e; font-size: 9px; }
+.benchmark-po-entry summary > span { color: #64736a; font-size: 12px; }
 .insight-result .panel-heading, .benchmark-po-entry .panel-heading { margin-bottom: 0; }
 .insight-result h4, .benchmark-po-entry h4 { margin: 4px 0; }
 .support-excerpt { padding: 10px; border-left: 3px solid #b8c99d; background: #f8faf5; }
@@ -309,12 +322,12 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .dimension-add { display: flex; gap: 8px; }
 .dimension-add input { flex: 1; }
 .benchmark-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid #e5eae6; border-radius: 9px; }
-.benchmark-table { min-width: 100%; width: max-content; border-collapse: collapse; font-size: 10px; }
+.benchmark-table { min-width: 100%; width: max-content; border-collapse: collapse; font-size: 13px; }
 .benchmark-table th, .benchmark-table td { min-width: 155px; max-width: 320px; padding: 10px; border: 1px solid #e5eae6; text-align: left; vertical-align: top; white-space: normal; }
 .benchmark-table th { color: #42564c; background: #f6f8f5; }
 .benchmark-table td { color: #68766f; }
 .benchmark-table td textarea { width: 100%; min-height: 60px; border: 1px solid #e2e8e4; border-radius: 6px; padding: 7px; resize: vertical; font: inherit; }
-.benchmark-table td small, .benchmark-table tbody th small { display: block; margin-top: 5px; color: #8b9690; font-weight: 400; }
+.benchmark-table td small, .benchmark-table tbody th small { display: block; margin-top: 5px; color: #64736a; font-size: 12px; font-weight: 400; }
 .benchmark-table td a { display: inline-block; margin: 5px 5px 0 0; color: #617e49; }
 .benchmark-po-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .benchmark-po-fields textarea { min-height: 76px; resize: vertical; }
@@ -333,7 +346,7 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .structured-update p { color: #66736d; font-size: 10px; line-height: 1.6; }
 .field-error { color: #9c4e42 !important; }
 @media (max-width: 760px) { .intake-scope-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-content-layout { grid-template-columns: minmax(0, 1fr); }.report-toc { position: static; max-height: none; } }
-@media (max-width: 760px) { .benchmark-po-fields { grid-template-columns: minmax(0, 1fr); }.dimension-add { align-items: stretch; flex-direction: column; } }
+@media (max-width: 760px) { .benchmark-po-fields { grid-template-columns: minmax(0, 1fr); }.dimension-add { align-items: stretch; flex-direction: column; }.related-entity-candidates li { align-items: flex-start; flex-direction: column; }.related-entity-candidates .benchmark-card-actions { width: 100%; } }
 @media (max-width: 560px) { .intake-workspace, .report-viewer { margin-top: 25px; }.intake-scope-grid, .report-meta dl { grid-template-columns: minmax(0, 1fr); }.intake-actions { align-items: stretch; flex-direction: column; }.intake-actions button { width: 100%; }.report-history-row { align-items: flex-start; flex-wrap: wrap; }.report-date { margin-left: auto; }.report-meta { padding: 16px; }.report-body { padding: 16px; } }
 @media (max-width: 560px) {
   .research-panel { padding: 16px; }

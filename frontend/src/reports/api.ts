@@ -22,7 +22,7 @@ export type ResearchData = {
   po_recommendations: string[];
 };
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
-export type BenchmarkWorkspaceEntry = BenchmarkSelection & { po_assessment: string; notes: string; next_action: string; dimension_assessments: Record<string, string> };
+export type BenchmarkWorkspaceEntry = BenchmarkSelection & { po_assessment: string; notes: string; next_action: string; dimension_assessments: Record<string, string>; observation_finding_links?: Record<string, string[]> };
 export type BenchmarkWorkspace = { custom_dimensions: string[]; entries: BenchmarkWorkspaceEntry[] };
 export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY'; research_contract_version?: 'po_research_v1'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };

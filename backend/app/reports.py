@@ -307,6 +307,9 @@ def update_benchmark_state(report_id: str, payload: BenchmarkStateUpdate, sessio
     available = _available_keys(report)
     previous_selections = report.benchmark_selections_json or []
     previous_entries = (report.benchmark_workspace_json or {}).get("entries", [])
+    research_data = report.research_data_json or {}
+    findings = {item["key"]: item for item in research_data.get("findings", [])}
+    dimensions = {item["key"]: item for item in research_data.get("benchmark_dimensions", [])}
     invalid_selections = [
         selection.model_dump()
         for selection in payload.selections
@@ -319,12 +322,43 @@ def update_benchmark_state(report_id: str, payload: BenchmarkStateUpdate, sessio
         if entry.item_key not in available[entry.item_type]
         and not any(item.get("item_type") == entry.item_type and item.get("item_key") == entry.item_key for item in previous_entries)
     ]
-    if invalid_selections or invalid_entries:
+    invalid_observation_links = []
+    for entry in payload.entries:
+        previous_entry = next((
+            previous for previous in previous_entries
+            if previous.get("item_type") == entry.item_type and previous.get("item_key") == entry.item_key
+        ), None)
+        for dimension_key, finding_keys in entry.observation_finding_links.items():
+            dimension = dimensions.get(dimension_key)
+            has_observation = bool(
+                entry.item_type == "entity"
+                and dimension
+                and any(
+                    observation.get("entity_key") == entry.item_key
+                    and observation.get("value") not in (None, "")
+                    for observation in dimension.get("observations", [])
+                )
+            )
+            for finding_key in finding_keys:
+                finding = findings.get(finding_key)
+                previously_confirmed = finding_key in (
+                    (previous_entry or {}).get("observation_finding_links", {}).get(dimension_key, [])
+                )
+                valid = has_observation and bool(finding and entry.item_key in finding.get("related_entities", []))
+                if not valid and not previously_confirmed:
+                    invalid_observation_links.append({
+                        "item_type": entry.item_type,
+                        "item_key": entry.item_key,
+                        "dimension_key": dimension_key,
+                        "finding_key": finding_key,
+                    })
+    if invalid_selections or invalid_entries or invalid_observation_links:
         raise HTTPException(status_code=422, detail={
             "code": "INVALID_BENCHMARK_STATE",
-            "message": "Benchmark selections and notes must reference report items. Existing orphan references may be retained unchanged.",
+            "message": "Benchmark selections, notes, and confirmed observation links must reference report items. Existing orphan references may be retained unchanged.",
             "invalid_selections": invalid_selections,
             "invalid_entries": invalid_entries,
+            "invalid_observation_links": invalid_observation_links,
         })
 
     report.benchmark_selections_json = [selection.model_dump() for selection in payload.selections]

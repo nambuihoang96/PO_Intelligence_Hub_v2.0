@@ -113,19 +113,26 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('navigation', { name: 'Mục lục' })).toBeTruthy();
   });
 
-  it('renders domain-neutral structured data and saves a selected finding as a benchmark item', async () => {
+  it('keeps insight and comparison targets independent and preserves PO notes across remove, refresh, and restore', async () => {
     const structured = {
       ...report,
       parse_status: 'PARSED' as const,
       research_data: {
         ...report.research_data,
-        entities: [{ key: 'entity-a', entity_type: 'service', name: 'Regional transfer network', attributes: { settlement_window: 'same day' }, evidence_references: ['https://example.com/'] }],
-        findings: [{ key: 'finding-a', finding_type: 'operational insight', title: 'Settlement speed differs', description: 'The two observed options report different settlement windows.', related_entities: ['entity-a'], evidence_references: ['https://example.com/'], scope: { region: 'US' }, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: 'Validate merchant needs before comparison.' }],
+        entities: [
+          { key: 'learning-app-a', entity_type: 'learning app', name: 'Learning App A', attributes: { practice: 'daily sessions' }, evidence_references: ['https://example.com/'] },
+          { key: 'streak-mechanic', entity_type: 'mechanic', name: 'Streak mechanic', attributes: { behavior: 'daily return' }, evidence_references: ['https://example.com/'] },
+          { key: 'reward-system', entity_type: 'feature', name: 'Reward system', attributes: { behavior: 'progress reward' }, evidence_references: ['https://example.com/'] },
+        ],
+        findings: [{ key: 'finding-a', finding_type: 'engagement insight', title: 'Daily habit and reward loop', description: 'The report connects reminders and rewards to a daily practice routine.', related_entities: ['learning-app-a', 'streak-mechanic', 'reward-system'], evidence_references: ['https://example.com/'], scope: { region: 'US', environment: 'Web' }, evidence_status: 'unverified', confidence: null, uncertainty: 'Impact is not experimentally measured.', po_implications: 'Validate which elements are useful to learners.' }],
         evidence_references: [{ url: 'https://example.com/', title: 'Source', source_location: 'line:3', verified: false }],
-        benchmark_dimensions: [{ key: 'settlement-window', name: 'Settlement window', related_entities: ['entity-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'entity-a', value: 'Same day', evidence_references: ['https://example.com/'], source_locations: [], evidence_status: 'unverified', uncertainty: null }], po_notes: null }],
+        benchmark_dimensions: [
+          { key: 'daily-practice', name: 'Daily practice', related_entities: ['learning-app-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'learning-app-a', value: 'Daily reminder and streak', evidence_references: ['https://example.com/'], source_locations: [], evidence_status: 'unverified', uncertainty: 'Single report source.' }], po_notes: null },
+          { key: 'speaking-feedback', name: 'Speaking feedback', related_entities: ['learning-app-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'learning-app-a', value: 'Immediate pronunciation feedback', evidence_references: ['https://example.com/'], source_locations: [], evidence_status: 'unverified', uncertainty: 'The cited article covers multiple features.' }], po_notes: null },
+        ],
       },
     };
-    let persisted = structured;
+    let persisted: any = structured;
     mockFetch((url, init) => {
       if (url.includes('/benchmark-state')) {
         const body = JSON.parse(String(init.body));
@@ -139,34 +146,64 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Insights' }));
-    fireEvent.click(screen.getByText('Settlement speed differs').closest('summary')!);
-    fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark' }));
-    expect(await screen.findByRole('button', { name: 'Đã thêm' })).toBeTruthy();
-    expect(persisted.benchmark_selections).toContainEqual({ item_type: 'entity', item_key: 'entity-a' });
+    fireEvent.click(screen.getByText('Daily habit and reward loop').closest('summary')!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark: Daily habit and reward loop' }));
+    await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]));
     fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
+    expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
+    fireEvent.click(screen.getByText('Daily habit and reward loop').closest('summary')!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark: Learning App A' }));
+    await waitFor(() => expect(persisted.benchmark_selections).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Xem Benchmark' }).at(-1)!);
     const table = await screen.findByRole('table');
-    expect(table.querySelector('tbody tr th')?.textContent).toContain('Regional transfer network');
-    expect(screen.getAllByText('Settlement speed differs').length).toBeGreaterThan(0);
-    expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(1);
-    expect(await screen.findByText('Settlement speed differs')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('PO Assessment for Settlement speed differs'), { target: { value: 'Worth validating' } });
-    fireEvent.change(screen.getByLabelText('Next Action for Settlement speed differs'), { target: { value: 'Check source sample' } });
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(table.textContent).toContain('Learning App A');
+    expect(table.textContent).not.toContain('Streak mechanic');
+    expect(table.textContent).not.toContain('Reward system');
+    expect(screen.getAllByText('No confirmed supporting insight.')).toHaveLength(2);
+
+    const speakingLink = screen.getByLabelText('Confirm supporting insight for Learning App A / Speaking feedback');
+    expect((speakingLink as HTMLSelectElement).value).toBe('');
+    fireEvent.change(screen.getByLabelText('Confirm supporting insight for Learning App A / Daily practice'), { target: { value: 'finding-a' } });
+    await waitFor(() => expect(persisted.benchmark_workspace.entries.find((entry: { item_key: string }) => entry.item_key === 'learning-app-a')?.observation_finding_links?.['daily-practice']).toEqual(['finding-a']));
+    expect((screen.getByLabelText('Confirm supporting insight for Learning App A / Speaking feedback') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByText('PO-confirmed insight: Daily habit and reward loop')).toBeTruthy();
+    expect(screen.getAllByText('No confirmed supporting insight.')).toHaveLength(1);
+
+    fireEvent.change(screen.getByLabelText('PO Assessment for Daily habit and reward loop'), { target: { value: 'Worth validating' } });
+    fireEvent.change(screen.getByLabelText('Next Action for Daily habit and reward loop'), { target: { value: 'Test the reminder timing' } });
     fireEvent.change(screen.getByLabelText('PO dimension'), { target: { value: 'Evidence quality' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add dimension' }));
-    const customValue = await screen.findByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement;
+    const customValue = await screen.findByLabelText('Evidence quality assessment for Daily habit and reward loop') as HTMLTextAreaElement;
     fireEvent.change(customValue, { target: { value: 'Moderate confidence for PO use' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
-    expect(await screen.findByRole('status')).toBeTruthy();
-    await waitFor(() => expect((persisted.benchmark_workspace.entries[0] as { po_assessment: string }).po_assessment).toBe('Worth validating'));
+    expect(await screen.findByText('Đã lưu PO Assessment, Notes và Next Action.')).toBeTruthy();
+    await waitFor(() => expect(persisted.benchmark_workspace.entries.find((entry: { item_key: string }) => entry.item_key === 'finding-a')?.po_assessment).toBe('Worth validating'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Daily habit and reward loop' }));
+    await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'entity', item_key: 'learning-app-a' }]));
     cleanup();
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
-    expect((await screen.findByLabelText('PO Assessment for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Worth validating');
-    expect((screen.getByLabelText('Next Action for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Check source sample');
-    expect((screen.getByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
+    expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(1);
+    expect((screen.getByLabelText('Confirm supporting insight for Learning App A / Daily practice') as HTMLSelectElement).value).toBe('finding-a');
+    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore to Benchmark: Daily habit and reward loop' }));
+    await waitFor(() => expect(persisted.benchmark_selections).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Xem Benchmark' }).at(-1)!);
+    expect((await screen.findByLabelText('PO Assessment for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Worth validating');
+    expect((screen.getByLabelText('Next Action for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Test the reminder timing');
+    expect((screen.getByLabelText('Evidence quality assessment for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Learning App A' }));
+    await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]));
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
   });
 
-  it('opens an actual insight from the default Overview with entity details, evidence, KPI, and PO implications', async () => {
+  it('opens an actual insight from the default Overview without inferring a KPI relationship from a shared entity', async () => {
     const structured = {
       ...report,
       research_status: 'STRUCTURED_READY' as const,
@@ -188,9 +225,83 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(card.closest('summary')!);
     expect(await screen.findByText('Validate the flow with first-time users.')).toBeTruthy();
     expect(screen.getByText(/guided steps/)).toBeTruthy();
-    expect(screen.getByText(/Setup time reported:/)).toBeTruthy();
+    expect(screen.queryByText(/Setup time reported:/)).toBeNull();
     expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
     expect(screen.getByText('workflow observation · needs_review')).toBeTruthy();
+  });
+
+  it('keeps the contextual assessment workflow for a non-mobile report with no comparison entities', async () => {
+    const contextual = {
+      ...report,
+      research_data: {
+        ...report.research_data,
+        entities: [],
+        findings: [{ key: 'river-finding', finding_type: 'service observation', title: 'Seasonal access changes', description: 'The report notes access varies by season.', related_entities: [], evidence_references: [], source_locations: [], scope: { environment: 'Public infrastructure' }, evidence_status: 'needs_review', confidence: null, uncertainty: 'One region only.', po_implications: 'Check service continuity.' }],
+      },
+    };
+    let persisted: any = contextual;
+    mockFetch((url, init) => {
+      if (url.includes('/benchmark-state')) {
+        const body = JSON.parse(String(init.body));
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+      }
+      return persisted;
+    });
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByText('Seasonal access changes')).toBeTruthy();
+    fireEvent.click(screen.getByText('Seasonal access changes').closest('summary')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: Seasonal access changes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem Benchmark' }));
+    expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+    fireEvent.change(screen.getByLabelText('PO Assessment for Seasonal access changes'), { target: { value: 'Needs local validation' } });
+    fireEvent.change(screen.getByLabelText('Next Action for Seasonal access changes'), { target: { value: 'Interview service users' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
+    await waitFor(() => expect(persisted.benchmark_workspace.entries[0].po_assessment).toBe('Needs local validation'));
+    cleanup();
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    expect((await screen.findByLabelText('PO Assessment for Seasonal access changes') as HTMLTextAreaElement).value).toBe('Needs local validation');
+    expect((screen.getByLabelText('Next Action for Seasonal access changes') as HTMLTextAreaElement).value).toBe('Interview service users');
+  });
+
+  it('shows pending and inline failure feedback for the selected card and restores server state on failure', async () => {
+    const structured = { ...report, research_data: { ...report.research_data, findings: [{ key: 'finding-a', finding_type: 'observation', title: 'An observed pattern', description: 'A report-supported pattern.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }] } };
+    let persisted: any = structured;
+    const releaseState: { current: (() => void) | null } = { current: null };
+    let failNextState = false;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url.includes('/benchmark-state')) {
+        if (failNextState) {
+          failNextState = false;
+          return new Response(JSON.stringify({ error: { code: 'INVALID_BENCHMARK_STATE', message: 'The selection could not be saved.', details: {} } }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+        }
+        const body = JSON.parse(String(init.body));
+        return await new Promise<Response>((resolve) => {
+          releaseState.current = () => {
+            persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+            resolve(new Response(JSON.stringify(persisted), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+          };
+        });
+      }
+      return new Response(JSON.stringify(persisted), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByText('An observed pattern');
+    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
+    expect(await screen.findByText('Adding…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(true);
+    releaseState.current?.();
+    expect(await screen.findByText('Added to Benchmark.')).toBeTruthy();
+    failNextState = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('The selection could not be saved.');
+    expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' })).toBeTruthy();
+    expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]);
   });
 
   it('explains an outdated backend and keeps the full ChatGPT response after a 404', async () => {
