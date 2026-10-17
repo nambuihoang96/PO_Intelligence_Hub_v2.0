@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { reportApi, type ReportInput, type ReportSummary } from './api';
 import { extractHeadings } from './MarkdownReport';
 
@@ -47,28 +47,15 @@ const GEO_COUNTRIES: GeoOption[] = [
 ].map(([name, code]) => ({ label: `${name} (${code})`, value: code, code }));
 const GEO_OPTIONS = [...PRIORITY_GEOS, ...GEO_COUNTRIES.filter((country) => !PRIORITY_GEOS.some((priority) => priority.code === country.code))];
 
-function GeoCombobox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const results = GEO_OPTIONS.filter((option) => `${option.label} ${option.value}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const selected = GEO_OPTIONS.find((option) => option.value === value);
+function GeoDropdown({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const isCustom = value === 'Other / custom' || value.startsWith('custom:');
-  function choose(option: { label: string; value: string }) { onChange(option.value); setOpen(false); setQuery(''); }
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); setActiveIndex((index) => Math.min(index + 1, results.length)); }
-    else if (event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); setActiveIndex((index) => Math.max(index - 1, 0)); }
-    else if (event.key === 'Enter' && open) { event.preventDefault(); if (results[activeIndex]) choose(results[activeIndex]); else if (activeIndex === results.length) choose({ label: 'Other / custom', value: 'Other / custom' }); }
-    else if (event.key === 'Escape') { setOpen(false); setQuery(''); }
-  }
-  return <div className="geo-combobox">
-    <label className="intake-field" htmlFor="research-geo"><span className="field-label">GEO</span>
-      <input id="research-geo" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls="research-geo-options" aria-activedescendant={open && activeIndex >= 0 ? `research-geo-option-${activeIndex}` : undefined} aria-label="GEO" value={open ? query : (selected?.label ?? (isCustom ? 'Other / custom' : value))} onFocus={() => { setOpen(true); setQuery(''); }} onClick={() => { if (!open) { setOpen(true); setQuery(''); } }} onChange={(event) => { setQuery(event.target.value); setActiveIndex(-1); setOpen(true); }} onKeyDown={handleKeyDown} placeholder="Tìm quốc gia hoặc thị trường…" />
+  return <div className="geo-dropdown">
+    <label className="intake-field"><span className="field-label">GEO</span>
+      <select aria-label="GEO" value={isCustom && value.startsWith('custom:') ? 'Other / custom' : value} onChange={(event) => onChange(event.target.value)}>
+        {GEO_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <option value="Other / custom">Other / custom</option>
+      </select>
     </label>
-    {open && <ul className="geo-options" id="research-geo-options" role="listbox" aria-label="GEO options">
-      {results.map((option, index) => <li id={`research-geo-option-${index}`} key={option.value} role="option" aria-selected={option.value === value} className={index === activeIndex ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option)}>{option.label}</li>)}
-      <li id={`research-geo-option-${results.length}`} role="option" aria-selected={isCustom} className={activeIndex === results.length ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => choose({ label: 'Other / custom', value: 'Other / custom' })}>Other / custom</li>
-    </ul>}
     {isCustom && <label className="intake-field"><span className="field-label">GEO tùy chỉnh</span><input aria-label="GEO tùy chỉnh" value={value.startsWith('custom:') ? value.slice(7) : ''} onChange={(event) => onChange(event.target.value ? `custom:${event.target.value}` : 'Other / custom')} placeholder="Nhập GEO hoặc market" /></label>}
   </div>;
 }
@@ -179,7 +166,7 @@ export function ResearchIntake() {
       <div className="panel-heading"><div><span className="field-label">CHATGPT PLUS + LOCAL WORKSPACE</span><h2 id="intake-title">Bắt đầu với câu hỏi sản phẩm</h2></div></div>
       <label className="intake-field"><span className="field-label">Bạn muốn nghiên cứu gì?</span><textarea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ví dụ: Các app học tiếng Anh cho trẻ em tại Mỹ đang tạo động lực học tập như thế nào?" /></label>
       <div className="intake-scope-grid">
-        <GeoCombobox value={geo} onChange={setGeo} />
+        <GeoDropdown value={geo} onChange={setGeo} />
         <label className="intake-field"><span className="field-label">Environment</span><select value={os} onChange={(event) => setOs(event.target.value)}><option>Unknown</option><option>Not applicable</option><option>iOS</option><option>Android</option><option>Both</option><option>Web</option><option>Desktop</option><option>Cross-platform</option><option value="Other">Other</option></select></label>
         <label className="intake-field"><span className="field-label">Research focus (optional)</span><input value={researchFocus} onChange={(event) => setResearchFocus(event.target.value)} maxLength={200} placeholder="Nhập lĩnh vực hoặc trọng tâm theo cách của bạn" /></label>
         <label className="intake-field"><span className="field-label">Kỳ nghiên cứu</span><input value={researchPeriod} onChange={(event) => setResearchPeriod(event.target.value)} maxLength={200} placeholder="Ví dụ: 2025–2026" /></label>

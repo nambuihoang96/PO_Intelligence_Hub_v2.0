@@ -226,10 +226,7 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
 .intake-field textarea { min-height: 95px; resize: vertical; line-height: 1.55; }
 .intake-field textarea:focus, .intake-field input:focus, .intake-field select:focus { outline: none; border-color: #8fa77c; box-shadow: 0 0 0 3px rgba(143,167,124,.15); }
 .intake-scope-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
-.geo-combobox { position: relative; min-width: 0; }
-.geo-options { position: absolute; z-index: 20; top: calc(100% - 1px); left: 0; right: 0; max-height: 260px; overflow: auto; margin: 0; padding: 5px; list-style: none; border: 1px solid #dfe6e2; border-radius: 0 0 8px 8px; background: #fff; box-shadow: 0 8px 20px rgba(30, 50, 42, .14); }
-.geo-options li { padding: 8px 10px; border-radius: 5px; color: #43534f; cursor: pointer; font-size: 11px; }
-.geo-options li.active, .geo-options li:hover { background: #eef3eb; }
+.geo-dropdown { min-width: 0; }
 .import-validation { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .import-validation li[data-valid="false"] { color: #9a4b45; }
 .import-validation li[data-valid="true"] { color: #477556; }

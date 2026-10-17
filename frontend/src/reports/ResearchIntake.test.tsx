@@ -275,15 +275,14 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByText('Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.')).toBeTruthy();
   });
 
-  it('renders the default GEO and searches country options', async () => {
+  it('renders the default GEO in a native dropdown with common country options', async () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
-    const geo = await screen.findByRole('combobox', { name: 'GEO' }) as HTMLInputElement;
+    const geo = await screen.findByRole('combobox', { name: 'GEO' }) as HTMLSelectElement;
     expect(geo.value).toBe('Global / not specified');
-    fireEvent.click(geo);
-    fireEvent.change(geo, { target: { value: 'Uni' } });
     expect(screen.getByRole('option', { name: 'United States (US)' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'United Kingdom (GB)' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Other / custom' })).toBeTruthy();
   });
 
   it('submits selected GEO code and supports custom GEO entry', async () => {
@@ -299,10 +298,8 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     const geo = screen.getByRole('combobox', { name: 'GEO' });
-    fireEvent.click(geo);
-    fireEvent.change(geo, { target: { value: 'Vie' } });
-    fireEvent.click(screen.getByRole('option', { name: 'Vietnam (VN)' }));
-    expect((screen.getByRole('combobox', { name: 'GEO' }) as HTMLInputElement).value).toBe('Vietnam (VN)');
+    fireEvent.change(geo, { target: { value: 'VN' } });
+    expect((screen.getByRole('combobox', { name: 'GEO' }) as HTMLSelectElement).value).toBe('VN');
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     await waitFor(() => expect(submitted?.geo).toBe('VN'));
 
@@ -318,8 +315,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
-    fireEvent.click(screen.getByRole('combobox', { name: 'GEO' }));
-    fireEvent.click(screen.getByRole('option', { name: 'Other / custom' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'GEO' }), { target: { value: 'Other / custom' } });
     fireEvent.change(screen.getByLabelText('GEO tùy chỉnh'), { target: { value: 'Special Market' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
     await waitFor(() => expect(submitted?.geo).toBe('Special Market'));
