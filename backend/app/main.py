@@ -80,7 +80,7 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", "research_contract_version": "po_research_v1"}
 
     return application
 

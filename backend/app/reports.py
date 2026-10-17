@@ -20,6 +20,7 @@ from backend.app.schemas import (
     ImportedReportSummary,
     Page,
     ReprocessResult,
+    ReportStructuringUpdate,
     StructuredResearchDataUpdate,
 )
 
@@ -48,9 +49,15 @@ def _orphaned_selections(report: ImportedResearchReport) -> list[dict]:
 
 def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured_update_available: bool = False) -> ImportedReportCreated:
     data = ImportedReportSummary.model_validate(report).model_dump()
+    research = report.research_data_json or {}
+    has_results = bool(research.get("findings") or research.get("entities") or research.get("benchmark_dimensions"))
+    has_structure = bool(has_results or research.get("key_takeaways") or research.get("research_gaps") or research.get("po_recommendations"))
+    research_status = "STRUCTURED_READY" if has_results else ("STRUCTURED_PARTIAL" if has_structure else "TEXT_ONLY")
     data.update(
         content=report.content,
         parse_status=report.parse_status,
+        research_status=research_status,
+        research_contract_version="po_research_v1",
         research_data=report.research_data_json,
         extraction_error=report.extraction_error,
         benchmark_selections=report.benchmark_selections_json,
@@ -83,16 +90,18 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
     existing = session.scalar(select(ImportedResearchReport).where(ImportedResearchReport.content_sha256 == digest))
     if existing is not None:
         available = False
-        if payload.structured_json and parse_status == "PARSED":
+        if parse_status == "PARSED":
             incoming = research_data.model_dump(mode="json")
             current = existing.research_data_json or {}
-            if existing.parse_status != "PARSED":
+            existing_has_results = bool(current.get("findings") or current.get("entities") or current.get("benchmark_dimensions"))
+            incoming_has_results = bool(incoming.get("findings") or incoming.get("entities") or incoming.get("benchmark_dimensions"))
+            if incoming_has_results and not existing_has_results:
                 existing.research_data_json = incoming
                 existing.parse_status = "PARSED"
                 existing.extraction_error = None
                 session.commit()
                 session.refresh(existing)
-            else:
+            elif current != incoming:
                 available = current != incoming
         response.status_code = status.HTTP_200_OK
         return _read(existing, duplicate=True, structured_update_available=available)
@@ -228,6 +237,42 @@ def update_structured_data(report_id: str, payload: StructuredResearchDataUpdate
         ) from exc
     if normalized_status != "PARSED":
         raise HTTPException(status_code=422, detail={"code": "INVALID_STRUCTURED_RESEARCH_DATA", "message": "Structured data must reference URLs and source locations present in the original report.", "reason": extraction_error})
+    report.research_data_json = normalized.model_dump(mode="json")
+    report.parse_status = "PARSED"
+    report.extraction_error = None
+    session.commit()
+    session.refresh(report)
+    return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+
+
+@router.put("/{report_id}/structure-from-response", response_model=ImportedReportRead)
+def structure_from_response(report_id: str, payload: ReportStructuringUpdate, session: SessionDependency) -> ImportedReportRead:
+    """Apply a single ChatGPT transformation response without changing source text or PO data."""
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    try:
+        normalized, normalized_status, _ = normalize_report(payload.response, None)
+    except ResearchInputValidationError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_RESEARCH_INPUT", "message": str(exc), "errors": exc.errors}) from exc
+    if normalized_status != "PARSED":
+        raise HTTPException(status_code=422, detail={"code": "STRUCTURED_PAYLOAD_REQUIRED", "message": "Paste the complete ChatGPT response containing a valid po_research_v1 payload."})
+
+    original_sources, _ = extract_unstructured(report.content)
+    allowed_urls = {source.url for source in original_sources.evidence_references}
+    allowed_urls.update(source.get("url") for source in (report.research_data_json or {}).get("evidence_references", []) if source.get("url"))
+    supplied_urls = {source.url for source in normalized.evidence_references}
+    if missing := supplied_urls - allowed_urls:
+        raise HTTPException(status_code=422, detail={
+            "code": "STRUCTURED_REFERENCE_NOT_IN_ORIGINAL",
+            "message": "Structured response includes source URLs that are not present in the saved original report.",
+            "errors": [{"location": ["body", "response", "research_data", "evidence_references"], "message": "Remove unsupported URLs or preserve only references from the saved report: " + ", ".join(sorted(missing)), "type": "reference_not_in_original"}],
+        })
+
+    # Rebind source locations to the saved original, never to the generated
+    # transformation response. All other PO-owned and immutable fields stay put.
+    original_locations = {source.url: source.source_location for source in original_sources.evidence_references}
+    normalized.evidence_references = [source.model_copy(update={"source_location": original_locations.get(source.url)}) for source in normalized.evidence_references]
     report.research_data_json = normalized.model_dump(mode="json")
     report.parse_status = "PARSED"
     report.extraction_error = None

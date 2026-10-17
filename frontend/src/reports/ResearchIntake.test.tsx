@@ -25,9 +25,11 @@ describe('ChatGPT research intake', () => {
     const prompt = buildResearchPrompt({ question: 'Compare regional payment products', geo: 'US', os: 'Web', researchPeriod: '2025' });
     expect(prompt).toContain('Compare regional payment products');
     expect(prompt).toContain('do not assume an industry or taxonomy');
-    expect(prompt).toContain('open taxonomy label');
-    expect(prompt).toContain('Do not force irrelevant sections');
+    expect(prompt).toContain('open descriptive type');
+    expect(prompt).toContain('Do not force mobile, app, competitor');
     expect(prompt).toContain('evidence_references');
+    expect(prompt).toContain('po_research_v1');
+    expect(prompt).toContain('schema_version');
     expect(prompt).not.toContain('# Benchmark candidates');
     expect(prompt).not.toContain('iOS and Android findings separate');
   });
@@ -150,6 +152,33 @@ describe('ChatGPT research intake', () => {
     expect((await screen.findByLabelText('PO Assessment') as HTMLTextAreaElement).value).toBe('Worth validating');
     expect((screen.getByLabelText('Next Action') as HTMLTextAreaElement).value).toBe('Check source sample');
     expect((screen.getByLabelText('Evidence quality assessment for Settlement speed differs') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
+  });
+
+  it('opens an actual insight from the default Overview with entity details, evidence, KPI, and PO implications', async () => {
+    const structured = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      research_data: {
+        ...report.research_data,
+        executive_summary: 'Guided setup is documented; outcome impact is not measured.',
+        key_takeaways: ['Setup guidance appears before the first action.'],
+        entities: [{ key: 'subject-a', entity_type: 'service', name: 'Transfer service A', attributes: { setup_flow: 'guided steps' }, evidence_references: ['https://example.com/'] }],
+        findings: [{ key: 'finding-a', finding_type: 'workflow observation', title: 'Guidance precedes first action', description: 'The report states that setup guidance is shown before the first transfer.', related_entities: ['subject-a'], evidence_references: ['https://example.com/'], source_locations: [], scope: { region: 'US', period: '2025' }, evidence_status: 'needs_review', confidence: null, uncertainty: 'Only one source was supplied.', po_implications: 'Validate the flow with first-time users.' }],
+        evidence_references: [{ url: 'https://example.com/', title: 'Source report', source_location: null, verified: false }],
+        benchmark_dimensions: [{ key: 'setup-time', name: 'Setup time reported', related_entities: ['subject-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'subject-a', value: 'About 3 minutes', evidence_references: ['https://example.com/'], source_locations: [], evidence_status: 'unverified', uncertainty: 'Source method is not described.' }], po_notes: null }],
+      },
+    };
+    mockFetch(() => structured);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByText('Guided setup is documented; outcome impact is not measured.')).toBeTruthy();
+    const card = await screen.findByRole('button', { name: /Guidance precedes first action/ });
+    fireEvent.click(card);
+    expect(await screen.findByText('Validate the flow with first-time users.')).toBeTruthy();
+    expect(screen.getByText(/guided steps/)).toBeTruthy();
+    expect(screen.getByText(/Setup time reported:/)).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
+    expect(screen.getByText('needs_review · unverified')).toBeTruthy();
   });
 
   it('validates missing metadata and does not send an import', async () => {

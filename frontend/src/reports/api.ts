@@ -11,6 +11,8 @@ export type ReportSummary = {
 };
 
 export type ResearchData = {
+  executive_summary?: string | null;
+  key_takeaways?: string[];
   sections: { heading: string; content: string; hierarchy: number; source_location: string | null; lists: { ordered: boolean; items: string[]; source_location?: string | null }[]; tables: { columns: string[]; rows: string[][]; source_location?: string | null }[] }[];
   entities: { key: string; entity_type: string; name: string; attributes: Record<string, unknown>; evidence_references: string[] }[];
   findings: { key: string; finding_type: string; title: string; description: string; related_entities: string[]; evidence_references: string[]; source_locations: string[]; scope: Record<string, unknown>; evidence_status: string; confidence: number | null; uncertainty: string | null; po_implications: string | null }[];
@@ -22,7 +24,7 @@ export type ResearchData = {
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
 export type BenchmarkWorkspaceEntry = BenchmarkSelection & { po_assessment: string; notes: string; next_action: string; dimension_assessments: Record<string, string> };
 export type BenchmarkWorkspace = { custom_dimensions: string[]; entries: BenchmarkWorkspaceEntry[] };
-export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
+export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY'; research_contract_version?: 'po_research_v1'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };
 export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { content: string; structured_json?: string };
 
@@ -68,9 +70,13 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): 
     const validation = readableValidationErrors(apiError?.details?.errors ?? body?.detail?.errors);
     const reason = validation.length ? `\n${validation.map((item) => `• ${item}`).join('\n')}` : '';
     const headline = validation.length && detail === 'Request validation failed.' ? 'Hãy sửa các trường chưa hợp lệ:' : (typeof detail === 'string' ? detail : 'Backend không thể lưu báo cáo. Kiểm tra dữ liệu và thử lại.');
-    throw new Error(`${headline}${reason}\nNội dung nhập vẫn được giữ. Bạn có thể sửa lỗi và thử lại.`);
+    const code = apiError?.code ? ` [${apiError.code}]` : '';
+    throw new Error(`${headline}${code}${reason}\nHTTP ${response.status} · ${url}\nNội dung nhập vẫn được giữ. Bạn có thể sửa lỗi và thử lại.`);
   }
   if (body === null) throw new Error('Backend trả về phản hồi không đọc được. Vui lòng thử lại.');
+  if (body.research_contract_version && body.research_contract_version !== 'po_research_v1') {
+    throw new Error(`Phiên bản research contract không tương thích (${String(body.research_contract_version)}). Hãy khởi động backend đúng phiên bản rồi thử lại.`);
+  }
   return body as T;
 }
 
@@ -81,5 +87,6 @@ export const reportApi = {
   updateBenchmarkSelections: (id: string, selections: BenchmarkSelection[]) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-selections`, { method: 'PUT', body: JSON.stringify({ selections }) }),
   reprocess: (id: string) => request<ImportedReport & { reprocessed: boolean; message: string }>(`/api/v1/reports/${encodeURIComponent(id)}/reprocess`, { method: 'POST' }),
   updateStructuredData: (id: string, research_data: ResearchData) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/structured-data`, { method: 'PUT', body: JSON.stringify({ research_data }) }),
+  structureFromResponse: (id: string, response: string) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/structure-from-response`, { method: 'PUT', body: JSON.stringify({ response }) }),
   updateBenchmarkWorkspace: (id: string, workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-workspace`, { method: 'PUT', body: JSON.stringify(workspace) }),
 };

@@ -12,7 +12,7 @@ class HealthSmokeTest(unittest.TestCase):
     def test_health_returns_ok(self) -> None:
         response = TestClient(app).get("/health")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok"})
+        self.assertEqual(response.json(), {"status": "ok", "research_contract_version": "po_research_v1"})
 
     def test_data_root_defaults_inside_workspace(self) -> None:
         with patch.dict("os.environ", {}, clear=True):

@@ -520,6 +520,8 @@ class BenchmarkWorkspaceRead(BenchmarkWorkspaceUpdate):
 class ImportedReportRead(ImportedReportSummary):
     content: str
     parse_status: str
+    research_status: str = "TEXT_ONLY"
+    research_contract_version: str = "po_research_v1"
     research_data: UniversalResearchData
     extraction_error: str | None
     benchmark_selections: list[BenchmarkSelection]
@@ -536,6 +538,20 @@ class ImportedReportCreated(ImportedReportRead):
 class StructuredResearchDataUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     research_data: UniversalResearchData
+
+
+class ReportStructuringUpdate(APIModel):
+    """One pasted ChatGPT response used to upgrade an existing text report."""
+
+    model_config = ConfigDict(extra="forbid")
+    response: str = Field(min_length=1, max_length=2_000_000)
+
+    @field_validator("response")
+    @classmethod
+    def response_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("ChatGPT response must not be blank")
+        return value
 
 
 class ReprocessResult(ImportedReportRead):

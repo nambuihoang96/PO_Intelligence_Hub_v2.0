@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { reportApi, type ReportSummary } from './api';
 import { extractHeadings } from './MarkdownReport';
-
-export function buildResearchPrompt(input: { question: string; geo: string; os: string; researchPeriod: string; focus?: string }): string {
-  return `# Product research request\n\n## Research question\n${input.question.trim()}\n\n## Scope\n- Research focus: ${input.focus?.trim() || 'Determine an appropriate scope from the question; do not assume an industry or taxonomy.'}\n- GEO: ${input.geo.trim() || 'Not specified'}\n- Platform or environment: ${input.os || 'Not specified'}\n- Research period: ${input.researchPeriod.trim() || 'State the available period and exact dates for each source when known.'}\n\n## Instructions\n1. Answer the research question directly, then organize the analysis around the evidence and concepts actually present in this research.\n2. Choose headings, entities, finding types, and comparison dimensions that fit this subject. Do not force irrelevant sections, categories, products, metrics, or benchmark dimensions.\n3. Identify possible comparison candidates only when relevant, explain inclusion criteria, and never imply a ranking without a cited source and explicit scope.\n4. Link real source URLs to the claims they support. Never invent citations, URLs, entities, IDs, rankings, or measurements.\n5. State GEO, platform/environment, and time scope only where applicable; distinguish unknown scope from known values.\n6. Do not infer downloads, revenue, market share, growth, or other measurements from indirect proxies such as review counts or search results.\n7. Distinguish sourced observations, interpretation, and hypotheses. Include confidence only with a reason; otherwise state that confidence was not assessed.\n8. Describe research gaps and practical next steps for a Product Owner where the evidence supports them.\n9. Preserve uncertainty and say explicitly when reliable evidence is unavailable.\n\n## Output\nReturn a readable Markdown report with headings that fit the subject, plus a JSON object in a fenced \`json\` block using this envelope:\n{\n  \"sections\": [{\"heading\": \"...\", \"content\": \"...\", \"hierarchy\": 1, \"source_location\": \"...\"}],\n  \"entities\": [{\"key\": \"stable-local-key\", \"entity_type\": \"open taxonomy label\", \"name\": \"...\", \"attributes\": {}, \"evidence_references\": [\"URL present in report\"]}],\n  \"findings\": [{\"key\": \"stable-local-key\", \"finding_type\": \"open label\", \"title\": \"...\", \"description\": \"...\", \"related_entities\": [], \"evidence_references\": [], \"scope\": {}, \"evidence_status\": \"unverified\", \"confidence\": null, \"uncertainty\": null, \"po_implications\": null}],\n  \"evidence_references\": [{\"url\": \"URL present in report\", \"title\": null, \"source_location\": null, \"verified\": false}],\n  \"benchmark_dimensions\": [{\"key\": \"stable-local-key\", \"name\": \"dimension grounded in this research\", \"related_entities\": [], \"evidence_references\": [], \"observations\": [], \"po_notes\": null}],\n  \"research_gaps\": [], \"po_recommendations\": []\n}\nUse only source URLs included in the Markdown report. Related-entity values must use entity keys above. Do not create IDs for external products or add unsupported values. If a field is not supported, leave its list empty or value null. The JSON is structured user-provided content; it is not independently verified.`;
-}
+import { buildRepairPrompt, buildResearchPrompt } from './researchPrompt';
+export { buildResearchPrompt } from './researchPrompt';
 
 export function inspectResearchContent(content: string): { format: 'Markdown/TXT' | 'JSON' | 'Markdown + JSON'; jsonError: string | null } {
   const fenced = /```json\s*\r?\n([\s\S]*?)(?:\r?\n```|$)/i.exec(content);
@@ -122,6 +120,7 @@ export function ResearchIntake() {
   const [importLoading, setImportLoading] = useState(false);
   const [importSlow, setImportSlow] = useState(false);
   const [error, setError] = useState('');
+  const [repairPrompt, setRepairPrompt] = useState('');
   const [success, setSuccess] = useState('');
   const [copied, setCopied] = useState(false);
   const [showPromptFallback, setShowPromptFallback] = useState(false);
@@ -199,7 +198,11 @@ export function ResearchIntake() {
       const report = await reportApi.import({ question, geo, os: environment, research_period: researchPeriod.trim() || null, content: reportContent });
       window.history.pushState({}, '', `/reports/${report.id}?imported=1${report.duplicate ? '&duplicate=1' : ''}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không lưu được báo cáo. Vui lòng thử lại.'); }
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Không lưu được báo cáo. Vui lòng thử lại.';
+      setError(message);
+      if (/422|INVALID_RESEARCH_INPUT|schema|entity keys|source URL/i.test(message)) setRepairPrompt(buildRepairPrompt(reportContent, message));
+    }
     finally { window.clearTimeout(slowTimer); importInFlight.current = false; setImportLoading(false); setImportSlow(false); }
   }
 
@@ -232,9 +235,10 @@ export function ResearchIntake() {
       {showPromptFallback && <label className="intake-field prompt-fallback"><span className="field-label">Prompt for ChatGPT</span><textarea rows={12} readOnly value={prompt} onFocus={(event) => event.currentTarget.select()} /></label>}
       {showImport && <section className="report-import-card" aria-labelledby="import-title">
         <div className="panel-heading"><div><span className="field-label">IMPORT RESEARCH</span><h2 id="import-title">Dán một lần, xem kết quả có cấu trúc</h2></div><span className="unverified-chip">Sẽ lưu chưa xác minh</span></div>
-        <label className="intake-field"><span className="field-label">Dán kết quả nghiên cứu từ ChatGPT</span><textarea rows={16} value={reportContent} onChange={(event) => { setReportContent(event.target.value); setFileName(''); setError(''); }} placeholder="# Research summary&#10;&#10;Dán nguyên kết quả Markdown, TXT hoặc JSON tại đây…" /></label>
+        <label className="intake-field"><span className="field-label">Dán kết quả nghiên cứu từ ChatGPT</span><textarea rows={16} value={reportContent} onChange={(event) => { setReportContent(event.target.value); setFileName(''); setError(''); setRepairPrompt(''); }} placeholder="# Research summary&#10;&#10;Dán nguyên kết quả Markdown, TXT hoặc JSON tại đây…" /></label>
         <div className="file-picker"><label className="secondary-action" htmlFor="report-file">Chọn file .md, .txt hoặc .json</label><input id="report-file" type="file" accept=".md,.txt,.json,text/markdown,text/plain,application/json" onChange={readFile} /><span>{fileName || 'Tối đa 2 MB'}</span></div>
-        {contentInspection.jsonError && <div className="research-alert" role="alert">{contentInspection.jsonError}</div>}
+        {contentInspection.jsonError && <div className="research-alert" role="alert">{contentInspection.jsonError}<button className="text-button" type="button" onClick={() => setRepairPrompt(buildRepairPrompt(reportContent, contentInspection.jsonError || 'Malformed JSON.'))}>Tạo prompt sửa JSON</button></div>}
+        {repairPrompt && <div className="research-panel"><div className="intake-actions"><strong>Prompt sửa structured output</strong><button className="secondary-action" type="button" onClick={() => { const clipboard = navigator.clipboard; if (!clipboard) { setError('Clipboard không khả dụng. Hãy chọn và copy nội dung bên dưới.'); return; } void clipboard.writeText(repairPrompt).then(() => setSuccess('Prompt sửa đã được sao chép.')).catch(() => setError('Không sao chép được prompt. Hãy chọn và copy nội dung bên dưới.')); }}>Copy prompt sửa</button></div><textarea aria-label="Prompt sửa structured output" rows={10} readOnly value={repairPrompt} onFocus={(event) => event.currentTarget.select()} /></div>}
         <div className="report-preview" aria-live="polite"><strong>Xem trước và kiểm tra</strong><ul className="import-validation">{validation.map((item) => <li key={item.label} data-valid={item.valid}>{item.valid ? '✓' : '•'} {item.label}: {item.valid ? 'Đã có' : item.error}</li>)}</ul><p>{reportContent.trim() ? validationMessage : 'Chưa có kết quả nghiên cứu để lưu.'}</p><span>{reportContent.length.toLocaleString()} ký tự · {previewHeadings.length} heading · {Array.from(reportContent.matchAll(/https?:\/\/[^\s)<>]+/g)).length} URL · Định dạng: {contentInspection.format}</span>{reportContent && <pre>{reportContent.slice(0, 700)}{reportContent.length > 700 ? '…' : ''}</pre>}</div>
         <div className="intake-actions"><button className="primary-action" type="button" onClick={importReport} disabled={importLoading}>{importLoading ? 'Đang lưu báo cáo...' : 'Lưu báo cáo vào workspace'}</button><button className="text-button" type="button" onClick={() => setShowImport(false)}>Hủy</button></div>
         {importLoading && <div className="research-success" role="status">Đang lưu báo cáo...{importSlow && <span> Request đang lâu hơn bình thường.</span>}</div>}

@@ -93,6 +93,8 @@ class BenchmarkDimension(ResearchModel):
 
 
 class UniversalResearchData(ResearchModel):
+    executive_summary: str | None = Field(default=None, max_length=10000)
+    key_takeaways: list[str] = Field(default_factory=list, max_length=100)
     sections: list[ResearchSection] = Field(default_factory=list, max_length=1000)
     entities: list[ResearchEntity] = Field(default_factory=list, max_length=2000)
     findings: list[ResearchFinding] = Field(default_factory=list, max_length=5000)
@@ -124,6 +126,13 @@ class UniversalResearchData(ResearchModel):
         if unknown_urls := sorted(set(references) - known_urls):
             raise ValueError("evidence references must match a source URL in the original report: " + ", ".join(unknown_urls))
         return self
+
+
+class POResearchPayload(ResearchModel):
+    """Versioned envelope shared by the prompt builder and report importer."""
+
+    schema_version: Literal["po_research_v1"]
+    research_data: UniversalResearchData
 
 
 def _url_references(markdown: str) -> list[SourceReference]:
@@ -252,14 +261,22 @@ class ResearchInputValidationError(ValueError):
 def _structured_candidate(content: str, explicit_json: str | None) -> tuple[str | None, str, str]:
     if explicit_json is not None and explicit_json.strip():
         return explicit_json, "structured_json", content
-    fenced = re.search(r"(?is)```json\s*\r?\n?(.*?)\r?\n?```", content)
-    if fenced:
-        prose = content[:fenced.start()] + content[fenced.end():]
-        return fenced.group(1), ("inline_json" if prose.strip() else "json_only"), prose
+    fences = list(re.finditer(r"(?is)```json\s*\r?\n?(.*?)\r?\n?```", content))
+    if fences:
+        # Prefer the explicitly marked canonical payload; otherwise choose the
+        # last valid JSON fence rather than an earlier illustrative code block.
+        candidates = []
+        for fence in fences:
+            marked = "PO_RESEARCH_V1" in content[max(0, fence.start() - 100):fence.start()].upper()
+            candidates.append((fence, marked))
+        marked_fences = [item for item in candidates if item[1]]
+        selected = marked_fences[-1][0] if marked_fences else candidates[-1][0]
+        prose = content[:selected.start()] + content[selected.end():]
+        return selected.group(1), ("inline_json" if prose.strip() else "json_only"), prose
     stripped = content.strip()
     if stripped.startswith(("{", "[")):
         return content, "json_only", ""
-    if re.search(r"(?is)```json\b", content):
+    if re.search(r"(?is)(?:PO_RESEARCH_V1\s*)?```json\b", content):
         raise ResearchInputValidationError(
             "The fenced JSON block is not closed.",
             [{"location": ["body", "content"], "message": "JSON code fence must end with ```.", "type": "json_fence_unclosed"}],
@@ -282,7 +299,23 @@ def normalize_report(content: str, structured_json: str | None) -> tuple[Univers
             [{"location": ["body", field_path, "line", exc.lineno, "column", exc.colno], "message": detail, "type": "json_invalid"}],
         ) from exc
     try:
-        structured = UniversalResearchData.model_validate(payload)
+        if isinstance(payload, dict) and "schema_version" in payload:
+            try:
+                structured = POResearchPayload.model_validate(payload).research_data
+            except ValidationError as exc:
+                # Make contract version failures distinguishable and actionable.
+                version_error = any("schema_version" in error.get("loc", ()) for error in exc.errors())
+                errors = [
+                    {"location": ["body", field_path, *error.get("loc", ())], "message": error.get("msg", "Invalid value"), "type": error.get("type", "value_error")}
+                    for error in exc.errors(include_input=False)
+                ]
+                if version_error:
+                    raise ResearchInputValidationError("Unsupported research contract version. Expected schema_version 'po_research_v1'.", errors) from exc
+                reasons = "; ".join(error.get("msg", "Invalid value") for error in exc.errors(include_input=False))
+                raise ResearchInputValidationError(f"Structured research payload does not match po_research_v1: {reasons}", errors) from exc
+        else:
+            # Existing reports and older clients submit the unwrapped model.
+            structured = UniversalResearchData.model_validate(payload)
     except ValidationError as exc:
         errors = [
             {"location": ["body", field_path, *error.get("loc", ())], "message": error.get("msg", "Invalid value"), "type": error.get("type", "value_error")}
@@ -300,25 +333,21 @@ def normalize_report(content: str, structured_json: str | None) -> tuple[Univers
             message = "Source URLs in structured_json must also appear in the Markdown/TXT report: " + ", ".join(sorted(missing))
             raise ResearchInputValidationError(message, [{"location": ["body", "structured_json", "evidence_references"], "message": message, "type": "reference_not_in_report"}])
 
-    lines = content.splitlines()
-    for source in structured.evidence_references:
-        if source.source_location:
-            match = re.fullmatch(r"line:(\d+)", source.source_location)
-            if not match or int(match.group(1)) > len(lines) or source.url not in lines[int(match.group(1)) - 1]:
-                # A location from a JSON-only document is not necessarily a
-                # Markdown line citation. Keep it only if it maps to the input.
-                if input_kind != "json_only":
-                    message = f"Source location {source.source_location} does not point to its URL in the original input."
-                    raise ResearchInputValidationError(message, [{"location": ["body", field_path, "evidence_references", "source_location"], "message": message, "type": "invalid_source_location"}])
-    locations = [section.source_location for section in structured.sections if section.source_location]
-    locations += [item.source_location for section in structured.sections for item in section.lists if item.source_location]
-    locations += [item.source_location for section in structured.sections for item in section.tables if item.source_location]
-    locations += [location for item in structured.findings for location in item.source_locations]
-    locations += [location for dimension in structured.benchmark_dimensions for observation in dimension.observations for location in observation.source_locations]
-    for location in locations:
-        match = re.fullmatch(r"line:(\d+)", location)
-        if not match or not 1 <= int(match.group(1)) <= len(lines):
-            if input_kind != "json_only":
-                message = f"Source location {location} is not a valid line in the original input."
-                raise ResearchInputValidationError(message, [{"location": ["body", field_path, "source_location"], "message": message, "type": "invalid_source_location"}])
+    # Do not trust model-generated line counts. Derive a location only when a
+    # URL occurs in readable report text; JSON-only and code-fence locations
+    # remain unset rather than pretending to point to claim support.
+    derived_sources = {item.url: item.source_location for item in _url_references(markdown)}
+    structured.evidence_references = [
+        source.model_copy(update={"source_location": derived_sources.get(source.url)})
+        for source in structured.evidence_references
+    ]
+    # ChatGPT should not count lines. Drop claimed JSON locations and retain
+    # only URL locations derived from the readable original report above.
+    structured.sections = [section.model_copy(update={
+        "source_location": None,
+        "lists": [item.model_copy(update={"source_location": None}) for item in section.lists],
+        "tables": [item.model_copy(update={"source_location": None}) for item in section.tables],
+    }) for section in structured.sections]
+    structured.findings = [item.model_copy(update={"source_locations": []}) for item in structured.findings]
+    structured.benchmark_dimensions = [item.model_copy(update={"observations": [observation.model_copy(update={"source_locations": []}) for observation in item.observations]}) for item in structured.benchmark_dimensions]
     return structured, "PARSED", None

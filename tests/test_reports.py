@@ -75,6 +75,80 @@ class ImportedReportsAPITest(unittest.TestCase):
             "research_gaps": ["Independent validation unavailable."], "po_recommendations": ["Assess within product context."],
         }
 
+    def _versioned_payload(self, url: str = "https://example.com/research") -> dict:
+        return {
+            "schema_version": "po_research_v1",
+            "research_data": {
+                "executive_summary": "Observed evidence supports a limited comparison; outcome metrics remain unknown.",
+                "key_takeaways": ["Compare only the supplied product experience."],
+                "sections": [{"heading": "Observed product behavior", "content": "The report describes a concrete behavior." , "hierarchy": 2}],
+                "entities": [{"key": "product-a", "entity_type": "service", "name": "Product A", "attributes": {"interaction": "guided"}, "evidence_references": [url]}],
+                "findings": [{"key": "finding-guidance", "finding_type": "behavior", "title": "Guidance is visible", "description": "The report states that guidance appears before the main action.", "related_entities": ["product-a"], "evidence_references": [url], "scope": {"environment": "Web", "period": "2025"}, "evidence_status": "needs_review", "uncertainty": "One source only", "po_implications": "Test the timing with users."}],
+                "evidence_references": [{"url": url, "title": "Observed behavior source", "verified": False}],
+                "benchmark_dimensions": [{"key": "interaction-pattern", "name": "Interaction pattern", "related_entities": ["product-a"], "evidence_references": [url], "observations": [{"entity_key": "product-a", "value": "Guided before action", "evidence_references": [url], "evidence_status": "needs_review", "uncertainty": "Single documented example"}]}],
+                "research_gaps": ["No comparative retention data was supplied."],
+                "po_recommendations": ["Validate whether early guidance reduces user confusion."],
+            },
+        }
+
+    def test_po_research_v1_envelope_imports_one_paste_as_structured_results(self) -> None:
+        url = "https://example.com/research"
+        payload = self._versioned_payload(url)
+        raw = f"# Research results\n\nThe report describes Product A guidance before its main action. Source: {url}\n\n<!-- PO_RESEARCH_V1 -->\n```json\n{json.dumps(payload)}\n```\n"
+        response = self.client.post("/api/v1/reports", json=self.payload(raw))
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = response.json()
+        self.assertEqual(saved["research_contract_version"], "po_research_v1")
+        self.assertEqual(saved["research_status"], "STRUCTURED_READY")
+        self.assertEqual(saved["research_data"]["executive_summary"], payload["research_data"]["executive_summary"])
+        self.assertEqual(saved["research_data"]["findings"][0]["title"], "Guidance is visible")
+        self.assertEqual(saved["research_data"]["benchmark_dimensions"][0]["observations"][0]["value"], "Guided before action")
+        self.assertEqual(saved["research_data"]["evidence_references"][0]["source_location"], "line:3")
+        self.assertEqual(saved["research_data"]["evidence_references"][0]["verified"], False)
+        self.assertEqual(saved["content"], raw)
+
+    def test_versioned_json_only_is_accepted_and_invalid_internal_reference_is_rejected(self) -> None:
+        valid = self.client.post("/api/v1/reports", json=self.payload(json.dumps(self._versioned_payload())))
+        self.assertEqual(valid.status_code, 201, valid.text)
+        self.assertEqual(valid.json()["research_status"], "STRUCTURED_READY")
+        self.assertIsNone(valid.json()["research_data"]["evidence_references"][0]["source_location"])
+        broken = self._versioned_payload()
+        broken["research_data"]["findings"][0]["related_entities"] = ["missing-product"]
+        invalid = self.client.post("/api/v1/reports", json=self.payload(json.dumps(broken)))
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.json()["error"]["code"], "INVALID_RESEARCH_INPUT")
+        self.assertIn("unknown entity keys", invalid.json()["error"]["message"])
+
+    def test_legacy_report_can_be_structured_from_one_chatgpt_response_without_losing_po_workspace(self) -> None:
+        original = "# Saved report\n\nProduct A displays guidance before the main action.\n\nSource: https://example.com/research\n"
+        saved = self.client.post("/api/v1/reports", json={**self.payload(original), "structured_json": json.dumps(self._structured_payload(url="https://example.com/research"))}).json()
+        report_id = saved["id"]
+        self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": [{"item_type": "finding", "item_key": "finding-entity-a"}]})
+        workspace = {"custom_dimensions": ["PO fit"], "entries": [{"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Keep this", "notes": "Do not erase", "next_action": "Review", "dimension_assessments": {}}]}
+        self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=workspace)
+        # Simulate a legacy text-only row that already owns PO workspace data.
+        engine = self.client.app.state.session_factory.kw["bind"]
+        from sqlalchemy.orm import Session
+        from backend.app.models import ImportedResearchReport
+        with Session(engine) as session:
+            row = session.get(ImportedResearchReport, report_id)
+            row.research_data_json = {}
+            row.parse_status = "NEEDS_STRUCTURING"
+            session.commit()
+        response = "# Structured response\n\n<!-- PO_RESEARCH_V1 -->\n```json\n" + json.dumps(self._versioned_payload()) + "\n```\n"
+        upgraded = self.client.put(f"/api/v1/reports/{report_id}/structure-from-response", json={"response": response})
+        self.assertEqual(upgraded.status_code, 200, upgraded.text)
+        self.assertEqual(upgraded.json()["content"], original)
+        self.assertEqual(upgraded.json()["research_data"]["findings"][0]["title"], "Guidance is visible")
+        self.assertEqual(upgraded.json()["benchmark_selections"][0]["item_key"], "finding-entity-a")
+        self.assertEqual(upgraded.json()["benchmark_workspace"]["entries"][0]["notes"], "Do not erase")
+        unsupported_url = self._versioned_payload("https://not-in-original.example/data")
+        rejected = self.client.put(f"/api/v1/reports/{report_id}/structure-from-response", json={"response": "<!-- PO_RESEARCH_V1 -->\n```json\n" + json.dumps(unsupported_url) + "\n```"})
+        self.assertEqual(rejected.status_code, 422)
+        reread = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(reread["research_data"]["findings"][0]["title"], "Guidance is visible")
+        self.assertEqual(reread["benchmark_workspace"]["entries"][0]["notes"], "Do not erase")
+
     def test_structured_update_invalid_data_and_duplicate_upgrade_preserve_po_data(self) -> None:
         raw = "# Context\n\nObservation from report.\n\nSource: https://example.com/\n"
         first = self.client.post("/api/v1/reports", json=self.payload(raw)).json()
@@ -129,21 +203,41 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(response.json()["content"], raw)
 
     def test_dynamic_environment_values_and_multi_domain_structured_contract(self) -> None:
-        domains = ("Puzzle", "ASMR", "Drama", "Utilities", "Ad Monetization", "Marine logistics")
-        for index, domain in enumerate(domains):
+        cases = [
+            ("Puzzle", "Crystal Harbor", "puzzle game", {"board_rule": "linked color clears"}, "Chain clears reveal route choices", "Players can trigger linked clears that open alternate routes.", "Progression choice", "Alternate route opens after a linked clear"),
+            ("ASMR", "Rain Room", "sensory experience", {"sound_layer": "rain on window"}, "Layer controls remain independent", "The report says rain and room-tone layers can be adjusted separately.", "Sound layer control", "Rain and room tone have separate controls"),
+            ("Education", "Word Garden", "learning service", {"practice_mode": "retrieval prompts"}, "Recall prompts follow each lesson", "The product presents short recall prompts after a lesson section.", "Practice cadence", "Prompt appears after each lesson section"),
+            ("Drama", "North Pier Stories", "serialized content service", {"release_model": "weekly episodes"}, "Episode releases are weekly", "The cited service page lists a weekly episode release schedule.", "Release cadence", "One episode scheduled each week"),
+            ("Utilities", "Pocket Archive", "file utility", {"transfer_method": "local network"}, "Transfer stays on local network", "The product documentation describes device-to-device transfer over a local network.", "Data path", "Local network transfer is documented"),
+            ("Ad Monetization", "Publisher placement study", "monetization setup", {"placement": "between content steps"}, "Placement follows a content transition", "The supplied report locates an ad placement between two content steps.", "Placement context", "Between content steps"),
+            ("Marine logistics", "Bay Ferry Service", "transport network", {"alert_channel": "harbor display"}, "Harbor displays announce route changes", "The operator report says harbor displays announce route changes before boarding.", "Service communication", "Route changes appear on harbor displays before boarding"),
+        ]
+        for index, (domain, entity_name, entity_type, attributes, finding_title, finding_description, dimension_name, value) in enumerate(cases):
             with self.subTest(domain=domain):
                 url = f"https://example.com/research-{index}"
-                raw = f"# {domain}\n\nObservation {domain} is stated here.\n\nSource: {url}\n"
-                structured = self._structured_payload(key=f"entity-{index}", url=url)
-                structured["sections"].append({"heading": "Additional context", "content": "Another report section.", "hierarchy": 2, "source_location": "line:3"})
-                result = self.client.post("/api/v1/reports", json={**self.payload(raw), "os": "Distributed physical operations", "structured_json": json.dumps(structured)})
+                raw = f"# {domain} research\n\n{finding_description} Source: {url}\n"
+                key = f"subject-{index}"
+                structured = {"schema_version": "po_research_v1", "research_data": {
+                    "executive_summary": finding_description,
+                    "key_takeaways": [finding_title],
+                    "sections": [{"heading": f"{domain} evidence", "content": finding_description, "hierarchy": 1}],
+                    "entities": [{"key": key, "entity_type": entity_type, "name": entity_name, "attributes": attributes, "evidence_references": [url]}],
+                    "findings": [{"key": f"finding-{index}", "finding_type": "observed behavior", "title": finding_title, "description": finding_description, "related_entities": [key], "evidence_references": [url], "scope": {"environment": domain}, "evidence_status": "unverified", "uncertainty": "This supplied case has one source."}],
+                    "evidence_references": [{"url": url, "title": f"{domain} source", "verified": False}],
+                    "benchmark_dimensions": [{"key": f"dimension-{index}", "name": dimension_name, "related_entities": [key], "evidence_references": [url], "observations": [{"entity_key": key, "value": value, "evidence_references": [url], "evidence_status": "unverified", "uncertainty": "Source scope is limited."}]}],
+                    "research_gaps": [f"No independent comparison for {domain} was supplied."], "po_recommendations": [f"Validate {dimension_name.lower()} with relevant users."],
+                }}
+                response_content = f"{raw}\n<!-- PO_RESEARCH_V1 -->\n```json\n{json.dumps(structured)}\n```"
+                result = self.client.post("/api/v1/reports", json={**self.payload(response_content), "os": "Distributed physical operations"})
                 self.assertEqual(result.status_code, 201, result.text)
                 data = result.json()
                 self.assertEqual(data["os"], "Distributed physical operations")
-                self.assertEqual(data["parse_status"], "PARSED")
-                self.assertEqual(len(data["research_data"]["sections"]), 2)
-                self.assertEqual(len(data["research_data"]["findings"]), 1)
-                self.assertEqual(len(data["research_data"]["entities"]), 1)
+                self.assertEqual(data["research_status"], "STRUCTURED_READY")
+                self.assertEqual(data["research_data"]["findings"][0]["title"], finding_title)
+                self.assertEqual(data["research_data"]["findings"][0]["related_entities"], [key])
+                self.assertEqual(data["research_data"]["entities"][0]["attributes"], attributes)
+                self.assertEqual(data["research_data"]["benchmark_dimensions"][0]["name"], dimension_name)
+                self.assertEqual(data["research_data"]["benchmark_dimensions"][0]["observations"][0]["value"], value)
                 self.assertEqual(data["research_data"]["evidence_references"][0]["verified"], False)
 
     def test_structured_locations_and_unverified_status_are_validated(self) -> None:
@@ -157,10 +251,9 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(imported["parse_status"], "PARSED")
         forged = self._structured_payload(url="https://example.com/source")
         forged["evidence_references"][0]["source_location"] = "line:1"
-        invalid = self.client.post("/api/v1/reports", json={**self.payload("# Other\n\nSource: https://example.com/source"), "structured_json": json.dumps(forged)})
-        self.assertEqual(invalid.status_code, 422)
-        self.assertEqual(invalid.json()["error"]["code"], "INVALID_RESEARCH_INPUT")
-        self.assertIn("does not point to its URL", invalid.json()["error"]["message"])
+        valid_without_forged_location = self.client.post("/api/v1/reports", json={**self.payload("# Other\n\nSource: https://example.com/source"), "structured_json": json.dumps(forged)})
+        self.assertEqual(valid_without_forged_location.status_code, 201)
+        self.assertEqual(valid_without_forged_location.json()["research_data"]["evidence_references"][0]["source_location"], "line:3")
 
     def test_benchmark_workspace_round_trips_and_rejects_unknown_items(self) -> None:
         raw = "# Context\n\nObservation here.\n\nSource: https://example.com/\n"
