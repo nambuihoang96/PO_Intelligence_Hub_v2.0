@@ -1,5 +1,6 @@
 import os
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest.mock import patch
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import sessionmaker
 
 from backend.app.main import create_app
 
@@ -23,7 +25,8 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.client = self.client_context.__enter__()
 
     def tearDown(self) -> None:
-        self.client_context.__exit__(None, None, None)
+        if self.client_context is not None:
+            self.client_context.__exit__(None, None, None)
         self.env.stop()
         self.temp_dir.cleanup()
 
@@ -62,11 +65,149 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertTrue(duplicate["duplicate"])
         self.assertEqual(len(self.client.get("/api/v1/reports").json()["items"]), 1)
 
+    def _structured_payload(self, key: str = "entity-a", url: str = "https://example.com/") -> dict:
+        return {
+            "sections": [{"heading": "Observed context", "content": "Relevant evidence and a domain-specific observation.", "hierarchy": 1, "source_location": "line:1"}],
+            "entities": [{"key": key, "entity_type": "research subject", "name": f"Subject {key}", "attributes": {"context": "provided"}, "evidence_references": [url]}],
+            "findings": [{"key": f"finding-{key}", "finding_type": "observation", "title": f"Observation {key}", "description": "A report-provided observation with explicit uncertainty.", "related_entities": [key], "evidence_references": [url], "source_locations": ["line:3"], "scope": {"geo": "US", "period": "2025"}, "evidence_status": "unverified", "confidence": None, "uncertainty": "Not independently checked", "po_implications": "Review before using."}],
+            "evidence_references": [{"url": url, "title": "Source supplied in report", "source_location": "line:5", "verified": False}],
+            "benchmark_dimensions": [{"key": f"dimension-{key}", "name": "Context-specific comparison", "related_entities": [key], "evidence_references": [url], "observations": [{"entity_key": key, "value": {"reported": "value"}, "evidence_references": [url], "source_locations": ["line:3"], "evidence_status": "unverified", "uncertainty": "Not independently verified"}]}],
+            "research_gaps": ["Independent validation unavailable."], "po_recommendations": ["Assess within product context."],
+        }
+
+    def test_structured_update_invalid_data_and_duplicate_upgrade_preserve_po_data(self) -> None:
+        raw = "# Context\n\nObservation from report.\n\nSource: https://example.com/\n"
+        first = self.client.post("/api/v1/reports", json=self.payload(raw)).json()
+        report_id = first["id"]
+        duplicate = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(self._structured_payload())}).json()
+        self.assertEqual(duplicate["id"], report_id)
+        self.assertEqual(duplicate["parse_status"], "PARSED")
+        self.assertEqual(len(self.client.get("/api/v1/reports").json()["items"]), 1)
+        selected = self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": [{"item_type": "finding", "item_key": "finding-entity-a"}]})
+        self.assertEqual(selected.status_code, 200)
+        workspace = {"custom_dimensions": ["PO priority"], "entries": [{"item_type": "finding", "item_key": "finding-entity-a", "po_assessment": "Promising", "notes": "Check sample size", "next_action": "Review source", "dimension_assessments": {}}]}
+        self.assertEqual(self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=workspace).status_code, 200)
+        before = self.client.get(f"/api/v1/reports/{report_id}").json()
+        invalid = self.client.put(f"/api/v1/reports/{report_id}/structured-data", json={"research_data": {"entities": [{"key": "broken"}]}})
+        self.assertEqual(invalid.status_code, 422)
+        after_invalid = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(after_invalid["research_data"], before["research_data"])
+        self.assertEqual(after_invalid["content"], raw)
+        revised = self._structured_payload(key="entity-b")
+        # The second valid URL remains grounded by the same report; only structured keys change.
+        update = self.client.put(f"/api/v1/reports/{report_id}/structured-data", json={"research_data": revised})
+        self.assertEqual(update.status_code, 200, update.text)
+        saved = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(saved["benchmark_selections"], before["benchmark_selections"])
+        self.assertEqual(saved["benchmark_workspace"], workspace)
+        self.assertEqual(saved["orphaned_benchmark_selections"], before["benchmark_selections"])
+        self.assertEqual(saved["orphaned_benchmark_entries"][0]["notes"], "Check sample size")
+        self.assertEqual(saved["content"], raw)
+        removed = self.client.put(f"/api/v1/reports/{report_id}/benchmark-selections", json={"selections": []})
+        self.assertEqual(removed.status_code, 200)
+        after_explicit_resolution = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(after_explicit_resolution["benchmark_selections"], [])
+        self.assertEqual(after_explicit_resolution["benchmark_workspace"]["entries"][0]["notes"], "Check sample size")
+
+    def test_duplicate_structured_data_does_not_overwrite_an_existing_structured_report(self) -> None:
+        raw = "# Context\n\nFirst observation.\n\nSource: https://example.com/\n"
+        first = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(self._structured_payload())}).json()
+        before = first["research_data"]
+        duplicate = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(self._structured_payload(key="other"))}).json()
+        self.assertTrue(duplicate["duplicate"])
+        self.assertTrue(duplicate["structured_update_available"])
+        self.assertEqual(duplicate["research_data"], before)
+        self.assertEqual(len(self.client.get("/api/v1/reports").json()["items"]), 1)
+
+    def test_deterministic_reprocess_preserves_valid_structured_data_and_original(self) -> None:
+        raw = "# Original heading\n\nAn observation here.\n\nSource: https://example.com/\n"
+        saved = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(self._structured_payload())}).json()
+        response = self.client.post(f"/api/v1/reports/{saved['id']}/reprocess")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["reprocessed"])
+        self.assertEqual(response.json()["research_data"], saved["research_data"])
+        self.assertEqual(response.json()["content"], raw)
+
+    def test_dynamic_environment_values_and_multi_domain_structured_contract(self) -> None:
+        domains = ("Puzzle", "ASMR", "Drama", "Utilities", "Ad Monetization", "Marine logistics")
+        for index, domain in enumerate(domains):
+            with self.subTest(domain=domain):
+                url = f"https://example.com/research-{index}"
+                raw = f"# {domain}\n\nObservation {domain} is stated here.\n\nSource: {url}\n"
+                structured = self._structured_payload(key=f"entity-{index}", url=url)
+                structured["sections"].append({"heading": "Additional context", "content": "Another report section.", "hierarchy": 2, "source_location": "line:3"})
+                result = self.client.post("/api/v1/reports", json={**self.payload(raw), "os": "Distributed physical operations", "structured_json": json.dumps(structured)})
+                self.assertEqual(result.status_code, 201, result.text)
+                data = result.json()
+                self.assertEqual(data["os"], "Distributed physical operations")
+                self.assertEqual(data["parse_status"], "PARSED")
+                self.assertEqual(len(data["research_data"]["sections"]), 2)
+                self.assertEqual(len(data["research_data"]["findings"]), 1)
+                self.assertEqual(len(data["research_data"]["entities"]), 1)
+                self.assertEqual(data["research_data"]["evidence_references"][0]["verified"], False)
+
+    def test_structured_locations_and_unverified_status_are_validated(self) -> None:
+        raw = "# Report\n\nA supported finding appears here.\n\nSource: https://example.com/source\n"
+        good = self._structured_payload(url="https://example.com/source")
+        good["findings"][0]["source_locations"] = ["line:3"]
+        good["evidence_references"][0]["source_location"] = "line:5"
+        good["benchmark_dimensions"][0]["observations"][0]["source_locations"] = ["line:3"]
+        good["benchmark_dimensions"][0]["observations"][0]["evidence_status"] = "unverified"
+        imported = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(good)}).json()
+        self.assertEqual(imported["parse_status"], "PARSED")
+        forged = self._structured_payload(url="https://example.com/source")
+        forged["evidence_references"][0]["source_location"] = "line:1"
+        invalid = self.client.post("/api/v1/reports", json={**self.payload("# Other\n\nSource: https://example.com/source"), "structured_json": json.dumps(forged)}).json()
+        self.assertNotEqual(invalid["parse_status"], "PARSED")
+        self.assertIn("source location does not point", invalid["extraction_error"])
+
+    def test_benchmark_workspace_round_trips_and_rejects_unknown_items(self) -> None:
+        raw = "# Context\n\nObservation here.\n\nSource: https://example.com/\n"
+        imported = self.client.post("/api/v1/reports", json={**self.payload(raw), "structured_json": json.dumps(self._structured_payload())}).json()
+        report_id = imported["id"]
+        workspace = {"custom_dimensions": ["PO-defined lens"], "entries": [{"item_type": "entity", "item_key": "entity-a", "po_assessment": "Keep", "notes": "Manual evaluation", "next_action": "Interview users", "dimension_assessments": {}}]}
+        response = self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=workspace)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.client.get(f"/api/v1/reports/{report_id}").json()["benchmark_workspace"], workspace)
+        invalid = {"custom_dimensions": [], "entries": [{"item_type": "entity", "item_key": "missing", "po_assessment": "", "notes": "", "next_action": ""}]}
+        self.assertEqual(self.client.put(f"/api/v1/reports/{report_id}/benchmark-workspace", json=invalid).status_code, 422)
+
+    def test_pre_0006_report_survives_additive_migration_and_can_be_reprocessed(self) -> None:
+        workspace = Path(__file__).resolve().parents[1]
+        self.client_context.__exit__(None, None, None)
+        config = Config(str(workspace / "alembic.ini"))
+        command.downgrade(config, "20261017_0005")
+        database = Path(self.temp_dir.name) / "report data" / "po_intelligence_hub.sqlite3"
+        raw = "# Legacy report\n\nExisting observation.\n\nSource: https://example.com/legacy\n"
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "INSERT INTO imported_research_reports (id, question, geo, os, research_period, content, content_sha256, origin, imported_at, benchmark_selections_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ("legacy-id", "Legacy question", "US", "Both", None, raw, "b" * 64, "chatgpt_user_import", "2026-10-16T00:00:00", json.dumps([{"item_type": "finding", "item_key": "old-key"}])),
+            )
+        command.upgrade(config, "head")
+        self.client_context = TestClient(create_app())
+        self.client = self.client_context.__enter__()
+        saved = self.client.get("/api/v1/reports/legacy-id")
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["content"], raw)
+        self.assertEqual(saved.json()["orphaned_benchmark_selections"], [{"item_type": "finding", "item_key": "old-key"}])
+        result = self.client.post("/api/v1/reports/legacy-id/reprocess")
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertTrue(result.json()["reprocessed"])
+        self.assertEqual(result.json()["content"], raw)
+        self.assertEqual(result.json()["benchmark_selections"], [{"item_type": "finding", "item_key": "old-key"}])
+        engine = self.client.app.state.session_factory.kw["bind"]
+        self.client_context.__exit__(None, None, None)
+        self.client_context = None
+        engine.dispose(close=True)
+        # Windows can retain the SQLite WAL file handle until the test process exits.
+        self.temp_dir._ignore_cleanup_errors = True
+
     def test_invalid_imports_return_validation_errors(self) -> None:
         for payload in (
             {**self.payload(), "content": "  "},
             {**self.payload(), "question": "   "},
-            {**self.payload(), "os": "Windows"},
+            {**self.payload(), "os": "  "},
             {**self.payload(), "origin": "verified"},
         ):
             response = self.client.post("/api/v1/reports", json=payload)

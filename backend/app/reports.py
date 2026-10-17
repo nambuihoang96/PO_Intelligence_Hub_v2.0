@@ -1,4 +1,5 @@
 import hashlib
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -8,14 +9,18 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport
-from backend.app.research_data import normalize_report
+from backend.app.research_data import extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
+    BenchmarkWorkspaceRead,
+    BenchmarkWorkspaceUpdate,
     ImportedReportCreate,
     ImportedReportCreated,
     ImportedReportRead,
     ImportedReportSummary,
     Page,
+    ReprocessResult,
+    StructuredResearchDataUpdate,
 )
 
 
@@ -24,7 +29,24 @@ SessionDependency = Annotated[Session, Depends(get_session)]
 LIMIT = Annotated[int, Query(ge=1, le=100, description="Maximum reports per page")]
 
 
-def _read(report: ImportedResearchReport, *, duplicate: bool = False) -> ImportedReportCreated:
+def _available_keys(report: ImportedResearchReport) -> dict[str, set[str]]:
+    data = report.research_data_json or {}
+    return {
+        "entity": {item["key"] for item in data.get("entities", [])},
+        "finding": {item["key"] for item in data.get("findings", [])},
+        "dimension": {item["key"] for item in data.get("benchmark_dimensions", [])},
+    }
+
+
+def _orphaned_selections(report: ImportedResearchReport) -> list[dict]:
+    available = _available_keys(report)
+    return [
+        item for item in (report.benchmark_selections_json or [])
+        if item.get("item_key") not in available.get(item.get("item_type"), set())
+    ]
+
+
+def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured_update_available: bool = False) -> ImportedReportCreated:
     data = ImportedReportSummary.model_validate(report).model_dump()
     data.update(
         content=report.content,
@@ -32,6 +54,13 @@ def _read(report: ImportedResearchReport, *, duplicate: bool = False) -> Importe
         research_data=report.research_data_json,
         extraction_error=report.extraction_error,
         benchmark_selections=report.benchmark_selections_json,
+        benchmark_workspace=report.benchmark_workspace_json or {},
+        orphaned_benchmark_selections=_orphaned_selections(report),
+        orphaned_benchmark_entries=[
+            item for item in (report.benchmark_workspace_json or {}).get("entries", [])
+            if item.get("item_key") not in _available_keys(report).get(item.get("item_type"), set())
+        ],
+        structured_update_available=structured_update_available,
         duplicate=duplicate,
     )
     return ImportedReportCreated.model_validate(data)
@@ -43,8 +72,20 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
     research_data, parse_status, extraction_error = normalize_report(payload.content, payload.structured_json)
     existing = session.scalar(select(ImportedResearchReport).where(ImportedResearchReport.content_sha256 == digest))
     if existing is not None:
+        available = False
+        if payload.structured_json and parse_status == "PARSED":
+            incoming = research_data.model_dump(mode="json")
+            current = existing.research_data_json or {}
+            if existing.parse_status != "PARSED":
+                existing.research_data_json = incoming
+                existing.parse_status = "PARSED"
+                existing.extraction_error = None
+                session.commit()
+                session.refresh(existing)
+            else:
+                available = current != incoming
         response.status_code = status.HTTP_200_OK
-        return _read(existing, duplicate=True)
+        return _read(existing, duplicate=True, structured_update_available=available)
 
     report = ImportedResearchReport(
         question=payload.question,
@@ -115,15 +156,15 @@ def update_benchmark_selections(
     report = session.get(ImportedResearchReport, report_id)
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
-    available = {
-        "entity": {item["key"] for item in report.research_data_json.get("entities", [])},
-        "finding": {item["key"] for item in report.research_data_json.get("findings", [])},
-        "dimension": {item["key"] for item in report.research_data_json.get("benchmark_dimensions", [])},
-    }
+    available = _available_keys(report)
     invalid = [
         selection.model_dump()
         for selection in payload.selections
         if selection.item_key not in available[selection.item_type]
+        and not any(
+            item.get("item_type") == selection.item_type and item.get("item_key") == selection.item_key
+            for item in (report.benchmark_selections_json or [])
+        )
     ]
     if invalid:
         raise HTTPException(
@@ -131,6 +172,64 @@ def update_benchmark_selections(
             detail={"code": "INVALID_BENCHMARK_SELECTION", "message": "Selected research items are not present in this report.", "invalid_selections": invalid},
         )
     report.benchmark_selections_json = [selection.model_dump() for selection in payload.selections]
+    session.commit()
+    session.refresh(report)
+    return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+
+
+@router.post("/{report_id}/reprocess", response_model=ReprocessResult)
+def reprocess_report(report_id: str, session: SessionDependency) -> ReprocessResult:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    if report.parse_status == "PARSED":
+        result = _read(report)
+        return ReprocessResult.model_validate({
+            **result.model_dump(exclude={"duplicate"}), "reprocessed": False,
+            "message": "Structured research data was retained. Deterministic reprocess was skipped to protect it.",
+        })
+    data, parse_status = extract_unstructured(report.content)
+    report.research_data_json = data.model_dump(mode="json")
+    report.parse_status = parse_status
+    report.extraction_error = None
+    session.commit()
+    session.refresh(report)
+    result = _read(report)
+    return ReprocessResult.model_validate({
+        **result.model_dump(exclude={"duplicate"}), "reprocessed": True,
+        "message": "Report reprocessed deterministically from its original Markdown; no AI or external service was called.",
+    })
+
+
+@router.put("/{report_id}/structured-data", response_model=ImportedReportRead)
+def update_structured_data(report_id: str, payload: StructuredResearchDataUpdate, session: SessionDependency) -> ImportedReportRead:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    normalized, normalized_status, extraction_error = normalize_report(
+        report.content,
+        json.dumps(payload.research_data.model_dump(mode="json")),
+    )
+    if normalized_status != "PARSED":
+        raise HTTPException(status_code=422, detail={"code": "INVALID_STRUCTURED_RESEARCH_DATA", "message": "Structured data must reference URLs and source locations present in the original report.", "reason": extraction_error})
+    report.research_data_json = normalized.model_dump(mode="json")
+    report.parse_status = "PARSED"
+    report.extraction_error = None
+    session.commit()
+    session.refresh(report)
+    return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+
+
+@router.put("/{report_id}/benchmark-workspace", response_model=ImportedReportRead)
+def update_benchmark_workspace(report_id: str, payload: BenchmarkWorkspaceUpdate, session: SessionDependency) -> ImportedReportRead:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    available = _available_keys(report)
+    invalid = [item.model_dump() for item in payload.entries if item.item_key not in available[item.item_type]]
+    if invalid:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_BENCHMARK_ITEM", "message": "Benchmark entries must reference an item in this report.", "invalid_items": invalid})
+    report.benchmark_workspace_json = payload.model_dump(mode="json")
     session.commit()
     session.refresh(report)
     return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))

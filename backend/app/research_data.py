@@ -66,6 +66,7 @@ class ResearchFinding(ResearchModel):
     description: str = Field(min_length=1, max_length=10000)
     related_entities: list[str] = Field(default_factory=list, max_length=100)
     evidence_references: list[str] = Field(default_factory=list, max_length=100)
+    source_locations: list[str] = Field(default_factory=list, max_length=100)
     scope: dict[str, Any] = Field(default_factory=dict)
     evidence_status: Literal["unverified", "needs_review", "conflicting", "insufficient_evidence"] = "unverified"
     confidence: float | None = Field(default=None, ge=0, le=1)
@@ -77,6 +78,9 @@ class BenchmarkObservation(ResearchModel):
     entity_key: str | None = Field(default=None, max_length=120)
     value: Any
     evidence_references: list[str] = Field(default_factory=list, max_length=100)
+    source_locations: list[str] = Field(default_factory=list, max_length=100)
+    evidence_status: Literal["unverified", "needs_review", "conflicting", "insufficient_evidence"] = "unverified"
+    uncertainty: str | None = Field(default=None, max_length=2000)
 
 
 class BenchmarkDimension(ResearchModel):
@@ -258,6 +262,21 @@ def normalize_report(markdown: str, structured_json: str | None) -> tuple[Univer
         supplied_urls = {item.url for item in structured.evidence_references}
         if missing := supplied_urls - report_urls:
             raise ValueError("source URLs are absent from the original report: " + ", ".join(sorted(missing)))
+        lines = markdown.splitlines()
+        for source in structured.evidence_references:
+            if source.source_location:
+                match = re.fullmatch(r"line:(\d+)", source.source_location)
+                if not match or int(match.group(1)) > len(lines) or source.url not in lines[int(match.group(1)) - 1]:
+                    raise ValueError(f"source location does not point to its URL in the report: {source.source_location}")
+        locations = [section.source_location for section in structured.sections]
+        locations += [item.source_location for section in structured.sections for item in section.lists if item.source_location]
+        locations += [item.source_location for section in structured.sections for item in section.tables if item.source_location]
+        locations += [location for item in structured.findings for location in item.source_locations]
+        locations += [location for dimension in structured.benchmark_dimensions for observation in dimension.observations for location in observation.source_locations]
+        for location in locations:
+            match = re.fullmatch(r"line:(\d+)", location)
+            if not match or not 1 <= int(match.group(1)) <= len(lines):
+                raise ValueError(f"source location is not a valid line in the original report: {location}")
         return structured, "PARSED", None
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         message = str(exc)

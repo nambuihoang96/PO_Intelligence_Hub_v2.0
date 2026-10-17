@@ -420,7 +420,7 @@ class ImportedReportCreate(APIModel):
 
     question: str = Field(min_length=1, max_length=2000)
     geo: str = Field(min_length=1, max_length=100)
-    os: str = Field(pattern="^(iOS|Android|Both)$")
+    os: str = Field(min_length=1, max_length=100)
     research_period: str | None = Field(default=None, max_length=200)
     content: str = Field(min_length=1, max_length=2_000_000)
     structured_json: str | None = Field(default=None, max_length=2_000_000)
@@ -435,6 +435,13 @@ class ImportedReportCreate(APIModel):
     def required_metadata_not_blank(cls, value: str) -> str:
         if value is None or not value.strip():
             raise ValueError("value must not be blank")
+        return value.strip()
+
+    @field_validator("os")
+    @classmethod
+    def environment_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("environment must not be blank")
         return value.strip()
 
     @field_validator("content")
@@ -474,13 +481,63 @@ class BenchmarkSelectionsUpdate(APIModel):
         return self
 
 
+class BenchmarkWorkspaceEntry(APIModel):
+    item_type: str = Field(pattern="^(entity|finding|dimension)$")
+    item_key: str = Field(min_length=1, max_length=120)
+    po_assessment: str = Field(default="", max_length=4000)
+    notes: str = Field(default="", max_length=8000)
+    next_action: str = Field(default="", max_length=4000)
+    dimension_assessments: dict[str, str] = Field(default_factory=dict, max_length=100)
+
+    @field_validator("dimension_assessments")
+    @classmethod
+    def validate_dimension_assessments(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(not key.strip() or len(key) > 120 or len(item) > 4000 for key, item in value.items()):
+            raise ValueError("PO dimension assessments must have non-blank keys and values up to 4000 characters")
+        return value
+
+
+class BenchmarkWorkspaceUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    custom_dimensions: list[str] = Field(default_factory=list, max_length=100)
+    entries: list[BenchmarkWorkspaceEntry] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_workspace_items(self) -> "BenchmarkWorkspaceUpdate":
+        pairs = [(entry.item_type, entry.item_key) for entry in self.entries]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("benchmark workspace entries must be unique")
+        normalized = [label.strip().casefold() for label in self.custom_dimensions]
+        if any(not label for label in normalized) or len(normalized) != len(set(normalized)):
+            raise ValueError("custom benchmark dimensions must be non-blank and unique")
+        return self
+
+
+class BenchmarkWorkspaceRead(BenchmarkWorkspaceUpdate):
+    pass
+
+
 class ImportedReportRead(ImportedReportSummary):
     content: str
     parse_status: str
     research_data: UniversalResearchData
     extraction_error: str | None
     benchmark_selections: list[BenchmarkSelection]
+    benchmark_workspace: BenchmarkWorkspaceRead
+    structured_update_available: bool = False
+    orphaned_benchmark_selections: list[BenchmarkSelection] = Field(default_factory=list)
+    orphaned_benchmark_entries: list[BenchmarkWorkspaceEntry] = Field(default_factory=list)
 
 
 class ImportedReportCreated(ImportedReportRead):
     duplicate: bool = False
+
+
+class StructuredResearchDataUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    research_data: UniversalResearchData
+
+
+class ReprocessResult(ImportedReportRead):
+    reprocessed: bool
+    message: str
