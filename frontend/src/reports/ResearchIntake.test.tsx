@@ -173,6 +173,37 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('heading', { name: 'Insights' })).toBeTruthy();
   });
 
+  it('uses consistent report-supplied ranking, category, metric, and period highlights in Overview and Insight Detail', async () => {
+    const text = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      research_data: {
+        ...report.research_data,
+        executive_summary: 'At US Android, product reached #5 Top Free Casual; weekly downloads fell from 23.7K to 11K in Q2/2025.',
+        key_takeaways: ['The product appeared at #28 Top 50 DIY.'],
+        findings: [{ key: 'ranked-finding', finding_type: 'unrecognized report type', title: 'Reached #5 Top Free Casual', description: 'Downloads fell from 23.7K to 11K in Q2/2025.', related_entities: [], evidence_references: ['https://example.com/'], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }],
+        evidence_references: [{ url: 'https://example.com/', title: 'Unverified source', source_location: null, verified: false }],
+      },
+    };
+    mockFetch(() => text);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: 'Research conclusion' });
+    const summary = document.querySelector('.executive-summary') as HTMLElement;
+    expect(summary.textContent).toBe('At US Android, product reached #5 Top Free Casual; weekly downloads fell from 23.7K to 11K in Q2/2025.');
+    expect(summary.querySelectorAll('.research-highlight.is-rank')).toHaveLength(1);
+    expect(summary.querySelectorAll('.research-highlight.is-category')).toHaveLength(1);
+    expect(summary.querySelectorAll('.research-highlight.is-metric.is-decrease')).toHaveLength(2);
+    expect(summary.querySelector('[data-highlight-kind="period"]')?.textContent).toBe('Q2/2025');
+    expect(document.querySelector('.overview-takeaways .takeaway-number')?.textContent).toBe('1');
+    expect(document.querySelector('.overview-takeaways .takeaway-copy')?.textContent).toContain('Top 50 DIY');
+    expect(document.querySelector('.finding-card-evidence')?.textContent).toContain('unverified');
+    fireEvent.click(screen.getByRole('button', { name: 'View Insight: Reached #5 Top Free Casual' }));
+    expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
+    expect(document.querySelector('.insight-detail-panel [data-highlight-kind="rank"]')?.textContent).toBe('#5');
+    expect(document.querySelector('.insight-detail-panel [data-highlight-kind="category"]')?.textContent).toBe('Top Free Casual');
+    expect(document.querySelectorAll('.insight-detail-panel .research-highlight.is-metric.is-decrease')).toHaveLength(2);
+  });
+
   it('opens a dedicated PO decision path from an insight and saves fields for reopen', async () => {
     const structured = {
       ...report,
