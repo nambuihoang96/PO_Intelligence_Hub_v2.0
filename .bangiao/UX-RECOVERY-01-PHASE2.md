@@ -1,85 +1,70 @@
-# UX-RECOVERY-01 — Review Phase 2 Handoff
+# UX-RECOVERY-01 — Phase 2 Product Review Fix
 
-## Scope and result
+## Delivery
 
-Implemented the bounded UI corrections after Product Review returned NEED FIX. This commit is based on `feat/ux-recovery-01-research-results` at `ed4679b62fb5f45aac3df858bd7b2da11c19ebd4` and does not merge to master.
+- Branch: `feat/ux-recovery-01-research-results`
+- HEAD before this review fix: `dd1339bc9c0a7cb2539d9db94111fb693ca0a296`
+- Earlier review reference: `ed4679b62fb5f45aac3df858bd7b2da11c19ebd4`
+- Implementation commit: `a9816dbf9dbd0c96ed905e88395fd24c8c15bedd`
+- Product review: **NEED RE-REVIEW**. The owner’s NEED FIX items were implemented; no independent product reviewer was run for this delivery.
 
-Overview now leads with the report's supplied research summary and findings. Finding groups use the report-supplied `finding_type`; cards show only supplied entity links, source references, PO implications, and uncertainty. Research gaps are presented separately because `po_research_v1` does not provide a finding-to-gap relationship. Counts are secondary metadata and the no-quantitative-data state is a compact note.
+## UX changes
 
-Insights use the same visual hierarchy and progressive disclosure. A separate PO Assessment tab offers a direct path from findings and subjects to editable PO Assessment, Notes, and Next Action using the existing benchmark workspace endpoint. This path does not add those items to Benchmark. Existing Benchmark membership, values, legacy dimensions, and user notes remain supported; missing observations remain Unknown.
+- Replaced four large metadata cards with a compact title, scope/status/provenance line and a back link. Finding/entity/source/gap counts are inside the collapsed “Report details” disclosure.
+- Moved report-supplied Key Findings before the executive summary. The summary is clamped to three lines by default and can be expanded; the source text remains unchanged. Quantitative absence is a small “Qualitative research · No quantitative dataset linked” note.
+- Collapsed the text-only structuring form behind a clear disclosure so it does not push the report navigation down.
+- Replaced the long accordion list with an Insight list and contextual detail panel. Evidence references remain marked unverified; source excerpts only appear when the report has a supplied location.
+- Kept PO Assessment as its own workflow. Benchmark stays tied to explicitly selected subjects, shows Unknown for missing observations, and labels a single selected subject as an assessment rather than an empty comparison.
+- No backend, database schema, migration, report content, or Research Run changes were made.
 
-No backend, API contract, schema, migration, production SQLite file, or Research Run Manifest was changed.
+## Before / after
+
+- **Before:** A tall report header, four prominent count cards, and a large quantitative-data placeholder consumed the first screen; findings began after these sections.
+- **After:** The compact header and tabs lead directly into report-supplied findings. A live 1280×720 browser capture shows the first two finding cards in the initial viewport. The summary and supplementary counts are secondary.
 
 ## Files changed
 
 - `frontend/src/reports/ReportResults.tsx`
 - `frontend/src/reports/ResearchIntake.test.tsx`
 - `frontend/src/style.css`
-- `.bangiao/UX-RECOVERY-01-phase2-overview.png`
-- `.bangiao/UX-RECOVERY-01-phase2-insight-detail.png`
-- `.bangiao/UX-RECOVERY-01-phase2-benchmark.png`
-- `.bangiao/UX-RECOVERY-01-phase2-po-assessment.png`
-- `.bangiao/UX-RECOVERY-01-phase2-mobile-390.png`
-- `.bangiao/UX-RECOVERY-01-phase2-viewport-check.json`
+- `.bangiao/screenshots/ux-recovery-01-phase2/01-overview-1280x720.jpg`
+- `.bangiao/screenshots/ux-recovery-01-phase2/02-insight-detail-1280x720.jpg`
+- `.bangiao/screenshots/ux-recovery-01-phase2/03-benchmark-1280x720.jpg`
+- `.bangiao/screenshots/ux-recovery-01-phase2/04-po-assessment-saved-1280x720.jpg`
+- `.bangiao/screenshots/ux-recovery-01-phase2/05-po-assessment-unsaved-1280x720.jpg`
+- `.bangiao/screenshots/ux-recovery-01-phase2/06-po-assessment-after-refresh-1280x720.jpg`
+- `.bangiao/UX-RECOVERY-01-PHASE2.md`
 
-Pre-existing `scripts/setup.ps1` and `.devcrew/` changes were preserved and excluded.
+Pre-existing changes in `scripts/setup.ps1` and `.devcrew/` were preserved and excluded from the implementation commit.
+
+## Test results
+
+- Frontend tests: **36 passed, 0 failed** (3 test files).
+- TypeScript check and Vite production build: **passed**.
+- Backend regression suite: **63 passed**; Alembic reported no new upgrade operations. Tests ran with `APP_DATA_ROOT` pointed at a temporary workspace directory. The ordinary sandbox initially blocked the TestClient socketpair; the suite passed after allowing local test sockets.
+- `git diff --check`: **passed**.
 
 ## Browser UAT
 
-**Verified in a real browser** using the actual imported qualitative report “Các game DIY tạo động lực như nào cho người chơi” in the isolated local UAT SQLite copy. Production SQLite was not used.
+Used the actual imported DIY Game report (`Các game DIY tạo động lực như nào cho người chơi`) in the Codex in-app browser at `http://127.0.0.1:15175/reports/6a73b8bf-01d6-4954-a72d-f165bd2c1d9e`.
 
-- Overview showed the report summary, report-supplied findings, related entities, source links, PO implications and uncertainties. Source links remained labeled unverified; no finding-to-gap links or quantitative values were invented.
-- Opened an Insight and followed **Record PO decision** to the dedicated PO Assessment tab without adding the finding to Benchmark.
-- Entered PO Assessment and Next Action, saved through the existing `PUT /api/v1/reports/{report_id}/benchmark-state` endpoint, refreshed, reopened, and confirmed both values remained.
-- Added Phone Case DIY to the Benchmark, removed it, restored it, refreshed, and confirmed membership persisted. Existing Tie Dye PO notes remained visible.
-- Screenshots were captured from Chrome at 1440px for Overview, Insight Detail, Benchmark, and PO Assessment; an additional 390px Overview screenshot is included.
+- Overview loaded fresh with Key Findings first; no quantitative chart or invented metric appeared.
+- Opened a finding and reviewed its supplied scope, PO implication, uncertainty, and source links. The links remained labelled unverified.
+- Benchmark displayed two selected report subjects, research-supplied dimensions and an Unknown observation.
+- Edited the finding’s PO Assessment in the isolated UAT SQLite copy, saw Unsaved, saved, reopened the report, and confirmed the value survived refresh. Restored the copy’s original assessment afterward.
+- Browser CSS viewport was **1280×720**. At this viewport the document/body width was 1265 CSS pixels and did not overflow horizontally; the comparison table scrolls within its own container.
+- Screenshots are actual captures saved in `.bangiao/screenshots/ux-recovery-01-phase2/`.
+- **NOT VERIFIED:** exact 1440×900, 1024, 768 and 390 viewport checks. The in-app browser has no viewport resize control. No mobile screenshot is claimed.
+- The request to open the screenshot via the GitHub web URL returned a cache miss; the checked-out `.bangiao/UX-RECOVERY-01-preview.png` was inspected locally.
 
-### Screenshots
+Production SQLite was not used for UAT writes. The isolated copy was restored to its pre-test PO Assessment value.
 
-**Overview**
+## Known limitations
 
-![Phase 2 Research Overview](UX-RECOVERY-01-phase2-overview.png)
+- The in-app browser could not be resized to the requested desktop and mobile dimensions.
+- The source excerpts can be opened only when report data supplies a reliable line location; no location is synthesized.
+- Findings, source references and PO implications remain report-supplied and unverified.
 
-**Insight detail**
+## Review status
 
-![Phase 2 Insight Detail](UX-RECOVERY-01-phase2-insight-detail.png)
-
-**Benchmark matrix**
-
-![Phase 2 Benchmark](UX-RECOVERY-01-phase2-benchmark.png)
-
-**PO Assessment and Next Action**
-
-![Phase 2 PO Assessment](UX-RECOVERY-01-phase2-po-assessment.png)
-
-**390px mobile Overview**
-
-![Phase 2 mobile Overview at 390px](UX-RECOVERY-01-phase2-mobile-390.png)
-
-## Responsive checks
-
-Measured browser viewport widths: **1440, 1024, 768, and 390 CSS pixels**. At each width, `documentElement.scrollWidth` and `body.scrollWidth` did not exceed `window.innerWidth`. No page-level horizontal overflow was detected. The Benchmark matrix keeps its own horizontal scroll area for wide comparison dimensions.
-
-Detailed measurements: `UX-RECOVERY-01-phase2-viewport-check.json`.
-
-## Tests
-
-- Frontend tests: **36 passed, 0 failed** (3 test files).
-- TypeScript check and Vite production build: **passed** (`npm run build`).
-- Backend regression tests: **63 passed, 0 failed** (`python -m unittest discover -s tests -v`).
-- Alembic schema check in backend regression run: **passed**, no new upgrade operations.
-- `git diff --check`: **passed**.
-
-## Limitations
-
-- This report has no linked quantitative dataset; the dashboard intentionally shows qualitative results without charts or estimated metrics.
-- The supplied source URLs and structured research remain unverified. The source locations for this report were not supplied, so the UI does not claim exact report locations.
-- The research contract does not explicitly link gaps to findings; the UI keeps gaps at report level.
-- Product owner review of this Phase 2 implementation is pending.
-
-## Commit
-
-- Branch: `feat/ux-recovery-01-research-results`
-- Implementation commit SHA: `de03d807567b56305fbfb1b27fd4d98e70dfd441`
-- Push/merge: this branch is being pushed for owner review; master is unchanged.
-
+**NEED RE-REVIEW** by the Product Owner. This report does not claim the owner’s final approval or an independent Product Reviewer GO.
