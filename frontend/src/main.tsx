@@ -5,12 +5,13 @@ import { ResearchWorkspace } from './research/ResearchWorkspace';
 import { ResearchRunsWorkspace } from './research/ResearchRunsWorkspace';
 import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import { ReportHistory, ReportViewer, ResearchIntake } from './reports/ResearchIntake';
+import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
 import './style.css';
 
 type Page = {
   path: string;
   label: string;
-  icon: string;
+  icon: ResultsIconName;
   eyebrow: string;
   title: string;
   intro: string;
@@ -22,7 +23,7 @@ const pages: Page[] = [
   {
     path: '/',
     label: 'Home',
-    icon: '⌂',
+    icon: 'home',
     eyebrow: 'CHATGPT RESEARCH + LOCAL WORKSPACE',
     title: 'Turn research questions into reusable reports.',
     intro: 'Build a research prompt, use ChatGPT Plus, then bring the report back here.',
@@ -32,7 +33,7 @@ const pages: Page[] = [
   {
     path: '/research',
     label: 'Research',
-    icon: '⌕',
+    icon: 'search',
     eyebrow: 'RESEARCH WORKSPACE',
     title: 'Research projects',
     intro: 'Plan and follow research work from a focused workspace.',
@@ -42,7 +43,7 @@ const pages: Page[] = [
   {
     path: '/explorer',
     label: 'Explorer',
-    icon: '▦',
+    icon: 'compass',
     eyebrow: 'APP EXPLORER',
     title: 'Explore app store listings',
     intro: 'Search store-specific listings by app name, platform, and country.',
@@ -52,7 +53,7 @@ const pages: Page[] = [
   {
     path: '/sources',
     label: 'Sources',
-    icon: '↗',
+    icon: 'sources',
     eyebrow: 'DATA SOURCES',
     title: 'Research sources',
     intro: 'Keep track of the sources that support research findings.',
@@ -62,7 +63,7 @@ const pages: Page[] = [
   {
     path: '/reports',
     label: 'Reports',
-    icon: '▤',
+    icon: 'reports',
     eyebrow: 'REPORTS & DECISIONS',
     title: 'Reports and decisions',
     intro: 'Find completed research outputs and the decisions they inform.',
@@ -75,7 +76,7 @@ const secondaryPages: Page[] = [
   {
     path: '/research/new',
     label: 'New research',
-    icon: '＋',
+    icon: 'findings',
     eyebrow: 'RESEARCH WORKSPACE',
     title: 'Start a research project',
     intro: 'A research project will keep its plan, runs, sources, and outputs together.',
@@ -85,7 +86,7 @@ const secondaryPages: Page[] = [
   {
     path: '/research/runs',
     label: 'Research runs',
-    icon: '◷',
+    icon: 'runs',
     eyebrow: 'RESEARCH WORKSPACE',
     title: 'Research runs',
     intro: 'Track each research session and return to its results when available.',
@@ -105,7 +106,7 @@ function currentPage(pathname: string): Page {
 function EmptyState({ page }: { page: Page }) {
   return (
     <section className="empty-card" aria-labelledby="empty-title">
-      <div className="empty-icon" aria-hidden="true">{page.icon}</div>
+      <div className="empty-icon"><ResultsIcon name={page.icon} /></div>
       <div className="empty-copy">
         <span className="state-label">EMPTY WORKSPACE</span>
         <h2 id="empty-title">{page.emptyTitle}</h2>
@@ -151,7 +152,7 @@ function App() {
             const active = item.path === '/' ? page.path === '/' : page.path === item.path || (item.path === '/research' && researchPage);
             return (
               <a className={`nav-item${active ? ' active' : ''}`} href={item.path} key={item.path} aria-current={page.path === item.path ? 'page' : undefined}>
-                <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+                <span className="nav-icon"><ResultsIcon name={item.icon} /></span>
                 <span>{item.label}</span>
               </a>
             );
@@ -164,7 +165,7 @@ function App() {
             <nav aria-label="Research navigation" className="secondary-nav">
               {secondaryPages.map((item) => (
                 <a className={`nav-item subnav-item${page.path === item.path ? ' active' : ''}`} href={item.path} key={item.path} aria-current={page.path === item.path ? 'page' : undefined}>
-                  <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+                  <span className="nav-icon"><ResultsIcon name={item.icon} /></span>
                   <span>{item.label}</span>
                 </a>
               ))}
