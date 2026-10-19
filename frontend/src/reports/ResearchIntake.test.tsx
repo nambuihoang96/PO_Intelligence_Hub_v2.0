@@ -117,6 +117,85 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('navigation', { name: 'Mục lục' })).toBeTruthy();
   });
 
+  it('shows a qualitative research dashboard from supplied findings without invented metrics', async () => {
+    const structured = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      parse_status: 'PARSED' as const,
+      research_data: {
+        ...report.research_data,
+        executive_summary: 'Players value quick creative sessions and visible progress.',
+        key_takeaways: ['Short sessions support repeat play.'],
+        entities: [{ key: 'tool-a', entity_type: 'product', name: 'Product A', attributes: {}, evidence_references: ['https://example.com/'] }],
+        findings: [{ key: 'finding-a', finding_type: 'motivation', title: 'Creative control supports engagement', description: 'Players return when they can personalize an outcome.', related_entities: ['tool-a'], evidence_references: ['https://example.com/'], source_locations: ['line:3'], scope: { region: 'US' }, evidence_status: 'unverified', confidence: null, uncertainty: 'Based on qualitative accounts.', po_implications: 'Test whether customization is discoverable.' }],
+        evidence_references: [{ url: 'https://example.com/', title: 'Research source', source_location: 'line:3', verified: false }],
+        benchmark_dimensions: [{ key: 'creative-control', name: 'Creative control', related_entities: ['tool-a'], evidence_references: ['https://example.com/'], observations: [{ entity_key: 'tool-a', value: 'Player customization', evidence_references: ['https://example.com/'], source_locations: ['line:3'], evidence_status: 'unverified', uncertainty: null }], po_notes: null }],
+        research_gaps: ['No behavioral data was supplied.'],
+        po_recommendations: ['Validate the customization flow with users.'],
+      },
+    };
+    mockFetch(() => structured);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
+    expect(screen.getByText('Players value quick creative sessions and visible progress.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Insights/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Source references' })).toBeTruthy();
+    expect(screen.getByText(/No separate quantitative dataset is linked/)).toBeTruthy();
+    expect(screen.queryByText(/retention|revenue|market size/i)).toBeNull();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Overview' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Insights' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View Insight: Creative control supports engagement' }));
+    expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
+    expect(screen.getByText('Test whether customization is discoverable.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Research source' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'View support in original report' }));
+    expect(screen.getByText(/line:3: A sourced finding/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View support in original report' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('heading', { name: 'Insights' })).toBeTruthy();
+  });
+
+  it('keeps a sparse structured report useful without filling absent sections with placeholders', async () => {
+    const sparse = { ...report, research_status: 'STRUCTURED_PARTIAL' as const, research_data: { ...report.research_data, executive_summary: 'A short research summary.', findings: [{ key: 'one-finding', finding_type: 'observation', title: 'One supplied finding', description: 'A limited observation.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }] } };
+    mockFetch(() => sparse);
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View Insight: One supplied finding' })).toBeTruthy();
+    expect((document.querySelector('.results-fact-strip strong') as HTMLElement).textContent).toBe('1');
+    expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
+    expect(screen.getByText('No source references were supplied.')).toBeTruthy();
+  });
+
+  it('shows text-only reports as needing structure and never promotes headings into insights', async () => {
+    const textOnly = { ...report, research_status: 'TEXT_ONLY' as const };
+    mockFetch(() => textOnly);
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: 'This report needs semantic structure' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Structure this report' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Insights' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
+  });
+
+  it('shows saved PO work in the Overview after reopening an existing report', async () => {
+    const saved = {
+      ...report,
+      benchmark_selections: [{ item_type: 'entity' as const, item_key: 'service-a' }],
+      benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'entity' as const, item_key: 'service-a', po_assessment: 'Keep the onboarding flow in the next prototype.', notes: 'Discuss with the design team.', next_action: 'Schedule a usability review.', dimension_assessments: {}, observation_finding_links: {} }] },
+      research_data: { ...report.research_data, entities: [{ key: 'service-a', entity_type: 'service', name: 'Service A', attributes: {}, evidence_references: [] }] },
+    };
+    mockFetch(() => saved);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    const view = render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByText('Saved PO assessments')).toBeTruthy();
+    expect(screen.getByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
+    view.unmount();
+
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Benchmark · 1 selected' })).toBeTruthy();
+  });
+
   it('keeps insight and comparison targets independent and preserves PO notes across remove, refresh, and restore', async () => {
     const structured = {
       ...report,
@@ -253,7 +332,7 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('button', { name: 'View Insight' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Insight: An observed pattern' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
     await waitFor(() => expect(submittedSelections).toHaveLength(2));
@@ -391,7 +470,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Guided setup is documented; outcome impact is not measured.')).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: 'View Insight' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Insight: Guidance precedes first action' }));
     expect(await screen.findByText('Validate the flow with first-time users.')).toBeTruthy();
     expect(screen.getByText('Guided steps are shown before the first action.')).toBeTruthy();
     expect(screen.getAllByText('The report states that setup guidance is shown before the first transfer.')).toHaveLength(1);
@@ -426,7 +505,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Seasonal access changes')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'View Insight' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View Insight: Seasonal access changes' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: Seasonal access changes' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xem Benchmark' }));
     expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
@@ -467,7 +546,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     await screen.findByText('An observed pattern');
-    fireEvent.click(screen.getByRole('button', { name: 'View Insight' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View Insight: An observed pattern' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
     expect(await screen.findByText('Adding…')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(false);
