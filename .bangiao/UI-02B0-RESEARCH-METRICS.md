@@ -55,9 +55,13 @@ Performed in the in-app browser against local frontend/backend services using an
 2. Overview rendered a same-period entity comparison and labeled it report-supplied and unverified.
 3. Clicked a comparison row; the app opened Evidence for that observation. The source remained unverified and the supporting report location was shown.
 4. Refreshed the report, returned to Reports history, and reopened it. All three observations and their evidence references remained present.
-5. The browser screenshots shown during this UAT were captured from the running app. The available browser capture interface returned renderable images but did not expose a way to save those images as files, so no screenshot files are included under `.bangiao/screenshots/ui-02b0/`.
+5. Saved screenshots from the running localhost app under `.bangiao/screenshots/ui-02b0/`:
+   - [Overview, desktop 1440×900](screenshots/ui-02b0/overview-desktop-1440x900.png)
+   - [Quantitative Evidence, desktop 1440×900](screenshots/ui-02b0/quantitative-evidence-desktop-1440x900.png)
+   - [Evidence detail, desktop 1440×900](screenshots/ui-02b0/evidence-detail-desktop-1440x900.png)
+   - [Quantitative Evidence, mobile 390×844](screenshots/ui-02b0/quantitative-evidence-mobile-390x844.png)
 
-**Not verified:** a real owner-supplied quantitative report in the isolated database; mobile viewport; browser rendering of the two-point and insufficient-data states. Those states are covered by automated frontend tests. A chart image alone was not imported or treated as data.
+The mobile screenshot was captured, but it shows the wide comparison content clipped at 390px. Mobile responsiveness is therefore **not accepted** by this UAT. **Not verified:** a real owner-supplied quantitative report in the isolated database; browser rendering of the two-point and insufficient-data states. Those states are covered by automated frontend tests. A chart image alone was not imported or treated as data.
 
 The synthetic values were created only for the acceptance workflow, clearly labeled synthetic in the report, and are not market findings. Production SQLite was not used or changed.
 
@@ -66,7 +70,7 @@ The synthetic values were created only for the acceptance workflow, clearly labe
 - Exact structured observations are supported; approximate numeric prose is intentionally retained as report text rather than parsed into metric values.
 - Chart images are not machine-read. The user must request exact structured values from ChatGPT Plus.
 - The app selects visual forms deterministically from compatible observations instead of consuming a ChatGPT-authored chart intent.
-- Screenshot files could not be exported from the browser capture interface in this environment; mobile UAT and real-report UAT remain unverified.
+- The quantitative section overflows/clips at the captured 390px viewport; it needs a focused responsive follow-up. Real-report UAT remains unverified.
 
 ## Commit
 
