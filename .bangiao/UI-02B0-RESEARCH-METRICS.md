@@ -72,6 +72,4 @@ The synthetic values were created only for the acceptance workflow, clearly labe
 
 Implementation commit SHA: `5d2a474` (`feat: add report-supplied quantitative analytics`).
 
-Handoff documentation is recorded in a follow-up commit on the same task branch.
-
-Push status: pending.
+The handoff is committed separately. The implementation and handoff commits have been pushed to `origin/feat/ux-recovery-01-research-results` for review.
