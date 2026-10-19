@@ -82,7 +82,6 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
   .page-footer { padding: 13px 18px; font-size: 7px; }
 }
 
-
 .research-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; align-items: start; gap: 16px; margin-top: 34px; }
 .research-main-column { min-width: 0; }
 .research-panel { min-width: 0; padding: 22px; border: 1px solid #e1e7e2; border-radius: 12px; background: #fff; box-shadow: 0 8px 25px rgba(28,54,43,.035); }
@@ -1088,4 +1087,70 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   .research-map-row { grid-template-columns: minmax(0,1fr); gap: 4px; }
   .research-map-connector { display: none; }
   .research-map-row > p, .research-map-row > .research-map-unlinked { grid-column: auto; }
+}
+
+/* UI-01 refinement round 2: size the overview from its available content width. */
+.results-overview { container: research-results / inline-size; }
+.report-viewer .overview-main-grid { grid-template-columns: minmax(0, 2.1fr) minmax(220px, .8fr); gap: 16px; }
+.report-viewer .overview-insights, .report-viewer .overview-side-column { min-width: 0; }
+.overview-insights { container: findings-panel / inline-size; }
+.finding-groups { display: block; }
+.finding-groups > .insight-dashboard-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.finding-map-card { align-self: start; gap: 11px; padding: 15px 16px 13px; border-color: #e1e8f1; border-radius: 12px; }
+.finding-map-card .insight-dashboard-card { grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 11px; width: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; }
+.finding-map-card .insight-dashboard-card:hover { border: 0; background: transparent; }
+.finding-map-card .finding-icon-frame { width: 36px; height: 36px; border-radius: 10px; }
+.finding-map-card .insight-dashboard-copy { min-width: 0; gap: 5px; }
+.finding-map-card .insight-dashboard-copy .insight-type { color: #536983; font-size: 12px; font-weight: 600; }
+.finding-map-card .insight-dashboard-copy > strong { color: #1e2d42; font-size: 16px; line-height: 1.35; }
+.finding-map-card .insight-dashboard-copy > span:not(.insight-type) { display: -webkit-box; overflow: hidden; color: #53657c; font-size: 14px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.finding-map-card .insight-open { display: inline-flex; grid-column: 2; align-items: center; justify-self: start; gap: 5px; margin-top: 2px; color: #245aa2; font-size: 13px; font-weight: 650; }
+.finding-card-evidence { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding-top: 9px; border-top: 1px solid #edf1f6; color: #63748a; font-size: 12px; }
+.finding-card-evidence .evidence-count { display: inline-flex; align-items: center; gap: 5px; color: #405774; font-weight: 600; }
+.finding-card-evidence svg { width: 15px; height: 15px; }
+.finding-card-details { border-top: 1px solid #edf1f6; color: #4b5f78; }
+.finding-card-details > summary { width: fit-content; padding-top: 9px; color: #405d82; font-size: 13px; font-weight: 600; cursor: pointer; }
+.finding-card-details > summary:focus-visible, .research-map-toggle:focus-visible, .research-map-node:focus-visible { outline: 3px solid #8ab4f8; outline-offset: 2px; }
+.finding-card-details-content { display: grid; gap: 11px; padding-top: 10px; font-size: 13px; }
+.finding-related { display: grid; gap: 6px; }
+.finding-related > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.finding-related b, .finding-supporting-sources > b, .finding-po-implication b { color: #52657d; font-size: 12px; font-weight: 650; }
+.finding-po-implication { display: grid; gap: 4px; margin: 0; color: #33465f; line-height: 1.5; }
+.finding-supporting-sources ul { display: grid; gap: 5px; margin: 6px 0 0; padding-left: 18px; }
+.finding-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.finding-card-actions .text-button, .finding-card-actions .secondary-action { min-height: 34px; }
+.research-map-focus { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 9px; padding: 8px 10px; border-radius: 8px; color: #405b7d; background: #f2f6fc; font-size: 13px; }
+.research-map-board { display: grid; gap: 6px; }
+.research-map-row { min-height: 0; grid-template-columns: minmax(0, 1.1fr) 22px minmax(0, .9fr) 22px minmax(0, 1.1fr); gap: 8px; padding: 7px 9px; border-radius: 9px; }
+.research-map-row.is-focused { border-color: #8eacd4; background: #f5f8fd; box-shadow: 0 0 0 2px #e8f0fc; }
+.research-map-node { min-height: 38px; padding: 7px 8px; }
+.research-map-node strong { font-size: 13px; }
+.research-map-node small { font-size: 11px; }
+.research-map-node[aria-pressed="true"] { border-color: #789bc9; background: #edf4ff; box-shadow: inset 0 0 0 1px #c9dbf4; }
+.research-map-entity { min-height: 34px; }
+.research-map-implication { min-height: 38px; }
+.research-map-toggle { display: inline-flex; margin-top: 10px; }
+@container research-results (max-width: 1020px) {
+  .report-viewer .overview-main-grid { grid-template-columns: minmax(0, 1fr); }
+  .report-viewer .overview-side-column { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); align-items: start; }
+}
+@container findings-panel (max-width: 680px) {
+  .finding-groups > .insight-dashboard-list { grid-template-columns: minmax(0, 1fr); }
+}
+@container findings-panel (min-width: 681px) {
+  .finding-groups > .insight-dashboard-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .research-map-columns { display: none; }
+  .research-map-row { grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 9px; }
+  .research-map-row > .research-map-connector { display: none; }
+  .research-map-entities, .research-map-implication, .research-map-row > .research-map-empty { grid-column: 1; margin-left: 12px; }
+  .research-map-entities, .research-map-implication { margin-left: 12px; }
+  .research-map-entities::before { color: #687b92; content: "Explicitly related entities"; font-size: 11px; font-weight: 600; }
+  .finding-map-card .insight-dashboard-card { grid-template-columns: 34px minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .finding-map-card { padding: 13px; }
+  .finding-map-card .insight-dashboard-copy > strong { font-size: 15px; }
+  .finding-map-card .insight-dashboard-copy > span:not(.insight-type) { font-size: 14px; }
 }

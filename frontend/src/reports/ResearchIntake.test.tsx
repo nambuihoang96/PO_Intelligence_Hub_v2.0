@@ -147,7 +147,7 @@ describe('ChatGPT research intake', () => {
     expect(document.querySelector('.research-map-entities')?.textContent).toContain('Product A');
     expect(document.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
     expect(document.querySelector('.finding-icon-frame svg')).toBeTruthy();
-    expect(screen.getByText('1 reference')).toBeTruthy();
+    expect(screen.getByText('1 source reference')).toBeTruthy();
     expect(screen.getByText(/No quantitative dataset linked/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View all 5 takeaways' })).toBeTruthy();
     expect(screen.queryByText('Takeaway four.')).toBeNull();
@@ -195,6 +195,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
     await screen.findByRole('heading', { name: 'Research conclusion' });
+    fireEvent.click(screen.getByText('Related context and actions'));
     fireEvent.click(screen.getByRole('button', { name: 'Record PO decision' }));
     expect(screen.getByRole('tab', { name: 'PO Assessment' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.change(screen.getByLabelText('PO Assessment for A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
@@ -219,9 +220,64 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByRole('heading', { name: 'Research conclusion' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View Insight: One supplied finding' })).toBeTruthy();
     expect(document.querySelector('.results-fact-strip')?.textContent).toContain('1 findings');
+    expect(document.querySelectorAll('.research-map-row')).toHaveLength(1);
+    expect(screen.getByText('No entity link supplied')).toBeTruthy();
+    expect(screen.getByText('No PO implication supplied')).toBeTruthy();
+    expect(document.querySelector('.research-map-connector.is-connected')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
     expect(screen.getByText('Research snapshot')).toBeTruthy();
-    expect(screen.getByText('Evidence')).toBeTruthy();
+    expect(screen.getByText('No source references · unverified')).toBeTruthy();
+  });
+
+  it('keeps finding actions available on demand and lets the PO focus and expand explicit map relationships', async () => {
+    const findings = Array.from({ length: 5 }, (_, index) => ({
+      key: `finding-${index + 1}`,
+      finding_type: 'observation',
+      title: `Supplied finding ${index + 1}`,
+      description: `Report description for finding ${index + 1}.`,
+      related_entities: index === 0 ? ['subject-a'] : [],
+      evidence_references: index === 0 ? ['https://example.com/'] : [],
+      source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null,
+      uncertainty: null, po_implications: index === 0 ? 'Review the supplied workflow.' : null,
+    }));
+    const structured = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      research_data: {
+        ...report.research_data,
+        entities: [{ key: 'subject-a', entity_type: 'product', name: 'Supplied subject', attributes: {}, evidence_references: ['https://example.com/'] }],
+        findings,
+        evidence_references: [{ url: 'https://example.com/', title: 'Supplied source', source_location: null, verified: false }],
+      },
+    };
+    mockFetch(() => structured);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: 'Key findings' });
+    const details = screen.getAllByText('Related context and actions')[0];
+    expect(details.closest('details')?.open).toBe(false);
+    fireEvent.click(details);
+    expect(screen.getAllByRole('button', { name: 'Record PO decision' }).length).toBe(5);
+    expect(screen.getByRole('link', { name: 'Supplied source' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add to Benchmark: Supplied finding 1' })).toBeTruthy();
+
+    const map = document.querySelector('.research-map-board[role="list"]') as HTMLElement;
+    expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Show all relationships · 5' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Show all relationships/ }));
+    expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(5);
+    expect(map.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
+
+    const focusButton = [...map.querySelectorAll<HTMLButtonElement>('.research-map-finding')].find((button) => button.textContent?.includes('Supplied finding 4'))!;
+    fireEvent.click(focusButton);
+    expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(1);
+    expect(focusButton.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Focused on: Supplied finding 4')).toBeTruthy();
+    expect(map.querySelector('.research-map-row')?.classList.contains('is-unlinked')).toBe(true);
+    expect(map.querySelector('.research-map-row .research-map-connector.is-connected')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear focus' }));
+    expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(5);
+    fireEvent.click(screen.getByRole('button', { name: 'Show fewer relationships' }));
+    expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(3);
   });
 
   it('shows text-only reports as needing structure and never promotes headings into insights', async () => {
