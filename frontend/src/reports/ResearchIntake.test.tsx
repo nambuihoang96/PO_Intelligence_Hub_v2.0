@@ -137,9 +137,9 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => structured);
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'What the research found' })).toBeTruthy();
     expect(screen.getByText('Players value quick creative sessions and visible progress.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: /Insights/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'What was discovered?' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Source references' })).toBeTruthy();
     expect(screen.getByText(/No separate quantitative dataset is linked/)).toBeTruthy();
     expect(screen.queryByText(/retention|revenue|market size/i)).toBeNull();
@@ -156,13 +156,52 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('heading', { name: 'Insights' })).toBeTruthy();
   });
 
+  it('opens a dedicated PO decision path from an insight and saves fields for reopen', async () => {
+    const structured = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      research_data: {
+        ...report.research_data,
+        executive_summary: 'The report supports a supplied qualitative conclusion.',
+        findings: [{ key: 'finding-po', finding_type: 'observation', title: 'A report-supplied insight', description: 'This conclusion is supported by the cited source.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: 'The original research does not quantify impact.', po_implications: 'Consider validating this flow with users.' }],
+      },
+    };
+    let savedReport = structured;
+    const fetchMock = mockFetch((url, init) => {
+      if (url.includes('/reports/saved-report') && init.method === 'PUT') {
+        const body = JSON.parse(String(init.body));
+        savedReport = { ...savedReport, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+        return savedReport;
+      }
+      return savedReport;
+    });
+    window.history.replaceState({}, '', '/reports/saved-report');
+    const view = render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: 'What the research found' });
+    fireEvent.click(screen.getByRole('button', { name: 'Record PO decision' }));
+    expect(screen.getByRole('tab', { name: 'PO Assessment' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.change(screen.getByLabelText('PO Assessment for A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
+    fireEvent.change(screen.getByLabelText('Next Action for A report-supplied insight'), { target: { value: 'Plan a small usability study.' } });
+    expect(screen.getByText('Unsaved changes · edits are only on this page until saved.')).toBeTruthy();
+    expect(screen.getByText('No PO decision yet')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO assessment' }));
+    await screen.findByText('Đã lưu PO Assessment, Notes và Next Action.');
+    expect(await screen.findByText('PO decision saved')).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/benchmark-state') && init?.method === 'PUT')).toBe(true);
+    view.unmount();
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'PO Assessment' }));
+    expect((await screen.findByLabelText('PO Assessment for A report-supplied insight') as HTMLTextAreaElement).value).toBe('Test the hypothesis before prioritizing.');
+    expect((screen.getByLabelText('Next Action for A report-supplied insight') as HTMLTextAreaElement).value).toBe('Plan a small usability study.');
+  });
+
   it('keeps a sparse structured report useful without filling absent sections with placeholders', async () => {
     const sparse = { ...report, research_status: 'STRUCTURED_PARTIAL' as const, research_data: { ...report.research_data, executive_summary: 'A short research summary.', findings: [{ key: 'one-finding', finding_type: 'observation', title: 'One supplied finding', description: 'A limited observation.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }] } };
     mockFetch(() => sparse);
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'What the research found' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View Insight: One supplied finding' })).toBeTruthy();
-    expect((document.querySelector('.results-fact-strip strong') as HTMLElement).textContent).toBe('1');
+    expect(document.querySelector('.results-fact-strip')?.textContent).toContain('1 findings');
     expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
     expect(screen.getByText('No source references were supplied.')).toBeTruthy();
   });
@@ -187,7 +226,7 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => saved);
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Saved PO assessments')).toBeTruthy();
+    expect(await screen.findByText('Saved PO decisions')).toBeTruthy();
     expect(screen.getByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
     view.unmount();
 
@@ -482,7 +521,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByText('platform signature')).toBeTruthy();
     expect(screen.queryByText(/Setup time reported:/)).toBeNull();
     expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
-    expect(screen.getByText('workflow observation · needs_review')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Supporting source references · needs_review · unverified/ })).toBeTruthy();
   });
 
   it('keeps the contextual assessment workflow for a non-mobile report with no comparison entities', async () => {

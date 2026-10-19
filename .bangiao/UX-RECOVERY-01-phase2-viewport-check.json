@@ -1,0 +1,34 @@
+[
+  {
+    "requestedWidth": 1440,
+    "innerWidth": 1440,
+    "documentWidth": 1425,
+    "bodyWidth": 1425,
+    "reportWidth": 1111,
+    "horizontalOverflow": false
+  },
+  {
+    "requestedWidth": 1024,
+    "innerWidth": 1024,
+    "documentWidth": 1009,
+    "bodyWidth": 1009,
+    "reportWidth": 717,
+    "horizontalOverflow": false
+  },
+  {
+    "requestedWidth": 768,
+    "innerWidth": 768,
+    "documentWidth": 753,
+    "bodyWidth": 753,
+    "reportWidth": 511,
+    "horizontalOverflow": false
+  },
+  {
+    "requestedWidth": 390,
+    "innerWidth": 390,
+    "documentWidth": 390,
+    "bodyWidth": 390,
+    "reportWidth": 366,
+    "horizontalOverflow": false
+  }
+]

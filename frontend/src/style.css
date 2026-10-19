@@ -684,3 +684,100 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
   .report-viewer .overview-section-heading .text-button { white-space: nowrap; }
   .report-viewer .report-body { padding: 16px; }
 }
+
+/* UX-RECOVERY-01 Phase 2: conclusion-first qualitative workspace */
+.report-viewer .executive-card { padding: 22px 25px 16px; }
+.report-viewer .executive-card .overview-section-heading { margin-bottom: 10px; }
+.report-viewer .executive-summary { max-width: 1120px; font-size: 17px; line-height: 1.72; }
+.quantitative-note-compact { margin: 15px 0 0; padding-top: 12px; border-top: 1px solid #edf0f5; color: #748197; font-size: 13px; line-height: 1.5; }
+.results-fact-strip { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0 4px; color: #7b8797; font-size: 12px; }
+.results-fact-strip > span + span::before { margin-right: 18px; color: #c1cad5; content: "·"; }
+.report-viewer .overview-insights { padding: 23px; }
+.finding-groups { display: grid; gap: 23px; }
+.finding-group { min-width: 0; }
+.report-viewer .finding-group > h4 { margin: 0 0 10px; color: #52627a; font-size: 14px; font-weight: 650; }
+.finding-group .insight-dashboard-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.finding-map-card { min-width: 0; padding: 14px 15px 13px; border: 1px solid #e6ebf2; border-radius: 11px; background: #fff; transition: border-color .14s ease, box-shadow .14s ease; }
+.finding-map-card:hover { border-color: #cbd9ed; box-shadow: 0 7px 18px rgba(35,64,106,.055); }
+.finding-map-card .insight-dashboard-card { grid-template-columns: 25px minmax(0,1fr) auto; gap: 10px; padding: 0; border: 0; }
+.finding-map-card .insight-index { width: 24px; height: 24px; background: #edf3ff; }
+.finding-map-card .insight-index::before { width: 7px; height: 7px; }
+.finding-map-card .insight-dashboard-copy { gap: 5px; }
+.finding-map-card .insight-dashboard-copy > strong { font-size: 15px; }
+.finding-map-card .insight-dashboard-copy > span:not(.insight-type) { -webkit-line-clamp: 3; }
+.finding-map-card .insight-open { font-size: 13px; white-space: nowrap; }
+.finding-relationships { display: grid; gap: 9px; margin: 12px 0 0 35px; padding-top: 10px; border-top: 1px solid #eff2f6; }
+.finding-relationships > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 8px; color: #596b81; font-size: 12px; line-height: 1.5; }
+.finding-relationships > span > b { flex: 0 0 100%; color: #7a8799; font-size: 11px; font-weight: 650; letter-spacing: .025em; text-transform: uppercase; }
+.finding-relationships a { overflow-wrap: anywhere; color: #315f9e; text-decoration: none; }
+.finding-relationships a:hover { text-decoration: underline; }
+.finding-relationships small { flex-basis: 100%; color: #8590a0; font-size: 11px; }
+.relationship-chip { padding: 3px 8px; border-radius: 12px; color: #4b607d; background: #f1f5fa; }
+.finding-relationships .finding-po-implication, .finding-relationships .finding-uncertainty { display: grid; gap: 3px; padding: 8px 9px; border-radius: 7px; background: #f7f9fc; }
+.finding-relationships .finding-po-implication { border-left: 2px solid #6b93ce; }
+.finding-relationships .finding-uncertainty { border-left: 2px solid #c5a55c; }
+.finding-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 12px 0 0 35px; }
+.finding-card-actions > .benchmark-card-actions { display: contents; }
+.finding-card-actions .secondary-action { min-height: 34px; padding: 7px 10px; font-size: 12px; }
+.finding-card-actions .text-button { min-height: 32px; font-size: 12px; }
+.overview-content-grid { grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr); }
+.overview-content-grid .overview-side-column { grid-template-columns: minmax(0, 1fr); }
+.overview-decisions { align-self: start; }
+.overview-decisions .secondary-action { width: auto; }
+.po-decisions-page .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.po-decisions-page .panel-heading h3 { margin: 4px 0 0; }
+.decision-workflow-intro { max-width: 850px; margin: 0 0 18px; color: #66768c; font-size: 14px; line-height: 1.6; }
+.decision-workflow-grid { display: grid; grid-template-columns: minmax(230px, .75fr) minmax(0, 1.5fr); gap: 18px; align-items: start; }
+.decision-item-list { display: grid; gap: 7px; max-height: 700px; overflow: auto; }
+.decision-item-list > button { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 12px 13px; border: 1px solid #e8edf3; border-radius: 9px; color: #34445a; background: #fff; text-align: left; cursor: pointer; }
+.decision-item-list > button.active { border-color: #a9c4ed; background: #f4f8ff; box-shadow: inset 3px 0 #3975ce; }
+.decision-item-list > button > span, .decision-item-list > button > small { color: #7b8798; font-size: 12px; }
+.decision-item-list > button > strong { overflow-wrap: anywhere; font-size: 14px; line-height: 1.4; }
+.decision-editor { min-width: 0; padding: 18px; border: 1px solid #e7ecf3; border-radius: 11px; background: #fbfcfe; }
+.decision-editor h4 { margin: 5px 0 3px; color: #2d3e55; font-size: 18px; line-height: 1.4; }
+.decision-editor .benchmark-po-fields { display: grid; gap: 13px; }
+.decision-editor .intake-field textarea { min-height: 88px; }
+.po-decisions-page .benchmark-save-controls { justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid #edf0f5; }
+.po-decisions-page .benchmark-save-state { margin-right: auto; }
+.insight-detail-page .panel-heading { margin-bottom: 16px; }
+.insight-detail-page .panel-heading > p { margin: 0; color: #77869a; font-size: 13px; }
+.insight-list { display: grid; gap: 10px; }
+.report-viewer .insight-result { border: 1px solid #e7ebf1; border-radius: 10px; background: #fff; }
+.report-viewer .insight-result > summary { padding: 15px 17px; }
+.report-viewer .insight-result-detail { display: grid; gap: 16px; padding: 4px 18px 18px; }
+.insight-result-detail > section { padding: 12px 14px; border-radius: 8px; background: #f8fafc; }
+.insight-result-detail > section > h5 { margin: 0 0 6px; color: #61728a; font-size: 12px; font-weight: 650; letter-spacing: .035em; text-transform: uppercase; }
+.insight-result-detail > section > p { margin: 0; color: #46576d; font-size: 14px; line-height: 1.65; }
+.insight-result-detail > .insight-po-recommendation { border-left: 3px solid #6b93ce; background: #f3f7fd; }
+.insight-result-detail .related-entity-candidates { margin: 0; }
+.insight-result-detail .evidence-link-list { margin: 0; }
+.benchmark-workspace .benchmark-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid #e4e9f0; }
+.benchmark-workspace .benchmark-table { min-width: 740px; }
+.benchmark-workspace .benchmark-table td { min-width: 165px; vertical-align: top; line-height: 1.5; }
+.benchmark-workspace .benchmark-table td > small { display: block; margin-top: 6px; color: #7a8799; font-size: 12px; }
+.benchmark-workspace .benchmark-table td > a { display: inline-block; margin: 7px 8px 0 0; }
+.benchmark-workspace .benchmark-table td > span { overflow-wrap: anywhere; }
+.benchmark-workspace .benchmark-assessments { margin-top: 20px; }
+@media (max-width: 900px) {
+  .finding-group .insight-dashboard-list { grid-template-columns: minmax(0, 1fr); }
+  .overview-content-grid { grid-template-columns: minmax(0, 1fr); }
+  .decision-workflow-grid { grid-template-columns: minmax(200px, .75fr) minmax(0, 1.25fr); }
+}
+@media (max-width: 560px) {
+  .report-viewer .executive-card { padding: 17px; }
+  .report-viewer .executive-summary { font-size: 15px; }
+  .results-fact-strip { gap: 4px 10px; font-size: 11px; }
+  .results-fact-strip > span + span::before { margin-right: 10px; }
+  .finding-map-card { padding: 12px; }
+  .finding-map-card .insight-dashboard-card { grid-template-columns: 22px minmax(0,1fr); }
+  .finding-map-card .insight-open { grid-column: 2; justify-self: start; }
+  .finding-relationships, .finding-card-actions { margin-left: 0; }
+  .finding-relationships { margin-top: 10px; }
+  .decision-workflow-grid { grid-template-columns: minmax(0, 1fr); }
+  .decision-item-list { grid-template-columns: minmax(0, 1fr); max-height: 240px; }
+  .decision-editor { padding: 14px; }
+  .po-decisions-page .benchmark-save-controls { justify-content: stretch; }
+  .po-decisions-page .benchmark-save-controls > button { width: 100%; }
+  .report-viewer .insight-result > summary { padding: 13px; }
+  .report-viewer .insight-result-detail { padding: 2px 12px 14px; }
+}
