@@ -449,3 +449,75 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
   .report-viewer .report-tabs button { min-height: 40px; padding: 7px 9px; }
   .report-viewer .related-entity-attributes dl > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* Research mobile readability: keep shared components and wider layouts unchanged. */
+@media (max-width: 560px) {
+  body:has(.research-page) { min-width: 0; }
+  .research-page { font-size: 1rem; line-height: 1.6; overflow-wrap: anywhere; }
+  .research-page .brand-copy strong { font-size: 1rem; }
+  .research-page .brand-copy small { color: #c0ceca; font-size: .875rem; }
+  .research-page .primary-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+    overflow: visible;
+  }
+  .research-page .nav-item { min-width: 0; min-height: 44px; padding: 8px; font-size: .875rem; line-height: 1.4; white-space: normal; }
+  .research-page .nav-icon { font-size: 1rem; }
+  .research-page .topbar { flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+  .research-page .breadcrumb { flex-wrap: wrap; min-width: 0; color: #52615e; font-size: .875rem; }
+  .research-page .local-badge { color: #52615e; font-size: .875rem; white-space: normal; }
+  .research-page .eyebrow, .research-page .state-label { color: #526440; font-size: .875rem; line-height: 1.5; }
+  .research-page .intro, .research-page .form-intro,
+  .research-page .state-message, .research-page .research-empty p,
+  .research-page .research-side-note p, .research-page .run-plan-snapshot p {
+    color: #52615e; font-size: 1rem; line-height: 1.6;
+  }
+  .research-page .panel-heading { flex-wrap: wrap; }
+  .research-page .panel-heading > div { min-width: 0; }
+  .research-page .panel-heading h2 { font-size: 1.125rem; line-height: 1.4; }
+  .research-page .research-empty strong, .research-page .research-side-note strong,
+  .research-page .project-row-copy strong, .research-page .research-run-row strong,
+  .research-page .run-detail-fields dd { font-size: 1rem; line-height: 1.5; }
+  .research-page .field-label, .research-page .period-fieldset legend {
+    flex-wrap: wrap; font-size: .875rem; line-height: 1.5;
+  }
+  .research-page .field-label span, .research-page .period-fieldset legend span,
+  .research-page .field-help, .research-page .research-side-note > span,
+  .research-page .project-row-copy small, .research-page .research-run-row span,
+  .research-page .run-detail-fields dt, .research-page .version-item small {
+    color: #52615e; font-size: .875rem; line-height: 1.6;
+  }
+  .research-page .research-form input, .research-page .research-form textarea,
+  .research-page .run-create-controls select, .research-page .run-selector-label select {
+    width: 100%; min-width: 0; max-width: 100%; min-height: 44px;
+    font-size: 1rem; line-height: 1.4;
+  }
+  .research-page .research-form input::placeholder,
+  .research-page .research-form textarea::placeholder { color: #596963; opacity: 1; }
+  .research-page .research-form input:disabled,
+  .research-page .research-form textarea:disabled { color: #52615e; opacity: 1; }
+  .research-page .primary-action, .research-page .secondary-action,
+  .research-page .text-button, .research-page .version-item {
+    min-height: 44px; max-width: 100%; padding: 10px 12px;
+    font-size: .875rem; line-height: 1.4; white-space: normal;
+  }
+  .research-page .version-item { flex-wrap: wrap; }
+  .research-page .project-row-copy strong, .research-page .project-row-copy small,
+  .research-page .research-run-row strong {
+    overflow: visible; text-overflow: clip; white-space: normal;
+  }
+  .research-page .project-mark, .research-page .row-arrow { flex-shrink: 0; }
+  .research-page .run-create-controls > *, .research-page .run-detail-fields > div,
+  .research-page .research-alert > * { min-width: 0; }
+  .research-page .research-alert, .research-page .research-success,
+  .research-page .read-only-note { flex-wrap: wrap; font-size: 1rem; line-height: 1.6; }
+  .research-page .research-alert { color: #804435; }
+  .research-page .research-success { color: #4c612e; }
+  .research-page .read-only-note { color: #526044; }
+  .research-page .manual-chip, .research-page .run-state-chip {
+    max-width: 100%; color: #526440; font-size: .875rem; line-height: 1.5; white-space: normal;
+  }
+  .research-page .page-footer {
+    flex-wrap: wrap; color: #52615e; font-size: .875rem; line-height: 1.5;
+  }
+}

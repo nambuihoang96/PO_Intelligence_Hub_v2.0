@@ -138,7 +138,7 @@ function App() {
         : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${researchPage ? ' research-page' : ''}`}>
       <aside className="sidebar">
         <a className="brand" href="/" aria-label="PO Intelligence Hub home">
           <span className="brand-mark">PO</span>
