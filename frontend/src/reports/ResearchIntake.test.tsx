@@ -137,17 +137,22 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => structured);
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'What the research found' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
     expect(screen.getByText('Players value quick creative sessions and visible progress.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'What was discovered?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Key findings' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Source references' })).toBeTruthy();
-    expect(screen.getByText(/No separate quantitative dataset is linked/)).toBeTruthy();
+    expect(screen.getByText(/No quantitative dataset linked/)).toBeTruthy();
+    expect((document.querySelector('.results-fact-strip') as HTMLDetailsElement).open).toBe(false);
+    expect(screen.getByRole('button', { name: 'Read full summary' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Read full summary' }));
+    expect(screen.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByText(/retention|revenue|market size/i)).toBeNull();
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Overview' }), { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Insights' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     fireEvent.click(screen.getByRole('button', { name: 'View Insight: Creative control supports engagement' }));
     expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
+    expect(document.querySelector('.insight-list-item.active')?.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText('Test whether customization is discoverable.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Research source' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'View support in original report' }));
@@ -177,7 +182,7 @@ describe('ChatGPT research intake', () => {
     });
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    await screen.findByRole('heading', { name: 'What the research found' });
+    await screen.findByRole('heading', { name: 'Executive summary' });
     fireEvent.click(screen.getByRole('button', { name: 'Record PO decision' }));
     expect(screen.getByRole('tab', { name: 'PO Assessment' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.change(screen.getByLabelText('PO Assessment for A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
@@ -199,7 +204,7 @@ describe('ChatGPT research intake', () => {
     const sparse = { ...report, research_status: 'STRUCTURED_PARTIAL' as const, research_data: { ...report.research_data, executive_summary: 'A short research summary.', findings: [{ key: 'one-finding', finding_type: 'observation', title: 'One supplied finding', description: 'A limited observation.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }] } };
     mockFetch(() => sparse);
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'What the research found' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View Insight: One supplied finding' })).toBeTruthy();
     expect(document.querySelector('.results-fact-strip')?.textContent).toContain('1 findings');
     expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
@@ -210,8 +215,9 @@ describe('ChatGPT research intake', () => {
     const textOnly = { ...report, research_status: 'TEXT_ONLY' as const };
     mockFetch(() => textOnly);
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'This report needs semantic structure' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Structure this report' })).toBeTruthy();
+    expect(await screen.findByText('TEXT_ONLY · Structure this report')).toBeTruthy();
+    fireEvent.click(screen.getByText('TEXT_ONLY · Structure this report'));
+    expect(screen.getByRole('button', { name: 'Prepare ChatGPT prompt' })).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Insights' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
   });
@@ -268,7 +274,6 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Insights' }));
-    fireEvent.click(screen.getByText('Daily habit and reward loop').closest('summary')!);
     fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark: Daily habit and reward loop' }));
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]));
     fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
@@ -276,7 +281,6 @@ describe('ChatGPT research intake', () => {
     expect(screen.queryByRole('table')).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
-    fireEvent.click(screen.getByText('Daily habit and reward loop').closest('summary')!);
     fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark: Learning App A' }));
     await waitFor(() => expect(persisted.benchmark_selections).toHaveLength(2));
     fireEvent.click(screen.getAllByRole('button', { name: 'Xem Benchmark' }).at(-1)!);
@@ -590,15 +594,12 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByText('Adding…')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
-    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
     const pendingDraft = await screen.findByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement;
     fireEvent.change(pendingDraft, { target: { value: 'Draft typed while save was pending' } });
     releaseState.current?.();
     fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
-    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
     expect((screen.getByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement).value).toBe('Draft typed while save was pending');
     fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
-    fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
     expect(await screen.findByText('Added to Benchmark.')).toBeTruthy();
     failNextState = true;
     fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
@@ -643,12 +644,13 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByText('TEXT_ONLY · Structure this report'));
     const response = '{"schema_version":"po_research_v1","research_data":{}}';
-    fireEvent.change(await screen.findByLabelText('Dán câu trả lời ChatGPT đầy đủ'), { target: { value: response } });
-    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật báo cáo hiện tại' }));
+    fireEvent.change(await screen.findByLabelText('Paste the complete ChatGPT response'), { target: { value: response } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update this report' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toContain('Backend local đang chạy phiên bản cũ');
-    expect((screen.getByLabelText('Dán câu trả lời ChatGPT đầy đủ') as HTMLTextAreaElement).value).toBe(response);
+    expect((screen.getByLabelText('Paste the complete ChatGPT response') as HTMLTextAreaElement).value).toBe(response);
   });
 
   it('validates missing metadata and does not send an import', async () => {

@@ -82,6 +82,7 @@ h1 { font: 600 clamp(28px, 3.2vw, 42px)/1.16 'Segoe UI', sans-serif; letter-spac
   .page-footer { padding: 13px 18px; font-size: 7px; }
 }
 
+
 .research-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; align-items: start; gap: 16px; margin-top: 34px; }
 .research-main-column { min-width: 0; }
 .research-panel { min-width: 0; padding: 22px; border: 1px solid #e1e7e2; border-radius: 12px; background: #fff; box-shadow: 0 8px 25px rgba(28,54,43,.035); }
@@ -780,4 +781,85 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
   .po-decisions-page .benchmark-save-controls > button { width: 100%; }
   .report-viewer .insight-result > summary { padding: 13px; }
   .report-viewer .insight-result-detail { padding: 2px 12px 14px; }
+}
+
+/* UX-RECOVERY-01 Phase 2 review: put conclusions ahead of dashboard metadata. */
+.report-viewer .report-meta.results-header { gap: 8px; padding: 15px 22px; }
+.results-title-row { align-items: center; }
+.results-breadcrumb { margin-bottom: 5px; font-size: 12px; }
+.report-viewer .results-title-copy > h2 { margin: 0 0 7px; font-size: clamp(23px, 2vw, 29px); }
+.results-title-copy > .results-context { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; color: #718096; font-size: 12px; line-height: 1.4; }
+.results-context > span + span::before { margin-right: 11px; color: #bdc7d3; content: "·"; }
+.results-context .results-status { margin: 0; padding: 3px 8px; font-size: 11px; }
+.report-viewer .results-header-links { display: none; }
+.report-viewer .results-back-link { flex: 0 0 auto; color: #536b89; font-size: 13px; }
+.report-viewer .report-tabs { top: 4px; }
+.results-overview { gap: 13px; }
+.results-fact-strip { display: block; padding: 2px 4px; color: #76849a; font-size: 12px; }
+.results-fact-strip summary { width: fit-content; cursor: pointer; }
+.results-fact-strip > div { display: flex; flex-wrap: wrap; gap: 6px 15px; padding: 9px 0 0; }
+.results-fact-strip > div span + span::before { margin-right: 15px; color: #c4ccd7; content: "·"; }
+.report-viewer .overview-insights { padding: 19px 21px; }
+.report-viewer .finding-group > h4 { color: #718096; font-weight: 550; }
+.finding-groups { gap: 13px; }
+.finding-group .insight-dashboard-list { gap: 10px; }
+.finding-map-card { padding: 12px 14px; }
+.finding-map-card .insight-dashboard-copy > span:not(.insight-type) { -webkit-line-clamp: 2; }
+.finding-relationships { gap: 7px; margin-top: 9px; padding-top: 8px; }
+.finding-relationships > span > b { flex-basis: auto; min-width: 100%; }
+.finding-card-actions { margin-top: 8px; }
+.report-viewer .executive-card { padding: 18px 21px 15px; }
+.report-viewer .executive-card .overview-section-heading { margin-bottom: 6px; }
+.report-viewer .executive-summary { display: -webkit-box; overflow: hidden; margin-top: 0; font-size: 15px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.report-viewer .executive-summary.is-expanded { display: block; overflow: visible; }
+.summary-toggle { margin-top: 5px; font-size: 12px; }
+.report-viewer .takeaway-list { margin-top: 10px; padding-top: 10px; }
+.report-viewer .takeaway-list h4 { margin-bottom: 6px; font-size: 13px; }
+.report-viewer .takeaway-list ul { gap: 5px; }
+.report-viewer .takeaway-list li { font-size: 13px; line-height: 1.45; }
+.report-viewer .takeaway-list li > span { width: auto; height: auto; flex: 0 0 10px; color: #60738d; background: transparent; }
+.quantitative-note-compact { display: inline-flex; gap: 4px; margin: 8px 0 0; padding: 0; border: 0; font-size: 12px; }
+.quantitative-note-compact > span { color: #536783; font-weight: 600; }
+.insight-workspace { display: grid; grid-template-columns: minmax(220px, .36fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.insight-list { position: sticky; top: 66px; display: grid; max-height: calc(100vh - 95px); gap: 7px; overflow: auto; padding-right: 3px; }
+.insight-list-item { display: grid; gap: 5px; width: 100%; padding: 12px 13px; border: 1px solid transparent; border-radius: 9px; color: #43546b; background: #f7f9fc; text-align: left; cursor: pointer; }
+.insight-list-item:hover { background: #f1f5fb; }
+.insight-list-item.active { border-color: #b9cbea; background: #f1f6ff; box-shadow: inset 3px 0 #4778c7; }
+.insight-list-item > span, .insight-list-item > small { color: #718096; font-size: 12px; line-height: 1.4; }
+.insight-list-item > strong { color: #293a50; font-size: 14px; line-height: 1.4; }
+.insight-detail-panel { display: grid; gap: 13px; min-width: 0; padding: 20px 22px; border: 1px solid #e7ebf1; border-radius: 12px; background: #fff; }
+.insight-detail-panel > .field-label { color: #75839a; font-size: 12px; }
+.insight-detail-panel > h4 { margin: -8px 0 0; color: #26374d; font-size: 22px; line-height: 1.35; }
+.insight-detail-panel .insight-result-detail, .insight-detail-panel > section { display: grid; gap: 6px; margin: 0; padding: 12px 14px; border-radius: 8px; background: #f8fafc; }
+.insight-detail-panel > section > h5 { margin: 0; color: #65758b; font-size: 12px; text-transform: uppercase; letter-spacing: .025em; }
+.insight-detail-panel > section > p { margin: 0; color: #46576d; font-size: 14px; line-height: 1.6; }
+.insight-detail-panel > .insight-po-recommendation { border-left: 3px solid #91afd9; background: #f3f7fd; }
+.insight-detail-panel .related-entity-candidates { min-width: 0; }
+.insight-detail-panel .evidence-link-list { margin: 0; }
+.insight-detail-panel .finding-card-actions { margin: 0; }
+.benchmark-workspace > .benchmark-intro { max-width: 850px; margin: 0 0 16px; color: #68788e; font-size: 14px; line-height: 1.55; }
+.benchmark-workspace .benchmark-table-wrap { border-color: #e6ebf2; border-radius: 10px; }
+.benchmark-workspace .benchmark-table th { background: #f7f9fc; }
+.benchmark-workspace .benchmark-table td { background: #fff; }
+.benchmark-workspace .benchmark-table td > small { color: #718096; }
+.benchmark-workspace .benchmark-table td > a { color: #365c96; }
+.report-viewer .structuring-callout { padding: 12px 17px; }
+.report-viewer .structuring-callout > summary { color: #52627a; font-weight: 600; cursor: pointer; }
+.report-viewer .structuring-callout[open] > p { color: #68788e; font-size: 14px; line-height: 1.5; }
+@media (max-width: 760px) {
+  .insight-workspace { grid-template-columns: minmax(0, 1fr); }
+  .insight-list { position: static; display: flex; max-height: none; overflow-x: auto; padding: 0 0 5px; }
+  .insight-list-item { flex: 0 0 min(290px, 78vw); }
+}
+@media (max-width: 560px) {
+  .report-viewer .report-meta.results-header { padding: 14px 16px; }
+  .results-title-row { align-items: flex-start; }
+  .report-viewer .results-title-copy > h2 { font-size: 22px; }
+  .results-title-copy > .results-context { gap: 4px 8px; }
+  .results-context > span + span::before { margin-right: 7px; }
+  .report-viewer .results-back-link { padding: 4px 0; font-size: 12px; }
+  .report-viewer .overview-insights, .report-viewer .executive-card { padding: 15px; }
+  .finding-group .insight-dashboard-list { grid-template-columns: minmax(0, 1fr); }
+  .insight-detail-panel { padding: 15px; }
+  .insight-detail-panel > h4 { font-size: 19px; }
 }
