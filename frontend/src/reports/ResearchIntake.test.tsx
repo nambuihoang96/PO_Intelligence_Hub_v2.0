@@ -18,6 +18,10 @@ function mockFetch(resolve: (url: string, init: RequestInit) => unknown) {
   return fetchMock;
 }
 
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
 describe('ChatGPT research intake', () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState({}, '', '/'); });
 
@@ -203,6 +207,172 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
   });
 
+  it('serializes rapid Add → Add and ends with both confirmed memberships', async () => {
+    const structured = { ...report, research_data: { ...report.research_data, entities: [
+      { key: 'subject-a', entity_type: 'service', name: 'Subject A', attributes: {}, evidence_references: [] },
+      { key: 'subject-b', entity_type: 'service', name: 'Subject B', attributes: {}, evidence_references: [] },
+    ] } };
+    let persisted: any = structured;
+    const requestBodies: any[] = [];
+    const releases: Array<(response: Response) => void> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/benchmark-state')) {
+        requestBodies.push(JSON.parse(String(init.body)));
+        return await new Promise<Response>((resolve) => releases.push(resolve));
+      }
+      return jsonResponse(persisted);
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Entities' }));
+    const [addSubjectA, addSubjectB] = screen.getAllByRole('button', { name: 'Add to Benchmark' });
+    fireEvent.click(addSubjectA);
+    fireEvent.click(addSubjectB);
+    await waitFor(() => expect(requestBodies).toHaveLength(1));
+    const apply = (body: any) => { persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } }; return jsonResponse(persisted); };
+    releases[0](apply(requestBodies[0]));
+    await waitFor(() => expect(requestBodies).toHaveLength(2));
+    expect(requestBodies[1].selections).toEqual([{ item_type: 'entity', item_key: 'subject-a' }, { item_type: 'entity', item_key: 'subject-b' }]);
+    releases[1](apply(requestBodies[1]));
+    await waitFor(() => expect(persisted.benchmark_selections).toEqual(requestBodies[1].selections));
+  });
+
+  it('queues Add → Remove while a request is pending and reconciles after first request failure', async () => {
+    const structured = { ...report, research_data: { ...report.research_data, findings: [{ key: 'finding-a', finding_type: 'observation', title: 'An observed pattern', description: 'A report-supported pattern.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }] } };
+    let persisted: any = structured;
+    const submittedSelections: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/benchmark-state')) {
+        const body = JSON.parse(String(init.body));
+        submittedSelections.push(body.selections);
+        if (submittedSelections.length === 1) throw new Error('temporary network failure');
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+        return jsonResponse(persisted);
+      }
+      return jsonResponse(persisted);
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'View Insight' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
+    await waitFor(() => expect(submittedSelections).toHaveLength(2));
+    expect(submittedSelections).toEqual([[{ item_type: 'finding', item_key: 'finding-a' }], []]);
+    await waitFor(() => expect(persisted.benchmark_selections).toEqual([]));
+    expect(await screen.findByText('Removed from Benchmark. PO notes are preserved and can be restored.')).toBeTruthy();
+  });
+
+  it('saves PO notes queued during a pending membership request and does not call them saved early', async () => {
+    const structured = { ...report, research_data: { ...report.research_data, entities: [{ key: 'subject-a', entity_type: 'service', name: 'Subject A', attributes: {}, evidence_references: [] }] } };
+    let persisted: any = structured;
+    const requestBodies: any[] = [];
+    let releaseFirst: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/benchmark-state')) {
+        const body = JSON.parse(String(init.body));
+        requestBodies.push(body);
+        if (requestBodies.length === 1) return await new Promise<Response>((resolve) => { releaseFirst = resolve; });
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+        return jsonResponse(persisted);
+      }
+      return jsonResponse(persisted);
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Entities' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark' }));
+    await waitFor(() => expect(requestBodies).toHaveLength(1));
+    fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(screen.getByText('Subject A').closest('summary')!);
+    fireEvent.change(await screen.findByLabelText('Notes for Subject A'), { target: { value: 'PO note added while selection is saving' } });
+    expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
+    expect(screen.getByText(/Saving · saving PO edits/)).toBeTruthy();
+    const firstBody = requestBodies[0];
+    persisted = { ...persisted, benchmark_selections: firstBody.selections, benchmark_workspace: { custom_dimensions: firstBody.custom_dimensions, entries: firstBody.entries } };
+    releaseFirst?.(jsonResponse(persisted));
+    await waitFor(() => expect(requestBodies).toHaveLength(2));
+    expect(requestBodies[1].entries[0].notes).toBe('PO note added while selection is saving');
+    await waitFor(() => expect(persisted.benchmark_workspace.entries[0].notes).toBe('PO note added while selection is saving'));
+    expect(await screen.findByText(/Saved · all PO edits are confirmed/)).toBeTruthy();
+  });
+
+  it('keeps a failed PO draft visible, warns before leaving, and supports retry', async () => {
+    const selected = { ...report,
+      benchmark_selections: [{ item_type: 'entity' as const, item_key: 'subject-a' }],
+      benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'entity' as const, item_key: 'subject-a', po_assessment: '', notes: '', next_action: '', dimension_assessments: {}, observation_finding_links: {} }] },
+      research_data: { ...report.research_data, entities: [{ key: 'subject-a', entity_type: 'service', name: 'Subject A', attributes: {}, evidence_references: [] }] },
+    };
+    let persisted: any = selected;
+    let attempts = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/benchmark-state')) {
+        attempts += 1;
+        if (attempts === 1) throw new Error('network offline');
+        const body = JSON.parse(String(init.body));
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+        return jsonResponse(persisted);
+      }
+      return jsonResponse(persisted);
+    }));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(screen.getByText('Subject A').closest('summary')!);
+    const assessment = await screen.findByLabelText('PO Assessment for Subject A') as HTMLTextAreaElement;
+    fireEvent.change(assessment, { target: { value: 'Do not lose this draft' } });
+    expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole('link', { name: '← Quay lại Research' }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(window.location.pathname).toBe('/reports/saved-report');
+    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
+    expect(await screen.findByText(/Save failed · PO edits remain/)).toBeTruthy();
+    expect((screen.getByLabelText('PO Assessment for Subject A') as HTMLTextAreaElement).value).toBe('Do not lose this draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
+    expect(await screen.findByText(/Saved · all PO edits are confirmed/)).toBeTruthy();
+    expect(persisted.benchmark_workspace.entries[0].po_assessment).toBe('Do not lose this draft');
+  });
+
+  it('keeps legacy dimension notes visible and editable after removing an active dimension selection', async () => {
+    const legacy = { ...report,
+      benchmark_selections: [{ item_type: 'dimension' as const, item_key: 'retention-key-v1' }],
+      benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'dimension' as const, item_key: 'retention-key-v1', po_assessment: 'Prior assessment', notes: 'Workspace note from the old dimension flow', next_action: 'Review next quarter', dimension_assessments: { 'Retention / old wording': 'Old dimension-specific assessment' }, observation_finding_links: {} }] },
+      research_data: { ...report.research_data, benchmark_dimensions: [{ key: 'retention-key-v1', name: 'Retention pattern', related_entities: [], evidence_references: [], observations: [], po_notes: 'Historical dimension PO note; do not discard.' }] },
+    };
+    let persisted: any = legacy;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).includes('/benchmark-state')) {
+        const body = JSON.parse(String(init.body));
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+      }
+      return jsonResponse(persisted);
+    }));
+    window.history.replaceState({}, '', '/reports/saved-report');
+    const view = render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    expect(screen.getByText('Historical dimension PO note; do not discard.')).toBeTruthy();
+    expect(screen.getByText('Stored dimension key:').parentElement?.textContent).toContain('retention-key-v1');
+    fireEvent.click(screen.getByText('Retention pattern').closest('summary')!);
+    expect((screen.getByLabelText('Legacy dimension assessment Retention / old wording for Retention pattern') as HTMLTextAreaElement).value).toBe('Old dimension-specific assessment');
+    const notes = screen.getByLabelText('Notes for Retention pattern') as HTMLTextAreaElement;
+    fireEvent.change(notes, { target: { value: 'Edited current workspace note; historical note remains separate.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
+    await waitFor(() => expect(persisted.benchmark_workspace.entries[0].notes).toBe('Edited current workspace note; historical note remains separate.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Retention pattern' }));
+    await waitFor(() => expect(persisted.benchmark_selections).toEqual([]));
+    expect(persisted.benchmark_workspace.entries[0].notes).toBe('Edited current workspace note; historical note remains separate.');
+    expect(persisted.research_data.benchmark_dimensions[0].po_notes).toBe('Historical dimension PO note; do not discard.');
+    view.unmount();
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    expect(screen.getByText('Historical dimension PO note; do not discard.')).toBeTruthy();
+    expect((screen.getByLabelText('Notes for Retention pattern') as HTMLTextAreaElement).value).toBe('Edited current workspace note; historical note remains separate.');
+  });
+
   it('opens an actual insight from the default Overview without inferring a KPI relationship from a shared entity', async () => {
     const structured = {
       ...report,
@@ -300,7 +470,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View Insight' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
     expect(await screen.findByText('Adding…')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
     fireEvent.click(screen.getByText('An observed pattern').closest('summary')!);
     const pendingDraft = await screen.findByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement;
