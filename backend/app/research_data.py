@@ -107,12 +107,17 @@ class QuantitativeObservation(ResearchModel):
     period_start: str | None = Field(default=None, max_length=10)
     period_end: str | None = Field(default=None, max_length=10)
     granularity: str | None = Field(default=None, max_length=40)
+    methodology: str | None = Field(default=None, max_length=500)
     source_reference: str | None = Field(default=None, max_length=2048)
     verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
     provenance_type: Literal["research_report", "csv_dataset"] = "research_report"
     provenance_id: str | None = Field(default=None, max_length=36)
     observation_type: Literal["reported", "imported", "calculated"] = "reported"
-    validation_reasons: list[str] = Field(default_factory=list, max_length=20)
+    validation_reasons: list[str] = Field(default_factory=list, max_length=40)
+    scope_compatible: bool | None = None
+    import_status: Literal["preview", "imported", "reported"] = "reported"
+    complete_observation: bool = False
+    comparison_ready: bool = False
 
     @field_validator("source_reference")
     @classmethod
@@ -145,6 +150,9 @@ class QuantitativeObservation(ResearchModel):
             raise ValueError("reported observations cannot be marked verified by the research report")
         if self.observation_type == "reported" and self.provenance_type != "research_report":
             raise ValueError("reported observations must use research_report provenance")
+        if self.observation_type == "reported":
+            object.__setattr__(self, "import_status", "reported")
+            object.__setattr__(self, "scope_compatible", None)
         if self.observation_type == "imported" and self.provenance_type != "csv_dataset":
             raise ValueError("imported observations must use csv_dataset provenance")
         return self
@@ -163,9 +171,11 @@ class QuantitativeObservation(ResearchModel):
             ("period_end", "period end"),
             ("granularity", "period granularity"),
             ("source_reference", "source reference"),
+            ("provenance_id", "data provenance"),
         ):
-            if getattr(self, field_name) is None and label not in reasons:
-                reasons.append(f"Missing {label}.")
+            missing_reason = f"Missing {label}."
+            if getattr(self, field_name) is None and missing_reason not in reasons:
+                reasons.append(missing_reason)
         for field_name in ("period_start", "period_end"):
             value = getattr(self, field_name)
             if value is not None:
@@ -185,6 +195,9 @@ class QuantitativeObservation(ResearchModel):
         if self.entity_id is None and "Entity mapping is not provided." not in reasons:
             reasons.append("Entity mapping is not provided.")
         object.__setattr__(self, "validation_reasons", reasons)
+        complete = not reasons
+        object.__setattr__(self, "complete_observation", complete)
+        object.__setattr__(self, "comparison_ready", complete and self.scope_compatible is True and bool(self.methodology and self.methodology.strip()))
         return self
 
 
@@ -202,6 +215,8 @@ class UniversalResearchData(ResearchModel):
 
     @model_validator(mode="after")
     def validate_relations(self) -> "UniversalResearchData":
+        if any(item.observation_type != "reported" or item.provenance_type != "research_report" for item in self.quantitative_observations):
+            raise ValueError("research reports may only supply reported quantitative observations")
         entity_keys = [entity.key for entity in self.entities]
         finding_keys = [finding.key for finding in self.findings]
         dimension_keys = [dimension.key for dimension in self.benchmark_dimensions]

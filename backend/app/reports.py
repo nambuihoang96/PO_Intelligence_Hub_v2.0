@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport, QuantitativeDataset, new_id
-from backend.app.quantitative import csv_digest, parse_csv_observations
+from backend.app.quantitative import assess_observation_readiness, csv_digest, parse_csv_observations
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
@@ -23,6 +23,7 @@ from backend.app.schemas import (
     ImportedReportSummary,
     Page,
     QuantitativeDatasetImport,
+    QuantitativeDatasetPreview,
     QuantitativeDatasetRead,
     ReprocessResult,
     ReportStructuringUpdate,
@@ -171,7 +172,14 @@ def get_report(report_id: str, session: SessionDependency) -> ImportedReportRead
     return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
 
 
-def _dataset_read(dataset: QuantitativeDataset, *, duplicate: bool = False) -> QuantitativeDatasetRead:
+def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchReport, duplicate: bool = False) -> QuantitativeDatasetRead:
+    observations = [assess_observation_readiness(item, report_geo=report.geo, report_platform=report.os) for item in (dataset.observations_json or [])]
+    complete_count = sum(bool(item.get("complete_observation")) for item in observations)
+    scope_count = sum(item.get("scope_compatible") is True for item in observations)
+    comparison_count = sum(bool(item.get("comparison_ready")) for item in observations)
+    incompatible_count = sum(item.get("scope_compatible") is False for item in observations)
+    compatibility = "compatible" if observations and all(item.get("complete_observation") and item.get("scope_compatible") is True for item in observations) else ("incompatible" if observations and incompatible_count == len(observations) else "partial")
+    validation_reasons = list(dict.fromkeys([*(dataset.validation_reasons_json or []), *(reason for item in observations for reason in item.get("validation_reasons", []))]))
     return QuantitativeDatasetRead.model_validate({
         "id": dataset.id,
         "report_id": dataset.report_id,
@@ -179,12 +187,60 @@ def _dataset_read(dataset: QuantitativeDataset, *, duplicate: bool = False) -> Q
         "content_sha256": dataset.content_sha256,
         "field_mapping": dataset.field_mapping_json or {},
         "entity_mappings": dataset.entity_mappings_json or {},
-        "observations": dataset.observations_json or [],
-        "compatibility_status": dataset.compatibility_status,
-        "validation_reasons": dataset.validation_reasons_json or [],
+        "observations": observations,
+        "compatibility_status": compatibility,
+        "validation_reasons": validation_reasons,
         "created_at": dataset.created_at,
         "duplicate": duplicate,
+        "complete_observations": complete_count,
+        "scope_compatible_observations": scope_count,
+        "comparison_ready_observations": comparison_count,
+        "comparison_readiness": "needs_compatible_pair" if comparison_count else "no_complete_observations",
     })
+
+
+def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatasetImport) -> QuantitativeDatasetPreview:
+    try:
+        observations, reasons, ambiguities, compatibility = parse_csv_observations(
+            payload.csv_content,
+            report_id=report.id,
+            report_geo=report.geo,
+            report_platform=report.os,
+            report_period=report.research_period,
+            entities=(report.research_data_json or {}).get("entities", []),
+            field_mapping=payload.field_mapping,
+            entity_mappings=payload.entity_mappings,
+        )
+    except (ValueError, csv.Error) as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_QUANTITATIVE_DATASET", "message": str(exc)}) from exc
+    for item in observations:
+        item["import_status"] = "preview"
+    complete = sum(bool(item.get("complete_observation")) for item in observations)
+    scoped = sum(item.get("scope_compatible") is True for item in observations)
+    comparison = sum(bool(item.get("comparison_ready")) for item in observations)
+    return QuantitativeDatasetPreview(
+        observations=observations,
+        validation_reasons=reasons,
+        ambiguities=ambiguities,
+        compatibility_status=compatibility,
+        total_rows=len(observations),
+        complete_observations=complete,
+        scope_compatible_observations=scoped,
+        comparison_ready_observations=comparison,
+        duplicate_rows=sum("Duplicate observation of CSV row" in reason for item in observations for reason in item.get("validation_reasons", [])),
+    )
+
+
+@router.post("/{report_id}/quantitative-datasets/preview", response_model=QuantitativeDatasetPreview)
+def preview_quantitative_dataset(
+    report_id: str,
+    payload: QuantitativeDatasetImport,
+    session: SessionDependency,
+) -> QuantitativeDatasetPreview:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    return _preview_dataset(report, payload)
 
 
 @router.post("/{report_id}/quantitative-datasets", response_model=QuantitativeDatasetRead, status_code=status.HTTP_201_CREATED)
@@ -204,20 +260,12 @@ def import_quantitative_dataset(
     ))
     if existing is not None:
         response.status_code = status.HTTP_200_OK
-        return _dataset_read(existing, duplicate=True)
-    try:
-        observations, reasons, ambiguities, compatibility = parse_csv_observations(
-            payload.csv_content,
-            report_id=report_id,
-            report_geo=report.geo,
-            report_platform=report.os,
-            report_period=report.research_period,
-            entities=(report.research_data_json or {}).get("entities", []),
-            field_mapping=payload.field_mapping,
-            entity_mappings=payload.entity_mappings,
-        )
-    except (ValueError, csv.Error) as exc:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_QUANTITATIVE_DATASET", "message": str(exc)}) from exc
+        return _dataset_read(existing, report=report, duplicate=True)
+    preview = _preview_dataset(report, payload)
+    observations = [item.model_dump(mode="json") for item in preview.observations]
+    reasons = preview.validation_reasons
+    ambiguities = preview.ambiguities
+    compatibility = preview.compatibility_status
     if ambiguities:
         raise HTTPException(status_code=409, detail={
             "code": "AMBIGUOUS_ENTITY_MAPPING",
@@ -227,6 +275,7 @@ def import_quantitative_dataset(
     dataset_id = new_id()
     for item in observations:
         item["provenance_id"] = dataset_id
+        item["import_status"] = "imported"
     dataset = QuantitativeDataset(
         id=dataset_id,
         report_id=report_id,
@@ -251,9 +300,9 @@ def import_quantitative_dataset(
         if existing is None:
             raise
         response.status_code = status.HTTP_200_OK
-        return _dataset_read(existing, duplicate=True)
+        return _dataset_read(existing, report=report, duplicate=True)
     session.refresh(dataset)
-    return _dataset_read(dataset)
+    return _dataset_read(dataset, report=report)
 
 
 @router.get("/{report_id}/quantitative-datasets", response_model=Page[QuantitativeDatasetRead])
@@ -263,7 +312,8 @@ def list_quantitative_datasets(
     cursor: str | None = None,
     limit: LIMIT = 20,
 ) -> Page[QuantitativeDatasetRead]:
-    if session.get(ImportedResearchReport, report_id) is None:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
         raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
     query = select(QuantitativeDataset).where(QuantitativeDataset.report_id == report_id).order_by(
         QuantitativeDataset.created_at.desc(), QuantitativeDataset.id.desc()
@@ -281,7 +331,7 @@ def list_quantitative_datasets(
     rows = list(session.scalars(query.limit(limit + 1)))
     has_more = len(rows) > limit
     items = rows[:limit]
-    return Page(items=[_dataset_read(item) for item in items], next_cursor=items[-1].id if has_more and items else None, limit=limit)
+    return Page(items=[_dataset_read(item, report=report) for item in items], next_cursor=items[-1].id if has_more and items else None, limit=limit)
 
 
 @router.put("/{report_id}/benchmark-selections", response_model=ImportedReportRead)

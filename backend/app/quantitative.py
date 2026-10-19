@@ -6,18 +6,21 @@ import csv
 import calendar
 import hashlib
 import io
+import math
 import re
 from datetime import date, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from backend.app.research_data import QuantitativeObservation
 
 
 CSV_FIELD_NAMES = {
     "metric_id", "metric_definition", "value", "unit", "entity_id", "geo",
-    "platform", "period_start", "period_end", "granularity", "source_reference",
+    "platform", "period_start", "period_end", "granularity", "source_reference", "methodology",
 }
 UNIT_ALIASES = {"percent": "%", "percentage": "%", "pct": "%", "seconds": "s", "minutes": "min"}
+EXACT_NUMBER = re.compile(r"^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
 
 
 def normalize_metric_id(value: str | None) -> str | None:
@@ -70,6 +73,28 @@ def _scope_compatible(observation: str | None, report_scope: str, dimension: str
     return supplied in scope
 
 
+def assess_observation_readiness(
+    raw: dict[str, Any], *, report_geo: str, report_platform: str,
+) -> dict[str, Any]:
+    """Recalculate readiness for current and legacy stored observation payloads."""
+    observation = QuantitativeObservation.model_validate(raw)
+    scope_compatible: bool | None = True
+    for supplied, report_scope, dimension in ((observation.geo, report_geo, "geo"), (observation.platform, report_platform, "platform")):
+        if not supplied or report_scope.strip().casefold() in {"unknown", "not applicable", "n/a"}:
+            if scope_compatible is not False:
+                scope_compatible = None
+        elif not _scope_compatible(supplied, report_scope, dimension):
+            scope_compatible = False
+    complete = not observation.validation_reasons
+    comparison_ready = complete and scope_compatible is True and bool(observation.methodology and observation.methodology.strip())
+    return observation.model_dump(mode="json") | {
+        "scope_compatible": scope_compatible,
+        "complete_observation": complete,
+        "comparison_ready": comparison_ready,
+        "import_status": "imported" if observation.observation_type == "imported" else "reported",
+    }
+
+
 def parse_csv_observations(
     csv_text: str,
     *,
@@ -106,6 +131,8 @@ def parse_csv_observations(
     rows: list[dict[str, Any]] = []
     reasons: list[str] = []
     ambiguities: list[dict[str, Any]] = []
+    seen_observations: dict[tuple[str, ...], int] = {}
+    duplicate_rows = 0
     years = _report_years(report_period)
     for row_number, row in enumerate(reader, 2):
         if row_number > 10002:
@@ -141,9 +168,17 @@ def parse_csv_observations(
         value: float | None = None
         if raw.get("value"):
             try:
-                value = float(raw["value"].replace(",", ""))
+                numeric_text = raw["value"]
+                if not EXACT_NUMBER.fullmatch(numeric_text):
+                    raise ValueError("not a strict numeric literal")
+                value = float(numeric_text.replace(",", ""))
+                if not math.isfinite(value):
+                    value = None
+                    row_reasons.append(f"CSV row {row_number} value must be a finite exact number.")
             except ValueError:
                 row_reasons.append(f"CSV row {row_number} has a non-numeric value.")
+        else:
+            pass
         period_start = raw.get("period_start") or None
         period_end = raw.get("period_end") or None
         start_date, end_date = _date(period_start), _date(period_end)
@@ -156,6 +191,12 @@ def parse_csv_observations(
 
         geo = raw.get("geo") or None
         platform = raw.get("platform") or None
+        source_reference = raw.get("source_reference") or None
+        if source_reference:
+            parsed_source = urlsplit(source_reference)
+            if parsed_source.scheme.casefold() not in {"http", "https"} or not parsed_source.hostname or parsed_source.username or parsed_source.password:
+                row_reasons.append(f"CSV row {row_number} source must be an HTTP(S) URL without credentials.")
+                source_reference = None
         if geo and report_geo.strip().casefold() in {"unknown", "not applicable", "n/a"}:
             row_reasons.append(f"Report GEO scope '{report_geo}' is unspecified.")
         elif geo and not _scope_compatible(geo, report_geo, "geo"):
@@ -166,6 +207,14 @@ def parse_csv_observations(
             row_reasons.append(f"Platform '{platform}' differs from report scope '{report_platform}'.")
         if years and start_date and end_date and (end_date.year < years[0] or start_date.year > years[1]):
             row_reasons.append("Observation period does not overlap the report period.")
+
+        scope_compatible: bool | None = True
+        for supplied, report_scope, dimension in ((geo, report_geo, "GEO"), (platform, report_platform, "platform")):
+            if not supplied or report_scope.strip().casefold() in {"unknown", "not applicable", "n/a"}:
+                if scope_compatible is not False:
+                    scope_compatible = None
+            elif not _scope_compatible(supplied, report_scope, "geo" if dimension == "GEO" else "platform"):
+                scope_compatible = False
 
         observation = QuantitativeObservation(
             metric_id=normalize_metric_id(raw.get("metric_id")),
@@ -178,30 +227,57 @@ def parse_csv_observations(
             period_start=period_start,
             period_end=period_end,
             granularity=raw.get("granularity") or None,
-            source_reference=raw.get("source_reference") or None,
+            methodology=raw.get("methodology") or None,
+            source_reference=source_reference,
             verification_status="unverified",
             provenance_type="csv_dataset",
+            provenance_id=report_id,
             observation_type="imported",
             validation_reasons=row_reasons,
+            scope_compatible=scope_compatible,
+            import_status="imported",
         )
+        identity = tuple(str(getattr(observation, field) or "").strip().casefold() for field in (
+            "metric_id", "metric_definition", "unit", "entity_id", "geo", "platform",
+            "period_start", "period_end", "granularity", "methodology", "value",
+        ))
+        if identity in seen_observations:
+            duplicate_rows += 1
+            row_reasons.append(f"Duplicate observation of CSV row {seen_observations[identity]}.")
+            observation = observation.model_copy(update={"validation_reasons": [*observation.validation_reasons, row_reasons[-1]], "complete_observation": False, "comparison_ready": False})
+        else:
+            seen_observations[identity] = row_number
         rows.append(observation.model_dump(mode="json"))
-        reasons.extend(row_reasons)
+        reasons.extend(observation.validation_reasons)
 
     if not rows:
         raise ValueError("CSV contains no non-empty data rows.")
     unique_reasons = list(dict.fromkeys(reasons))
-    status = "incompatible" if any("differs from report scope" in reason or "does not overlap" in reason for reason in unique_reasons) else ("compatible" if not unique_reasons and not ambiguities else "partial")
+    compatible_count = sum(item.get("scope_compatible") is True for item in rows)
+    incompatible_count = sum(item.get("scope_compatible") is False for item in rows)
+    status = "compatible" if all(item.get("complete_observation") and item.get("scope_compatible") is True for item in rows) and not ambiguities else ("incompatible" if incompatible_count == len(rows) else "partial")
+    if duplicate_rows:
+        unique_reasons.append(f"{duplicate_rows} duplicate observation row(s) need review.")
     return rows, unique_reasons, ambiguities, status
 
 
 def compatible_for_comparison(left: dict[str, Any], right: dict[str, Any]) -> tuple[bool, list[str]]:
     """Return strict compatibility reasons; no partial-market assumption."""
     reasons: list[str] = []
-    for field, label in (("metric_id", "metric"), ("unit", "unit"), ("geo", "GEO"), ("platform", "platform"), ("entity_id", "entity"), ("granularity", "granularity")):
+    for field, label in (("metric_id", "canonical metric identity"), ("metric_definition", "metric definition"), ("unit", "unit"), ("geo", "GEO"), ("platform", "platform"), ("entity_id", "entity"), ("granularity", "granularity"), ("methodology", "measurement methodology")):
         if not left.get(field) or not right.get(field):
             reasons.append(f"Missing {label} on one or both observations.")
-        elif str(left[field]).casefold() != str(right[field]).casefold():
+        elif str(left[field]).strip().casefold() != str(right[field]).strip().casefold():
             reasons.append(f"Different {label}.")
+    for field, label in (("value", "exact numeric value"), ("period_start", "period start"), ("period_end", "period end"), ("source_reference", "source provenance"), ("provenance_id", "dataset/report provenance")):
+        if left.get(field) in (None, "") or right.get(field) in (None, ""):
+            reasons.append(f"Missing {label} on one or both observations.")
+    if left.get("scope_compatible") is False or right.get("scope_compatible") is False:
+        reasons.append("One or both observations are outside the report scope.")
+    for side, observation in (("left", left), ("right", right)):
+        value = observation.get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            reasons.append(f"The {side} observation does not have an exact finite numeric value.")
     return not reasons, reasons
 
 

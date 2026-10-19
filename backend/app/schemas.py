@@ -591,7 +591,7 @@ class QuantitativeDatasetImport(APIModel):
     model_config = ConfigDict(extra="forbid")
     filename: str = Field(min_length=1, max_length=255)
     csv_content: str = Field(min_length=1, max_length=5_000_000)
-    field_mapping: dict[str, str] = Field(min_length=1, max_length=11)
+    field_mapping: dict[str, str] = Field(min_length=1, max_length=12)
     entity_mappings: dict[str, str] = Field(default_factory=dict, max_length=1000)
 
     @field_validator("filename")
@@ -615,6 +615,23 @@ class QuantitativeDatasetRead(APIModel):
     validation_reasons: list[str]
     created_at: datetime
     duplicate: bool = False
+    imported_successfully: bool = True
+    complete_observations: int = 0
+    scope_compatible_observations: int = 0
+    comparison_ready_observations: int = 0
+    comparison_readiness: Literal["no_complete_observations", "needs_compatible_pair"] = "no_complete_observations"
+
+
+class QuantitativeDatasetPreview(APIModel):
+    observations: list[QuantitativeObservation]
+    validation_reasons: list[str]
+    ambiguities: list[dict[str, Any]]
+    compatibility_status: Literal["compatible", "partial", "incompatible"]
+    total_rows: int
+    complete_observations: int
+    scope_compatible_observations: int
+    comparison_ready_observations: int
+    duplicate_rows: int = 0
 
 
 class QuantitativeDatasetPage(APIModel):

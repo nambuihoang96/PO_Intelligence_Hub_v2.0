@@ -24,7 +24,7 @@ class QuantitativeObservationTest(unittest.TestCase):
             metric_id="weekly downloads", metric_definition="Downloads per week", value=1250,
             unit="count", entity_id="product-a", geo="US", platform="Android",
             period_start="2026-01-01", period_end="2026-01-31", granularity="month",
-            source_reference="https://example.com/data", provenance_type="research_report",
+            source_reference="https://example.com/data", provenance_type="research_report", provenance_id="report",
         )
         self.assertEqual(value.metric_id, "weekly_downloads")
         self.assertEqual(value.verification_status, "unverified")
@@ -39,6 +39,15 @@ class QuantitativeObservationTest(unittest.TestCase):
     def test_reported_observation_cannot_claim_independent_verification(self):
         with self.assertRaises(ValidationError):
             QuantitativeObservation(metric_id="x", value=1, unit="users", observation_type="reported", verification_status="verified")
+
+    def test_research_contract_cannot_claim_csv_import_status(self):
+        with self.assertRaises(ValidationError):
+            UniversalResearchData(quantitative_observations=[QuantitativeObservation(
+                metric_id="users", metric_definition="Active users", value=10, unit="users",
+                entity_id="app", geo="US", platform="web", period_start="2026-01-01",
+                period_end="2026-01-31", granularity="month", source_reference="https://example.com",
+                provenance_id="dataset", observation_type="imported", provenance_type="csv_dataset",
+            )])
 
     def test_quantitative_sources_must_exist_in_report_reference_registry(self):
         with self.assertRaises(ValidationError):
@@ -64,6 +73,41 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertTrue(any("GEO" in reason for reason in reasons))
         self.assertTrue(any("Platform" in reason for reason in reasons))
 
+    def test_csv_keeps_mixed_rows_and_marks_missing_geo_period_and_bad_values(self):
+        rows, reasons, _, status = parse_csv_observations(
+            "metric,definition,value,unit,entity,geo,platform,start,end,granularity,source,methodology\n"
+            "downloads,Downloads,12,count,Product,US,Android,2026-01-01,2026-01-31,month,https://example.com/source,store console\n"
+            "downloads,Downloads,not-a-number,count,Product,,Android,,,month,https://example.com/source,store console\n",
+            report_id="r", report_geo="US", report_platform="Android", report_period="2026",
+            entities=[{"key": "product", "name": "Product"}],
+            field_mapping={"metric_id": "metric", "metric_definition": "definition", "value": "value", "unit": "unit", "entity_id": "entity", "geo": "geo", "platform": "platform", "period_start": "start", "period_end": "end", "granularity": "granularity", "source_reference": "source", "methodology": "methodology"},
+            entity_mappings={},
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(rows[0]["complete_observation"])
+        self.assertTrue(rows[0]["comparison_ready"])
+        self.assertFalse(rows[1]["complete_observation"])
+        self.assertFalse(rows[1]["comparison_ready"])
+        self.assertEqual(status, "partial")
+        self.assertTrue(any("GEO" in reason for reason in reasons))
+        self.assertTrue(any("period start" in reason for reason in reasons))
+        self.assertTrue(any("non-numeric" in reason for reason in reasons))
+
+    def test_duplicate_rows_are_retained_and_flagged(self):
+        rows, reasons, _, status = parse_csv_observations(
+            "metric,definition,value,unit,entity,geo,platform,start,end,granularity,source,methodology\n"
+            "users,Active users,5,users,Product,US,Android,2026-01-01,2026-01-31,month,https://example.com/source,first-party console\n"
+            "users,Active users,5,users,Product,US,Android,2026-01-01,2026-01-31,month,https://example.com/source,first-party console\n",
+            report_id="r", report_geo="US", report_platform="Android", report_period="2026",
+            entities=[{"key": "product", "name": "Product"}],
+            field_mapping={"metric_id": "metric", "metric_definition": "definition", "value": "value", "unit": "unit", "entity_id": "entity", "geo": "geo", "platform": "platform", "period_start": "start", "period_end": "end", "granularity": "granularity", "source_reference": "source", "methodology": "methodology"},
+            entity_mappings={},
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertFalse(rows[1]["complete_observation"])
+        self.assertTrue(any("duplicate observation" in reason for reason in reasons))
+        self.assertEqual(status, "partial")
+
     def test_duplicate_entity_name_requests_explicit_mapping(self):
         _, _, ambiguities, status = parse_csv_observations(
             "entity,value\nSame,1\n", report_id="r", report_geo="US", report_platform="web", report_period=None,
@@ -73,8 +117,8 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertEqual(status, "partial")
         self.assertEqual(ambiguities[0]["candidates"], ["a", "b"])
 
-    def observation(self, *, metric="users", unit="users", geo="US", platform="web", entity="a", start="2025-01-01", end="2025-12-31", value=100):
-        return {"metric_id": metric, "metric_definition": "User count", "value": value, "unit": unit, "entity_id": entity, "geo": geo, "platform": platform, "granularity": "year", "period_start": start, "period_end": end, "provenance_id": "source"}
+    def observation(self, *, metric="users", definition="User count", methodology="first-party analytics", unit="users", geo="US", platform="web", entity="a", start="2025-01-01", end="2025-12-31", value=100):
+        return {"metric_id": metric, "metric_definition": definition, "methodology": methodology, "value": value, "unit": unit, "entity_id": entity, "geo": geo, "platform": platform, "granularity": "year", "period_start": start, "period_end": end, "source_reference": "https://example.com/source", "provenance_id": "source"}
 
     def test_different_geo_os_and_incompatible_periods_are_rejected(self):
         base = self.observation()
@@ -85,6 +129,24 @@ class QuantitativeObservationTest(unittest.TestCase):
         current = self.observation(start="2026-02-01", end="2026-12-31", value=120)
         with self.assertRaisesRegex(ValueError, "adjacent periods"):
             calculate_change(current, base, "yoy")
+
+    def test_similar_metric_labels_do_not_override_definition_or_methodology(self):
+        base = self.observation(metric="downloads", definition="Downloads observed by store", methodology="store console")
+        for other in (
+            self.observation(metric="downloads", definition="Estimated downloads from panel model", methodology="panel estimate"),
+            self.observation(metric="estimated_downloads", definition="Downloads observed by store", methodology="store console"),
+        ):
+            compatible, reasons = compatible_for_comparison(base, other)
+            self.assertFalse(compatible)
+            self.assertTrue(reasons)
+
+    def test_missing_methodology_is_not_comparable(self):
+        base = self.observation()
+        other = self.observation()
+        other["methodology"] = None
+        compatible, reasons = compatible_for_comparison(base, other)
+        self.assertFalse(compatible)
+        self.assertIn("Missing measurement methodology on one or both observations.", reasons)
 
     def test_valid_yoy_calculates_absolute_and_percentage_change(self):
         previous = self.observation()
@@ -123,8 +185,8 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.env.stop()
         self.temp_dir.cleanup()
 
-    def create_report(self):
-        raw = "Original source: https://example.com/source"
+    def create_report(self, question="Example"):
+        raw = f"Original source: https://example.com/source\nQuestion: {question}"
         structured = {
             "entities": [
                 {"key": "product-a", "entity_type": "product", "name": "App A"},
@@ -133,7 +195,7 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
             "evidence_references": [{"url": "https://example.com/source"}],
         }
         response = self.client.post("/api/v1/reports", json={
-            "question": "Example", "geo": "US", "os": "Android", "research_period": "2025-2026",
+            "question": question, "geo": "US", "os": "Android", "research_period": "2025-2026",
             "content": raw, "structured_json": json.dumps(structured),
         })
         self.assertEqual(response.status_code, 201, response.text)
@@ -143,8 +205,8 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         report_id = self.create_report()
         body = {
             "filename": "weekly.csv",
-            "csv_content": "metric,value,unit,entity,geo,platform,start,end,granularity,source\nWeekly Downloads,10,downloads,App A,US,Android,2026-01-01,2026-01-31,month,https://example.com/source\n",
-            "field_mapping": {"metric_id": "metric", "value": "value", "unit": "unit", "entity_id": "entity", "geo": "geo", "platform": "platform", "period_start": "start", "period_end": "end", "granularity": "granularity", "source_reference": "source"},
+            "csv_content": "metric,definition,value,unit,entity,geo,platform,start,end,granularity,source,methodology\nWeekly Downloads,Downloads per week,10,downloads,App A,US,Android,2026-01-01,2026-01-31,month,https://example.com/source,store estimate\n",
+            "field_mapping": {"metric_id": "metric", "metric_definition": "definition", "value": "value", "unit": "unit", "entity_id": "entity", "geo": "geo", "platform": "platform", "period_start": "start", "period_end": "end", "granularity": "granularity", "source_reference": "source", "methodology": "methodology"},
         }
         saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(saved.status_code, 201, saved.text)
@@ -181,11 +243,60 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(get.status_code, 200)
         self.assertEqual(get.json()["research_data"]["quantitative_observations"], [])
 
+    def test_preview_is_non_persistent_then_confirm_links_only_current_report(self):
+        report_id = self.create_report()
+        other_report_id = self.create_report("Example 2")
+        body = {
+            "filename": "metrics.csv",
+            "csv_content": "metric,definition,value,unit,entity,geo,platform,start,end,granularity,source,methodology\nusers,Active users,10,users,App A,US,Android,2026-01-01,2026-01-31,month,https://example.com/source,first-party analytics\n",
+            "field_mapping": {"metric_id": "metric", "metric_definition": "definition", "value": "value", "unit": "unit", "entity_id": "entity", "geo": "geo", "platform": "platform", "period_start": "start", "period_end": "end", "granularity": "granularity", "source_reference": "source", "methodology": "methodology"},
+        }
+        preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["total_rows"], 1)
+        self.assertEqual(preview.json()["comparison_ready_observations"], 1)
+        self.assertEqual(self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets").json()["items"], [])
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        self.assertEqual(saved.json()["report_id"], report_id)
+        self.assertEqual(self.client.get(f"/api/v1/reports/{other_report_id}/quantitative-datasets").json()["items"], [])
+        self.assertEqual(saved.json()["comparison_ready_observations"], 1)
+
+    def test_legacy_dataset_readiness_is_recalculated_without_schema_migration(self):
+        report_id = self.create_report()
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                session.add(QuantitativeDataset(
+                    id="legacy-dataset", report_id=report_id, filename="legacy.csv", content_sha256="b" * 64,
+                    original_csv="legacy exact csv", field_mapping_json={}, entity_mappings_json={},
+                    observations_json=[{
+                        "metric_id": "active_users", "metric_definition": "Active users from product analytics",
+                        "value": 12, "unit": "users", "entity_id": "product-a", "geo": "US", "platform": "Android",
+                        "period_start": "2026-01-01", "period_end": "2026-01-31", "granularity": "month",
+                        "source_reference": "https://example.com/source", "verification_status": "unverified",
+                        "provenance_type": "csv_dataset", "provenance_id": "legacy-dataset", "observation_type": "imported",
+                    }],
+                    compatibility_status="compatible", validation_reasons_json=[],
+                ))
+                session.commit()
+        finally:
+            engine.dispose()
+        response = self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets")
+        self.assertEqual(response.status_code, 200, response.text)
+        dataset = response.json()["items"][0]
+        self.assertEqual(dataset["complete_observations"], 1)
+        self.assertEqual(dataset["scope_compatible_observations"], 1)
+        self.assertEqual(dataset["comparison_ready_observations"], 0)
+        self.assertTrue(dataset["observations"][0]["complete_observation"])
+        self.assertFalse(dataset["observations"][0]["comparison_ready"])
+
     def test_quantitative_dataset_routes_are_typed_in_openapi(self):
         schema = self.client.get("/openapi.json").json()
         path = schema["paths"]["/api/v1/reports/{report_id}/quantitative-datasets"]
         self.assertIn("post", path)
         self.assertIn("get", path)
+        self.assertIn("/api/v1/reports/{report_id}/quantitative-datasets/preview", schema["paths"])
         request_schema = path["post"]["requestBody"]["content"]["application/json"]["schema"]["$ref"]
         self.assertIn("QuantitativeDatasetImport", request_schema)
         properties = schema["components"]["schemas"]["QuantitativeDatasetImport"]["properties"]

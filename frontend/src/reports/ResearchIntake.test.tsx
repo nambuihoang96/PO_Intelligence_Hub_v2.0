@@ -148,7 +148,7 @@ describe('ChatGPT research intake', () => {
     expect(document.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
     expect(document.querySelector('.finding-icon-frame svg')).toBeTruthy();
     expect(screen.getByText('1 source reference')).toBeTruthy();
-    expect(screen.getByText(/No quantitative dataset linked/)).toBeTruthy();
+    expect(screen.getAllByText(/No quantitative dataset linked/).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'View all 5 takeaways' })).toBeTruthy();
     expect(screen.queryByText('Takeaway four.')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'View all 5 takeaways' }));

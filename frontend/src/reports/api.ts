@@ -33,18 +33,25 @@ export type QuantitativeObservation = {
   period_start: string | null;
   period_end: string | null;
   granularity: string | null;
+  methodology?: string | null;
   source_reference: string | null;
   verification_status: 'unverified' | 'needs_review' | 'verified';
   provenance_type: 'research_report' | 'csv_dataset';
   provenance_id: string | null;
   observation_type: 'reported' | 'imported' | 'calculated';
   validation_reasons: string[];
+  scope_compatible?: boolean | null;
+  import_status?: 'preview' | 'imported' | 'reported';
+  complete_observation?: boolean;
+  comparison_ready?: boolean;
 };
 export type QuantitativeDataset = {
   id: string; report_id: string; filename: string; content_sha256: string;
   field_mapping: Record<string, string>; entity_mappings: Record<string, string>;
   observations: QuantitativeObservation[]; compatibility_status: 'compatible' | 'partial' | 'incompatible';
   validation_reasons: string[]; created_at: string; duplicate: boolean;
+  imported_successfully?: boolean; complete_observations?: number; scope_compatible_observations?: number;
+  comparison_ready_observations?: number; comparison_readiness?: 'no_complete_observations' | 'needs_compatible_pair';
 };
 export type QuantitativeDatasetPage = { items: QuantitativeDataset[]; next_cursor: string | null; limit: number };
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
@@ -54,6 +61,11 @@ export type ImportedReport = ReportSummary & { content: string; parse_status: 'P
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };
 export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { content: string; structured_json?: string };
 export type QuantitativeDatasetInput = { filename: string; csv_content: string; field_mapping: Record<string, string>; entity_mappings?: Record<string, string> };
+export type QuantitativeDatasetPreview = {
+  observations: QuantitativeObservation[]; validation_reasons: string[]; ambiguities: { csv_value: string; row: number; candidates: string[] }[];
+  compatibility_status: 'compatible' | 'partial' | 'incompatible'; total_rows: number; complete_observations: number;
+  scope_compatible_observations: number; comparison_ready_observations: number; duplicate_rows: number;
+};
 
 function readableValidationErrors(errors: unknown): string[] {
   if (!Array.isArray(errors)) return [];
@@ -126,5 +138,6 @@ export const reportApi = {
   updateBenchmarkState: (id: string, selections: BenchmarkSelection[], workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-state`, { method: 'PUT', body: JSON.stringify({ ...workspace, selections }) }),
   updateBenchmarkWorkspace: (id: string, workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-workspace`, { method: 'PUT', body: JSON.stringify(workspace) }),
   listQuantitativeDatasets: (id: string, cursor?: string) => request<QuantitativeDatasetPage>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  previewQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDatasetPreview>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets/preview`, { method: 'POST', body: JSON.stringify(input) }),
   importQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDataset>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets`, { method: 'POST', body: JSON.stringify(input) }),
 };
