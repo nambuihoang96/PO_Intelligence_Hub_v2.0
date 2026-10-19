@@ -58,5 +58,4 @@ Used the Codex in-app browser against a local backend/frontend using a separate 
 ## Commit
 
 - Branch: `feat/ux-recovery-01-research-results`
-- Commit SHA: pending
-
+- Implementation commit SHA: `040afa8bf26722fd71724b54dcc3812c366763a3`
