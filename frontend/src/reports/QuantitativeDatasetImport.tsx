@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { reportApi, type ImportedReport, type QuantitativeDataset, type QuantitativeDatasetInput, type QuantitativeDatasetPreview, type QuantitativeMetricColumnMapping } from './api';
 
 const dimensions = [
@@ -7,6 +7,7 @@ const dimensions = [
   ['source_reference', 'Source URL'], ['methodology', 'Methodology'],
 ] as const;
 const LONG_FIELDS = [...dimensions, ['metric_id', 'Metric identity'], ['metric_definition', 'Metric definition'], ['value', 'Exact value']] as const;
+type EntityMappingRequirement = { csv_value: string; row: number; candidates: string[] };
 function parseDelimited(text: string): { rows: string[][]; delimiter: string } {
   const first = text.split(/\r?\n/).find((line) => line.trim()) ?? '';
   const delimiter = [',', ';', '\t', '|'].map((item) => ({ item, count: first.split(item).length })).sort((a, b) => b.count - a.count)[0]?.item ?? ',';
@@ -82,17 +83,27 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
   const [filename, setFilename] = useState(''); const [csvContent, setCsvContent] = useState('');
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({}); const [explicitValues, setExplicitValues] = useState<Record<string, string>>({});
   const [entityMappings, setEntityMappings] = useState<Record<string, string>>({}); const [metricMappings, setMetricMappings] = useState<QuantitativeMetricColumnMapping[]>([]);
+  const [mappingRequirements, setMappingRequirements] = useState<EntityMappingRequirement[]>([]);
   const [preview, setPreview] = useState<QuantitativeDatasetPreview | null>(null); const [busy, setBusy] = useState<'validating' | 'saving' | null>(null);
   const [message, setMessage] = useState(''); const [failure, setFailure] = useState('');
+  const validationRevision = useRef(0);
+  const [validatedInputKey, setValidatedInputKey] = useState('');
   const { rows, delimiter } = useMemo(() => parseDelimited(csvContent), [csvContent]);
   const headers = rows[0] ?? []; const sampleRows = rows.slice(1, 4); const wide = Boolean(metricMappings.length);
   const hints = dateHints(filename);
   const dataRows = rows.slice(1);
   const metricColumns = headers.filter((header) => !Object.values(fieldMapping).includes(header));
-  const unresolved = [...(preview?.ambiguities ?? []), ...(preview?.unmatched_entities ?? [])];
+  const unresolved = mappingRequirements;
+
+  function invalidatePreview() {
+    validationRevision.current += 1;
+    setPreview(null);
+    setValidatedInputKey('');
+    setBusy((current) => current === 'validating' ? null : current);
+  }
 
   async function chooseFile(file?: File) {
-    setPreview(null); setFailure(''); setMessage(''); setEntityMappings({}); setExplicitValues({}); setMetricMappings([]);
+    invalidatePreview(); setMappingRequirements([]); setFailure(''); setMessage(''); setEntityMappings({}); setExplicitValues({}); setMetricMappings([]);
     if (!file) return;
     if (!file.name.toLocaleLowerCase().endsWith('.csv')) { setFailure('Chọn file .csv để tiếp tục.'); return; }
     try {
@@ -113,29 +124,38 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
   }
   function setField(field: string, value: string) {
     setFieldMapping((current) => { const next = { ...current }; if (value) next[field] = value; else delete next[field]; return next; });
-    setExplicitValues((current) => { const next = { ...current }; delete next[field]; return next; }); setPreview(null);
+    setExplicitValues((current) => { const next = { ...current }; delete next[field]; return next; }); invalidatePreview();
   }
   function setConstant(field: string, value: string) {
     setExplicitValues((current) => { const next = { ...current }; if (value) next[field] = value; else delete next[field]; return next; });
-    setFieldMapping((current) => { const next = { ...current }; delete next[field]; return next; }); setPreview(null);
+    setFieldMapping((current) => { const next = { ...current }; delete next[field]; return next; }); invalidatePreview();
   }
   function toggleMetric(column: string, enabled: boolean) {
     setMetricMappings((current) => enabled
       ? [...current, { column, metric_id: safeMetricId(column), metric_definition: column, unit: '', methodology: '' }]
       : current.filter((metric) => metric.column !== column));
-    setFieldMapping((current) => { const next = { ...current }; delete next.metric_id; delete next.metric_definition; delete next.value; return next; }); setPreview(null);
+    setFieldMapping((current) => { const next = { ...current }; delete next.metric_id; delete next.metric_definition; delete next.value; return next; }); invalidatePreview();
   }
   function patchMetric(column: string, patch: Partial<QuantitativeMetricColumnMapping>) {
-    setMetricMappings((current) => current.map((metric) => metric.column === column ? { ...metric, ...patch } : metric)); setPreview(null);
+    setMetricMappings((current) => current.map((metric) => metric.column === column ? { ...metric, ...patch } : metric)); invalidatePreview();
   }
   async function validate() {
+    const requestRevision = ++validationRevision.current;
+    const requestInput = input();
     setBusy('validating'); setFailure(''); setMessage('');
-    try { setPreview(await reportApi.previewQuantitativeDataset(report.id, input())); }
-    catch (reason) { setFailure(reason instanceof Error ? reason.message : 'Không thể kiểm tra CSV.'); setPreview(null); }
-    finally { setBusy(null); }
+    try {
+      const result = await reportApi.previewQuantitativeDataset(report.id, requestInput);
+      if (requestRevision !== validationRevision.current) return;
+      const requirements = [...result.ambiguities, ...(result.unmatched_entities ?? [])];
+      setMappingRequirements([...new Map(requirements.map((item) => [item.csv_value, item])).values()]);
+      setPreview(result);
+      setValidatedInputKey(JSON.stringify(requestInput));
+    } catch (reason) {
+      if (requestRevision === validationRevision.current) { setFailure(reason instanceof Error ? reason.message : 'Không thể kiểm tra CSV.'); setPreview(null); }
+    } finally { if (requestRevision === validationRevision.current) setBusy(null); }
   }
   async function confirmLink() {
-    if (!preview || unresolved.some((item) => !entityMappings[item.csv_value])) return;
+    if (!preview || validatedInputKey !== JSON.stringify(input()) || unresolved.length > 0 || busy !== null) return;
     setBusy('saving'); setFailure(''); setMessage('');
     try { const dataset = await reportApi.importQuantitativeDataset(report.id, input()); onImported(dataset); setMessage(dataset.duplicate ? 'Dataset này đã được liên kết trước đó; dữ liệu đã lưu được mở lại.' : 'CSV đã được liên kết với báo cáo này.'); setPreview(null); }
     catch (reason) { setFailure(reason instanceof Error ? reason.message : 'Không thể lưu dataset.'); }
@@ -157,10 +177,10 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
         <button type="button" className="secondary-action" disabled={busy !== null || (!wide && (!fieldMapping.metric_id || !fieldMapping.value))} onClick={() => void validate()}>{busy === 'validating' ? 'Đang xác thực…' : '3. Kiểm tra dữ liệu'}</button>
       </section>}
       {preview && <section className="quant-validation" aria-live="polite"><h4>Kết quả xác thực · {preview.total_rows.toLocaleString('vi-VN')} observations</h4><div className="quant-readiness-counts"><span>Đầy đủ: <b>{preview.complete_observations}</b></span><span>Đúng scope: <b>{preview.scope_compatible_observations}</b></span><span>Có thể so sánh: <b>{preview.comparison_ready_observations}</b></span><span>Dòng trùng: <b>{preview.duplicate_rows}</b></span></div><p>{preview.compatibility_status === 'compatible' ? 'Phạm vi khớp với báo cáo.' : preview.compatibility_status === 'incompatible' ? 'Không có dòng nào khớp scope báo cáo.' : 'Một phần dữ liệu chưa đầy đủ hoặc cần xem lại.'} Lưu thành công không đồng nghĩa mọi quan sát sẵn sàng phân tích.</p>
-        {unresolved.length > 0 && <div className="quant-ambiguities"><strong>Entity chưa khớp — chọn mapping hoặc chủ động để trống</strong>{[...new Map(unresolved.map((item) => [item.csv_value, item])).values()].map((item) => <label key={item.csv_value}>{item.csv_value}<select value={entityMappings[item.csv_value] ?? ''} onChange={(event) => { setEntityMappings((current) => ({ ...current, [item.csv_value]: event.target.value })); setPreview(null); }}><option value="">Chọn…</option><option value="__unmapped__">Để trống entity (sẽ không dùng để so sánh)</option>{report.research_data.entities.filter((entity) => !item.candidates.length || item.candidates.includes(entity.key)).map((entity) => <option key={entity.key} value={entity.key}>{entity.name}</option>)}</select></label>)}</div>}
         <details className="quant-row-details"><summary>Xem observations và lý do validation</summary><div className="quant-table-scroll"><table><thead><tr><th>Metric</th><th>Value</th><th>Entity</th><th>GEO / Platform</th><th>Readiness</th><th>Validation</th></tr></thead><tbody>{preview.observations.map((observation, index) => <tr key={`${index}-${observation.metric_id}`}><td>{observation.metric_definition || observation.metric_id || 'Unknown metric'}</td><td>{observation.value ?? 'Unknown'} {observation.unit ?? ''}</td><td>{report.research_data.entities.find((entity) => entity.key === observation.entity_id)?.name ?? 'Not mapped'}</td><td>{observation.geo ?? 'GEO missing'} / {observation.platform ?? 'Platform missing'}</td><td>{observation.comparison_ready ? 'Ready for pair check' : observation.scope_compatible === false ? 'Scope mismatch' : 'Incomplete'}</td><td>{observation.validation_reasons.length ? observation.validation_reasons.join(' ') : 'No validation issues detected'}</td></tr>)}</tbody></table></div></details>
-        <button type="button" className="primary-action" disabled={busy !== null || unresolved.some((item) => !entityMappings[item.csv_value])} onClick={() => void confirmLink()}>{busy === 'saving' ? 'Đang lưu dataset…' : '4. Xác nhận liên kết với báo cáo này'}</button>
+        {unresolved.length === 0 && <button type="button" className="primary-action" disabled={busy !== null || !preview || validatedInputKey !== JSON.stringify(input())} onClick={() => void confirmLink()}>{busy === 'saving' ? 'Đang lưu dataset…' : '4. Xác nhận liên kết với báo cáo này'}</button>}
       </section>}
+      {unresolved.length > 0 && <section className="quant-validation" aria-live="polite"><h4>Entity cần mapping</h4><p>Các lựa chọn vẫn được giữ khi cần xác thực lại. Sau khi thay đổi mapping, bấm xác thực lại để dùng kết quả mới nhất.</p><div className="quant-ambiguities">{[...new Map(unresolved.map((item) => [item.csv_value, item])).values()].map((item) => <label key={item.csv_value}>{item.csv_value}<select aria-label={`Map entity ${item.csv_value}`} value={entityMappings[item.csv_value] ?? ''} onChange={(event) => { setEntityMappings((current) => ({ ...current, [item.csv_value]: event.target.value })); invalidatePreview(); }}><option value="">Chọn…</option><option value="__unmapped__">Để trống entity (sẽ không dùng để so sánh)</option>{report.research_data.entities.filter((entity) => !item.candidates.length || item.candidates.includes(entity.key)).map((entity) => <option key={entity.key} value={entity.key}>{entity.name}</option>)}</select></label>)}</div><button type="button" className="secondary-action" disabled={busy !== null} onClick={() => void validate()}>{busy === 'validating' ? 'Đang xác thực…' : 'Xác thực lại mappings'}</button></section>}
       {failure && <div className="research-alert" role="alert">{failure}</div>}{message && <div className="research-success" role="status">{message}</div>}
       <p className="quant-import-note">Không tải file lên trước khi bạn xác thực. CSV gốc được giữ cùng provenance; dữ liệu chỉ liên kết với báo cáo hiện tại sau xác nhận.</p>
     </div>

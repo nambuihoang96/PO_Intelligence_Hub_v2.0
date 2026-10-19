@@ -66,4 +66,74 @@ describe('QuantitativeDatasetImport', () => {
     expect(payload.explicit_values).toMatchObject({ geo: 'Worldwide', period_start: '2026-10-14', period_end: '2026-11-13' });
     expect(payload.metric_mappings).toEqual([expect.objectContaining({ column: 'Downloads (Absolute)', metric_definition: 'Downloads (Absolute)' })]);
   });
+
+  it('keeps three unresolved entity mappings visible, preserves choices, and requires a fresh preview', async () => {
+    const unresolvedPreview = {
+      ...preview,
+      ambiguities: [{ csv_value: 'Twin', row: 2, candidates: ['app-a'] }],
+      unmatched_entities: [{ csv_value: 'Unknown One', row: 3, candidates: [] }, { csv_value: 'Unknown Two', row: 4, candidates: [] }],
+    };
+    vi.mocked(reportApi.previewQuantitativeDataset)
+      .mockResolvedValueOnce(unresolvedPreview as never)
+      .mockResolvedValueOnce(preview as never);
+    vi.mocked(reportApi.importQuantitativeDataset).mockResolvedValue({ id: 'dataset-3', report_id: 'report-1', filename: 'three.csv', content_sha256: 'hash', field_mapping: {}, entity_mappings: {}, observations: preview.observations as never, compatibility_status: 'partial', validation_reasons: [], created_at: '2026-01-01', duplicate: false } as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Import CSV'));
+    const file = new File(['Entity;Value\nTwin;1\nUnknown One;bad\nUnknown Two;3\n'], 'three.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
+    fireEvent.click(screen.getByText('Or map multiple metric columns (wide CSV)'));
+    fireEvent.click(screen.getByLabelText('Value'));
+    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    await screen.findByText('Entity cần mapping');
+    fireEvent.change(screen.getByLabelText('Map entity Twin'), { target: { value: 'app-a' } });
+    expect(screen.getByLabelText('Map entity Twin')).toBeTruthy();
+    expect(screen.getByLabelText('Map entity Unknown One')).toBeTruthy();
+    expect(screen.getByLabelText('Map entity Unknown Two')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Map entity Unknown One'), { target: { value: 'app-a' } });
+    fireEvent.change(screen.getByLabelText('Map entity Unknown Two'), { target: { value: '__unmapped__' } });
+    expect((screen.getByLabelText('Map entity Twin') as HTMLSelectElement).value).toBe('app-a');
+    expect((screen.getByLabelText('Map entity Unknown One') as HTMLSelectElement).value).toBe('app-a');
+    expect((screen.getByLabelText('Map entity Unknown Two') as HTMLSelectElement).value).toBe('__unmapped__');
+    expect(screen.queryByText('4. Xác nhận liên kết với báo cáo này')).toBeNull();
+    fireEvent.click(screen.getByText('Xác thực lại mappings'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('4. Xác nhận liên kết với báo cáo này')).toBeTruthy();
+    fireEvent.click(screen.getByText('4. Xác nhận liên kết với báo cáo này'));
+    await waitFor(() => expect(reportApi.importQuantitativeDataset).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(reportApi.importQuantitativeDataset).mock.calls[0][1].entity_mappings).toEqual({ Twin: 'app-a', 'Unknown One': 'app-a', 'Unknown Two': '__unmapped__' });
+  });
+
+  it('ignores a validation response after its input has changed', async () => {
+    let resolveStale!: (result: typeof preview) => void;
+    const stalePreview = {
+      ...preview,
+      ambiguities: [{ csv_value: 'Old input', row: 2, candidates: ['app-a'] }],
+      unmatched_entities: [],
+    };
+    vi.mocked(reportApi.previewQuantitativeDataset)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveStale = resolve as (result: typeof preview) => void; }))
+      .mockResolvedValueOnce(preview as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Import CSV'));
+    const file = new File(['Entity;Value\nAlpha;1\n'], 'stale.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
+    fireEvent.click(screen.getByText('Or map multiple metric columns (wide CSV)'));
+    fireEvent.click(screen.getByLabelText('Value'));
+    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
+    resolveStale(stalePreview as never);
+    await waitFor(() => expect(screen.queryByText('Old input')).toBeNull());
+    expect(screen.queryByText('4. Xác nhận liên kết với báo cáo này')).toBeNull();
+
+    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[1]?.[1].explicit_values?.geo).toBe('Worldwide');
+    expect(await screen.findByText('4. Xác nhận liên kết với báo cáo này')).toBeTruthy();
+  });
 });

@@ -276,6 +276,60 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(len(saved.json()["metric_mappings"]), 2)
         self.assertEqual(len(saved.json()["observations"]), 2)
 
+    def test_sensor_style_csv_mapping_validation_import_refresh_and_raw_persistence(self):
+        report_id = self.create_report("Sensor Tower intake")
+        report = self.client.get(f"/api/v1/reports/{report_id}").json()
+        data = report["research_data"]
+        data["entities"][0]["name"] = "Twin"
+        data["entities"][1]["name"] = "Twin"
+        self.assertEqual(self.client.put(f"/api/v1/reports/{report_id}/structured-data", json={"research_data": data}).status_code, 200)
+        csv_content = (
+            "Unified Name;Unified ID;Platform;Downloads (Absolute);Revenue (Absolute)\n"
+            "Twin;id-twin;Unified;1200;20\n"
+            "Unknown One;id-one;Unified;900;15\n"
+            "Unknown Two;id-two;Unified;bad-number;10\n"
+        )
+        body = {
+            "filename": "sensor-worldwide.csv", "csv_content": csv_content,
+            "field_mapping": {"entity_id": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [
+                {"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower export"},
+                {"column": "Revenue (Absolute)", "metric_id": "revenue_absolute", "metric_definition": "Revenue (Absolute)", "unit": "USD", "methodology": "Sensor Tower export"},
+            ],
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-14", "period_end": "2026-11-13", "granularity": "rolling_period"},
+        }
+        first_preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(first_preview.status_code, 200, first_preview.text)
+        self.assertEqual(first_preview.json()["total_rows"], 6)
+        self.assertEqual(len(first_preview.json()["ambiguities"]), 1)
+        self.assertEqual({item["csv_value"] for item in first_preview.json()["unmatched_entities"]}, {"Unknown One", "Unknown Two"})
+        body["entity_mappings"] = {"Twin": "product-a", "Unknown One": "product-b", "Unknown Two": "__unmapped__"}
+        resolved_preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(resolved_preview.status_code, 200, resolved_preview.text)
+        self.assertEqual(resolved_preview.json()["ambiguities"], [])
+        self.assertEqual(resolved_preview.json()["unmatched_entities"], [])
+        observations = resolved_preview.json()["observations"]
+        self.assertTrue(any("non-numeric value 'bad-number'" in " ".join(item["validation_reasons"]) for item in observations))
+        self.assertTrue(all(item["scope_compatible"] is False for item in observations), "Unified must not be inferred as Android for this Android report")
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        self.assertEqual(len(saved.json()["observations"]), 6)
+        self.assertEqual(saved.json()["compatibility_status"], "incompatible")
+        refreshed = self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets")
+        self.assertEqual(refreshed.status_code, 200, refreshed.text)
+        self.assertEqual(len(refreshed.json()["items"]), 1)
+        persisted = refreshed.json()["items"][0]
+        self.assertEqual(len(persisted["observations"]), 6)
+        self.assertTrue(any("non-numeric value 'bad-number'" in " ".join(item["validation_reasons"]) for item in persisted["observations"]))
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                dataset = session.get(QuantitativeDataset, saved.json()["id"])
+                self.assertIsNotNone(dataset)
+                self.assertEqual(dataset.original_csv, csv_content)
+        finally:
+            engine.dispose()
+
     def test_ambiguous_entity_mapping_requires_confirmation_then_accepts_selection(self):
         report_id = self.create_report()
         raw = self.client.get(f"/api/v1/reports/{report_id}").json()
