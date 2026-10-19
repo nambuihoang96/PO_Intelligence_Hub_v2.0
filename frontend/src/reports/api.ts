@@ -60,9 +60,10 @@ export type BenchmarkWorkspace = { custom_dimensions: string[]; entries: Benchma
 export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY'; research_contract_version?: 'po_research_v1'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };
 export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { content: string; structured_json?: string };
-export type QuantitativeDatasetInput = { filename: string; csv_content: string; field_mapping: Record<string, string>; entity_mappings?: Record<string, string> };
+export type QuantitativeMetricColumnMapping = { column: string; metric_id: string; metric_definition: string; unit?: string | null; methodology?: string | null };
+export type QuantitativeDatasetInput = { filename: string; csv_content: string; field_mapping: Record<string, string>; entity_mappings?: Record<string, string>; metric_mappings?: QuantitativeMetricColumnMapping[]; explicit_values?: Record<string, string> };
 export type QuantitativeDatasetPreview = {
-  observations: QuantitativeObservation[]; validation_reasons: string[]; ambiguities: { csv_value: string; row: number; candidates: string[] }[];
+  observations: QuantitativeObservation[]; validation_reasons: string[]; ambiguities: { csv_value: string; row: number; candidates: string[] }[]; unmatched_entities?: { csv_value: string; row: number; candidates: string[] }[];
   compatibility_status: 'compatible' | 'partial' | 'incompatible'; total_rows: number; complete_observations: number;
   scope_compatible_observations: number; comparison_ready_observations: number; duplicate_rows: number;
 };

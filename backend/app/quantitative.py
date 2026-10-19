@@ -8,7 +8,7 @@ import hashlib
 import io
 import math
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -42,7 +42,29 @@ def _date(value: str | None) -> date | None:
     try:
         return date.fromisoformat(value)
     except ValueError:
+        # Sensor Tower's export uses day-first dates. Accept this only when
+        # the day is unambiguous; ambiguous dates must be explicitly corrected.
+        match = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", value.strip())
+        if match and int(match.group(1)) > 12:
+            try:
+                return datetime.strptime(value.strip(), "%d/%m/%Y").date()
+            except ValueError:
+                return None
         return None
+
+
+def detect_csv_delimiter(csv_text: str) -> str:
+    """Detect a common CSV delimiter from the first non-empty record."""
+    first_line = next((line for line in csv_text.splitlines() if line.strip()), "")
+    if not first_line:
+        raise ValueError("CSV must contain a header row and at least one observation row.")
+    candidates = [(
+        len(next(csv.reader([first_line], delimiter=delimiter))), delimiter,
+    ) for delimiter in (",", ";", "\t", "|")]
+    column_count, delimiter = max(candidates, key=lambda item: item[0])
+    if column_count < 2:
+        raise ValueError("Could not detect a column separator. Use comma, semicolon, tab, or pipe-delimited CSV.")
+    return delimiter
 
 
 def _report_years(value: str | None) -> tuple[int, int] | None:
@@ -105,11 +127,15 @@ def parse_csv_observations(
     entities: list[dict[str, Any]],
     field_mapping: dict[str, str],
     entity_mappings: dict[str, str],
+    metric_mappings: list[dict[str, Any]] | None = None,
+    explicit_values: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]], str]:
     """Map CSV rows to typed observations and surface ambiguous entity matches."""
-    reader = csv.DictReader(io.StringIO(csv_text, newline=""))
+    delimiter = detect_csv_delimiter(csv_text)
+    reader = csv.DictReader(io.StringIO(csv_text, newline=""), delimiter=delimiter)
     if not reader.fieldnames:
         raise ValueError("CSV must contain a header row and at least one observation row.")
+    reader.fieldnames = [name.strip().lstrip("\ufeff") for name in reader.fieldnames]
     if len(reader.fieldnames) > 256:
         raise ValueError("CSV has too many columns (maximum 256).")
     if len(set(reader.fieldnames)) != len(reader.fieldnames):
@@ -124,6 +150,22 @@ def parse_csv_observations(
             details.append("CSV header(s) not found: " + ", ".join(sorted(unknown_headers)))
         raise ValueError("; ".join(details))
 
+    metric_mappings = metric_mappings or []
+    explicit_values = explicit_values or {}
+    if metric_mappings:
+        metric_columns = [str(item.get("column", "")) for item in metric_mappings]
+        if len(set(metric_columns)) != len(metric_columns):
+            raise ValueError("Each metric column can only be mapped once.")
+        missing_metric_columns = set(metric_columns) - set(reader.fieldnames)
+        if missing_metric_columns:
+            raise ValueError("CSV metric column(s) not found: " + ", ".join(sorted(missing_metric_columns)))
+        if {"metric_id", "value"} & set(field_mapping):
+            raise ValueError("Wide metric mappings replace the Metric identity and Exact value column mappings.")
+    elif "value" not in field_mapping:
+        raise ValueError("Map an Exact value column, or add one or more metric columns.")
+    if set(explicit_values) & set(field_mapping):
+        raise ValueError("Choose a CSV column or an explicit value for: " + ", ".join(sorted(set(explicit_values) & set(field_mapping))))
+
     entity_by_key = {str(item["key"]): item for item in entities}
     names: dict[str, list[str]] = {}
     for entity in entities:
@@ -131,63 +173,66 @@ def parse_csv_observations(
     rows: list[dict[str, Any]] = []
     reasons: list[str] = []
     ambiguities: list[dict[str, Any]] = []
+    unmatched_entities: list[dict[str, Any]] = []
     seen_observations: dict[tuple[str, ...], int] = {}
     duplicate_rows = 0
     years = _report_years(report_period)
+    populated_row_count = 0
     for row_number, row in enumerate(reader, 2):
-        if row_number > 10002:
-            raise ValueError("CSV has too many data rows (maximum 10,000).")
         if None in row:
             raise ValueError(f"CSV row {row_number} has more values than the header defines.")
         if not any((value or "").strip() for value in row.values()):
             continue
+        populated_row_count += 1
+        if populated_row_count > 10000:
+            raise ValueError("CSV has too many non-empty data rows (maximum 10,000).")
         raw = {target: (row.get(header) or "").strip() for target, header in field_mapping.items()}
+        for field_name, value in explicit_values.items():
+            raw[field_name] = value.strip()
         raw_entity = raw.get("entity_id") or None
         entity_id = None
-        row_reasons: list[str] = []
+        entity_reasons: list[str] = []
         if raw_entity:
             if raw_entity in entity_by_key:
                 entity_id = raw_entity
             elif raw_entity in entity_mappings:
                 mapped_key = entity_mappings[raw_entity]
-                if mapped_key not in entity_by_key:
+                if mapped_key == "__unmapped__":
+                    entity_reasons.append("Entity intentionally left unmapped by the user.")
+                elif mapped_key not in entity_by_key:
                     raise ValueError(f"Entity mapping for '{raw_entity}' refers to unknown report entity '{mapped_key}'.")
-                entity_id = mapped_key
+                else:
+                    entity_id = mapped_key
             else:
                 candidates = names.get(raw_entity.casefold(), [])
                 if len(candidates) == 1:
                     entity_id = candidates[0]
                 elif len(candidates) > 1:
                     ambiguities.append({"csv_value": raw_entity, "row": row_number, "candidates": candidates})
-                    row_reasons.append("Entity mapping needs user confirmation.")
+                    entity_reasons.append("Entity mapping needs user confirmation.")
                 else:
-                    row_reasons.append(f"No report entity matches '{raw_entity}'.")
+                    unmatched_entities.append({"csv_value": raw_entity, "row": row_number, "candidates": []})
+                    if raw_entity in entity_mappings:
+                        entity_reasons.append(f"Entity mapping for '{raw_entity}' is invalid.")
+                    else:
+                        entity_reasons.append(f"No report entity matches '{raw_entity}'.")
         else:
-            row_reasons.append("Entity mapping is not provided.")
+            entity_reasons.append("Entity mapping is not provided.")
 
-        value: float | None = None
-        if raw.get("value"):
-            try:
-                numeric_text = raw["value"]
-                if not EXACT_NUMBER.fullmatch(numeric_text):
-                    raise ValueError("not a strict numeric literal")
-                value = float(numeric_text.replace(",", ""))
-                if not math.isfinite(value):
-                    value = None
-                    row_reasons.append(f"CSV row {row_number} value must be a finite exact number.")
-            except ValueError:
-                row_reasons.append(f"CSV row {row_number} has a non-numeric value.")
-        else:
-            pass
         period_start = raw.get("period_start") or None
         period_end = raw.get("period_end") or None
         start_date, end_date = _date(period_start), _date(period_end)
+        if start_date and period_start:
+            period_start = start_date.isoformat()
+        if end_date and period_end:
+            period_end = end_date.isoformat()
+        dimension_reasons: list[str] = []
         if period_start and start_date is None:
-            row_reasons.append(f"CSV row {row_number} has an invalid period_start; use YYYY-MM-DD.")
+            dimension_reasons.append(f"CSV row {row_number} has an invalid period_start; use YYYY-MM-DD or an unambiguous day-first date.")
         if period_end and end_date is None:
-            row_reasons.append(f"CSV row {row_number} has an invalid period_end; use YYYY-MM-DD.")
+            dimension_reasons.append(f"CSV row {row_number} has an invalid period_end; use YYYY-MM-DD or an unambiguous day-first date.")
         if start_date and end_date and start_date > end_date:
-            row_reasons.append(f"CSV row {row_number} period_start is after period_end.")
+            dimension_reasons.append(f"CSV row {row_number} period_start is after period_end.")
 
         geo = raw.get("geo") or None
         platform = raw.get("platform") or None
@@ -195,18 +240,18 @@ def parse_csv_observations(
         if source_reference:
             parsed_source = urlsplit(source_reference)
             if parsed_source.scheme.casefold() not in {"http", "https"} or not parsed_source.hostname or parsed_source.username or parsed_source.password:
-                row_reasons.append(f"CSV row {row_number} source must be an HTTP(S) URL without credentials.")
+                dimension_reasons.append(f"CSV row {row_number} source must be an HTTP(S) URL without credentials.")
                 source_reference = None
         if geo and report_geo.strip().casefold() in {"unknown", "not applicable", "n/a"}:
-            row_reasons.append(f"Report GEO scope '{report_geo}' is unspecified.")
+            dimension_reasons.append(f"Report GEO scope '{report_geo}' is unspecified.")
         elif geo and not _scope_compatible(geo, report_geo, "geo"):
-            row_reasons.append(f"GEO '{geo}' differs from report scope '{report_geo}'.")
+            dimension_reasons.append(f"GEO '{geo}' differs from report scope '{report_geo}'.")
         if platform and report_platform.strip().casefold() in {"unknown", "not applicable", "n/a"}:
-            row_reasons.append(f"Report platform scope '{report_platform}' is unspecified.")
+            dimension_reasons.append(f"Report platform scope '{report_platform}' is unspecified.")
         elif platform and not _scope_compatible(platform, report_platform, "platform"):
-            row_reasons.append(f"Platform '{platform}' differs from report scope '{report_platform}'.")
+            dimension_reasons.append(f"Platform '{platform}' differs from report scope '{report_platform}'.")
         if years and start_date and end_date and (end_date.year < years[0] or start_date.year > years[1]):
-            row_reasons.append("Observation period does not overlap the report period.")
+            dimension_reasons.append("Observation period does not overlap the report period.")
 
         scope_compatible: bool | None = True
         for supplied, report_scope, dimension in ((geo, report_geo, "GEO"), (platform, report_platform, "platform")):
@@ -216,39 +261,68 @@ def parse_csv_observations(
             elif not _scope_compatible(supplied, report_scope, "geo" if dimension == "GEO" else "platform"):
                 scope_compatible = False
 
-        observation = QuantitativeObservation(
-            metric_id=normalize_metric_id(raw.get("metric_id")),
-            metric_definition=raw.get("metric_definition") or None,
-            value=value,
-            unit=normalize_unit(raw.get("unit")),
-            entity_id=entity_id,
-            geo=geo,
-            platform=platform,
-            period_start=period_start,
-            period_end=period_end,
-            granularity=raw.get("granularity") or None,
-            methodology=raw.get("methodology") or None,
-            source_reference=source_reference,
-            verification_status="unverified",
-            provenance_type="csv_dataset",
-            provenance_id=report_id,
-            observation_type="imported",
-            validation_reasons=row_reasons,
-            scope_compatible=scope_compatible,
-            import_status="imported",
-        )
-        identity = tuple(str(getattr(observation, field) or "").strip().casefold() for field in (
-            "metric_id", "metric_definition", "unit", "entity_id", "geo", "platform",
-            "period_start", "period_end", "granularity", "methodology", "value",
-        ))
-        if identity in seen_observations:
-            duplicate_rows += 1
-            row_reasons.append(f"Duplicate observation of CSV row {seen_observations[identity]}.")
-            observation = observation.model_copy(update={"validation_reasons": [*observation.validation_reasons, row_reasons[-1]], "complete_observation": False, "comparison_ready": False})
+        if metric_mappings:
+            measures = [
+                {**mapping, "value": (row.get(mapping["column"]) or "").strip()}
+                for mapping in metric_mappings
+            ]
         else:
-            seen_observations[identity] = row_number
-        rows.append(observation.model_dump(mode="json"))
-        reasons.extend(observation.validation_reasons)
+            measures = [{
+                "metric_id": raw.get("metric_id"),
+                "metric_definition": raw.get("metric_definition"),
+                "unit": raw.get("unit"),
+                "methodology": raw.get("methodology"),
+                "value": raw.get("value"),
+            }]
+        for measure in measures:
+            row_reasons = [*entity_reasons, *dimension_reasons]
+            value: float | None = None
+            numeric_text = str(measure.get("value") or "").strip()
+            if numeric_text:
+                try:
+                    if not EXACT_NUMBER.fullmatch(numeric_text):
+                        raise ValueError("not a strict numeric literal")
+                    value = float(numeric_text.replace(",", ""))
+                    if not math.isfinite(value):
+                        value = None
+                        row_reasons.append(f"CSV row {row_number} value must be a finite exact number.")
+                except ValueError:
+                    row_reasons.append(f"CSV row {row_number} has a non-numeric value '{numeric_text}'.")
+            else:
+                row_reasons.append(f"CSV row {row_number} has an empty mapped value.")
+            observation = QuantitativeObservation(
+                metric_id=normalize_metric_id(str(measure.get("metric_id") or "")),
+                metric_definition=str(measure.get("metric_definition") or "").strip() or None,
+                value=value,
+                unit=normalize_unit(str(measure.get("unit") or raw.get("unit") or "")),
+                entity_id=entity_id,
+                geo=geo,
+                platform=platform,
+                period_start=period_start,
+                period_end=period_end,
+                granularity=raw.get("granularity") or None,
+                methodology=str(measure.get("methodology") or raw.get("methodology") or "").strip() or None,
+                source_reference=source_reference,
+                verification_status="unverified",
+                provenance_type="csv_dataset",
+                provenance_id=report_id,
+                observation_type="imported",
+                validation_reasons=row_reasons,
+                scope_compatible=scope_compatible,
+                import_status="imported",
+            )
+            identity = tuple(str(getattr(observation, field) or "").strip().casefold() for field in (
+                "metric_id", "metric_definition", "unit", "entity_id", "geo", "platform",
+                "period_start", "period_end", "granularity", "methodology", "value",
+            ))
+            if identity in seen_observations:
+                duplicate_rows += 1
+                duplicate_reason = f"Duplicate observation of CSV row {seen_observations[identity]}."
+                observation = observation.model_copy(update={"validation_reasons": [*observation.validation_reasons, duplicate_reason], "complete_observation": False, "comparison_ready": False})
+            else:
+                seen_observations[identity] = row_number
+            rows.append(observation.model_dump(mode="json"))
+            reasons.extend(observation.validation_reasons)
 
     if not rows:
         raise ValueError("CSV contains no non-empty data rows.")
@@ -258,7 +332,11 @@ def parse_csv_observations(
     status = "compatible" if all(item.get("complete_observation") and item.get("scope_compatible") is True for item in rows) and not ambiguities else ("incompatible" if incompatible_count == len(rows) else "partial")
     if duplicate_rows:
         unique_reasons.append(f"{duplicate_rows} duplicate observation row(s) need review.")
-    return rows, unique_reasons, ambiguities, status
+    mapping_requests = list({
+        (item["csv_value"], tuple(item["candidates"])): item
+        for item in [*ambiguities, *unmatched_entities]
+    }.values())
+    return rows, unique_reasons, mapping_requests, status
 
 
 def compatible_for_comparison(left: dict[str, Any], right: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -269,9 +347,12 @@ def compatible_for_comparison(left: dict[str, Any], right: dict[str, Any]) -> tu
             reasons.append(f"Missing {label} on one or both observations.")
         elif str(left[field]).strip().casefold() != str(right[field]).strip().casefold():
             reasons.append(f"Different {label}.")
-    for field, label in (("value", "exact numeric value"), ("period_start", "period start"), ("period_end", "period end"), ("source_reference", "source provenance"), ("provenance_id", "dataset/report provenance")):
+    for field, label in (("value", "exact numeric value"), ("period_start", "period start"), ("period_end", "period end"), ("provenance_id", "dataset/report provenance")):
         if left.get(field) in (None, "") or right.get(field) in (None, ""):
             reasons.append(f"Missing {label} on one or both observations.")
+    for observation in (left, right):
+        if not observation.get("source_reference") and not (observation.get("provenance_type") == "csv_dataset" and observation.get("provenance_id")):
+            reasons.append("Missing source provenance on one or both observations.")
     if left.get("scope_compatible") is False or right.get("scope_compatible") is False:
         reasons.append("One or both observations are outside the report scope.")
     for side, observation in (("left", left), ("right", right)):

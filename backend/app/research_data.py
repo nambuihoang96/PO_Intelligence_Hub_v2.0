@@ -170,12 +170,13 @@ class QuantitativeObservation(ResearchModel):
             ("period_start", "period start"),
             ("period_end", "period end"),
             ("granularity", "period granularity"),
-            ("source_reference", "source reference"),
             ("provenance_id", "data provenance"),
         ):
             missing_reason = f"Missing {label}."
             if getattr(self, field_name) is None and missing_reason not in reasons:
                 reasons.append(missing_reason)
+        if self.observation_type == "reported" and self.source_reference is None and "Missing source reference." not in reasons:
+            reasons.append("Missing source reference.")
         for field_name in ("period_start", "period_end"):
             value = getattr(self, field_name)
             if value is not None:

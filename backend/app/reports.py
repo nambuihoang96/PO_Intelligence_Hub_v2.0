@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport, QuantitativeDataset, new_id
-from backend.app.quantitative import assess_observation_readiness, csv_digest, parse_csv_observations
+from backend.app.quantitative import assess_observation_readiness, csv_digest, detect_csv_delimiter, parse_csv_observations
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
@@ -173,6 +173,17 @@ def get_report(report_id: str, session: SessionDependency) -> ImportedReportRead
 
 
 def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchReport, duplicate: bool = False) -> QuantitativeDatasetRead:
+    saved_mapping = dataset.field_mapping_json or {}
+    if "field_mapping" in saved_mapping:
+        field_mapping = saved_mapping.get("field_mapping", {})
+        metric_mappings = saved_mapping.get("metric_mappings", [])
+        explicit_values = saved_mapping.get("explicit_values", {})
+        delimiter = saved_mapping.get("delimiter", ",")
+    else:
+        field_mapping = saved_mapping
+        metric_mappings = []
+        explicit_values = {}
+        delimiter = ","
     observations = [assess_observation_readiness(item, report_geo=report.geo, report_platform=report.os) for item in (dataset.observations_json or [])]
     complete_count = sum(bool(item.get("complete_observation")) for item in observations)
     scope_count = sum(item.get("scope_compatible") is True for item in observations)
@@ -185,7 +196,10 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         "report_id": dataset.report_id,
         "filename": dataset.filename,
         "content_sha256": dataset.content_sha256,
-        "field_mapping": dataset.field_mapping_json or {},
+        "field_mapping": field_mapping,
+        "metric_mappings": metric_mappings,
+        "explicit_values": explicit_values,
+        "delimiter": delimiter,
         "entity_mappings": dataset.entity_mappings_json or {},
         "observations": observations,
         "compatibility_status": compatibility,
@@ -210,6 +224,8 @@ def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatase
             entities=(report.research_data_json or {}).get("entities", []),
             field_mapping=payload.field_mapping,
             entity_mappings=payload.entity_mappings,
+            metric_mappings=[item.model_dump() for item in payload.metric_mappings],
+            explicit_values=payload.explicit_values,
         )
     except (ValueError, csv.Error) as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_QUANTITATIVE_DATASET", "message": str(exc)}) from exc
@@ -221,7 +237,8 @@ def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatase
     return QuantitativeDatasetPreview(
         observations=observations,
         validation_reasons=reasons,
-        ambiguities=ambiguities,
+        ambiguities=[item for item in ambiguities if item.get("candidates")],
+        unmatched_entities=[item for item in ambiguities if not item.get("candidates")],
         compatibility_status=compatibility,
         total_rows=len(observations),
         complete_observations=complete,
@@ -264,13 +281,14 @@ def import_quantitative_dataset(
     preview = _preview_dataset(report, payload)
     observations = [item.model_dump(mode="json") for item in preview.observations]
     reasons = preview.validation_reasons
-    ambiguities = preview.ambiguities
+    ambiguities = [*preview.ambiguities, *preview.unmatched_entities]
     compatibility = preview.compatibility_status
     if ambiguities:
         raise HTTPException(status_code=409, detail={
             "code": "AMBIGUOUS_ENTITY_MAPPING",
-            "message": "One or more CSV entity names match multiple report entities. Confirm the mappings and retry.",
-            "ambiguous_mappings": ambiguities,
+        "message": "One or more CSV entity values need an explicit mapping or must be left unmapped before linking.",
+        "entity_mappings_required": ambiguities,
+        "ambiguous_mappings": ambiguities,
         })
     dataset_id = new_id()
     for item in observations:
@@ -282,7 +300,12 @@ def import_quantitative_dataset(
         filename=payload.filename,
         content_sha256=digest,
         original_csv=payload.csv_content,
-        field_mapping_json=payload.field_mapping,
+        field_mapping_json={
+            "field_mapping": payload.field_mapping,
+            "metric_mappings": [item.model_dump() for item in payload.metric_mappings],
+            "explicit_values": payload.explicit_values,
+            "delimiter": detect_csv_delimiter(payload.csv_content),
+        },
         entity_mappings_json=payload.entity_mappings,
         observations_json=observations,
         compatibility_status=compatibility,

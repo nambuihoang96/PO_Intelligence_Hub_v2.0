@@ -587,12 +587,40 @@ class ReprocessResult(ImportedReportRead):
     message: str
 
 
+class QuantitativeMetricColumnMapping(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    column: str = Field(min_length=1, max_length=256)
+    metric_id: str = Field(min_length=1, max_length=160)
+    metric_definition: str = Field(min_length=1, max_length=2000)
+    unit: str | None = Field(default=None, max_length=80)
+    methodology: str | None = Field(default=None, max_length=500)
+
+
 class QuantitativeDatasetImport(APIModel):
     model_config = ConfigDict(extra="forbid")
     filename: str = Field(min_length=1, max_length=255)
     csv_content: str = Field(min_length=1, max_length=5_000_000)
-    field_mapping: dict[str, str] = Field(min_length=1, max_length=12)
+    field_mapping: dict[str, str] = Field(max_length=12)
     entity_mappings: dict[str, str] = Field(default_factory=dict, max_length=1000)
+    metric_mappings: list[QuantitativeMetricColumnMapping] = Field(default_factory=list, max_length=32)
+    explicit_values: dict[str, str] = Field(default_factory=dict, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_mapping_configuration(self) -> "QuantitativeDatasetImport":
+        if len({item.column for item in self.metric_mappings}) != len(self.metric_mappings):
+            raise ValueError("Each metric column can only be mapped once.")
+        allowed_explicit = {"unit", "geo", "platform", "period_start", "period_end", "granularity", "methodology", "source_reference"}
+        unknown = set(self.explicit_values) - allowed_explicit
+        if unknown:
+            raise ValueError("Unsupported explicit value field(s): " + ", ".join(sorted(unknown)))
+        conflicts = set(self.explicit_values) & set(self.field_mapping)
+        if conflicts:
+            raise ValueError("Choose a CSV column or an explicit value for: " + ", ".join(sorted(conflicts)))
+        if self.metric_mappings and {"metric_id", "value"} & set(self.field_mapping):
+            raise ValueError("Wide metric mappings replace the Metric identity and Exact value column mappings.")
+        if not self.metric_mappings and "value" not in self.field_mapping:
+            raise ValueError("Map an Exact value column, or add one or more metric columns.")
+        return self
 
     @field_validator("filename")
     @classmethod
@@ -608,7 +636,10 @@ class QuantitativeDatasetRead(APIModel):
     report_id: str
     filename: str
     content_sha256: str
-    field_mapping: dict[str, str]
+    field_mapping: dict[str, Any]
+    metric_mappings: list[QuantitativeMetricColumnMapping] = Field(default_factory=list)
+    explicit_values: dict[str, str] = Field(default_factory=dict)
+    delimiter: str = ","
     entity_mappings: dict[str, str]
     observations: list[QuantitativeObservation]
     compatibility_status: Literal["compatible", "partial", "incompatible"]
@@ -626,6 +657,7 @@ class QuantitativeDatasetPreview(APIModel):
     observations: list[QuantitativeObservation]
     validation_reasons: list[str]
     ambiguities: list[dict[str, Any]]
+    unmatched_entities: list[dict[str, Any]] = Field(default_factory=list)
     compatibility_status: Literal["compatible", "partial", "incompatible"]
     total_rows: int
     complete_observations: int

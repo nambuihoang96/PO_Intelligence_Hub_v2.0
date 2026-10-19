@@ -19,6 +19,42 @@ from backend.app.research_data import QuantitativeObservation, UniversalResearch
 
 
 class QuantitativeObservationTest(unittest.TestCase):
+    def test_sensor_tower_semicolon_wide_export_and_blank_padding(self):
+        content = (
+            "Unified Name;Unified ID;Platform;Downloads (Absolute);Downloads (YoY Growth)\n"
+            "App A;id-a;Unified;1200;300\n"
+            "App B;id-b;Unified;900;150\n"
+            ";;;;\n"
+        )
+        rows, _, unresolved, status = parse_csv_observations(
+            content, report_id="report", report_geo="Worldwide", report_platform="Unified",
+            report_period="2026", entities=[{"key": "id-a", "name": "App A"}, {"key": "id-b", "name": "App B"}],
+            field_mapping={"entity_id": "Unified ID", "platform": "Platform"}, entity_mappings={},
+            metric_mappings=[
+                {"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower export"},
+                {"column": "Downloads (YoY Growth)", "metric_id": "downloads_yoy_growth", "metric_definition": "Downloads (YoY Growth)", "unit": "downloads", "methodology": "Sensor Tower export"},
+            ],
+            explicit_values={"geo": "Worldwide", "period_start": "2026-10-14", "period_end": "2026-11-13", "granularity": "rolling_period"},
+        )
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(unresolved, [])
+        self.assertEqual(status, "compatible")
+        self.assertTrue(all(item["complete_observation"] for item in rows))
+        self.assertEqual(rows[0]["period_start"], "2026-10-14")
+
+    def test_sensor_tower_unmapped_entity_is_retained_as_incomplete(self):
+        rows, _, unresolved, _ = parse_csv_observations(
+            "Unified ID;Downloads (Absolute)\nid-unknown;12\n", report_id="report", report_geo="Worldwide", report_platform="Unified", report_period=None,
+            entities=[], field_mapping={"entity_id": "Unified ID"}, entity_mappings={"id-unknown": "__unmapped__"},
+            metric_mappings=[{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            explicit_values={"geo": "Worldwide", "platform": "Unified", "period_start": "2026-10-14", "period_end": "2026-11-13", "granularity": "rolling_period"},
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(unresolved, [])
+        self.assertIsNone(rows[0]["entity_id"])
+        self.assertFalse(rows[0]["complete_observation"])
+        self.assertIn("intentionally left unmapped", " ".join(rows[0]["validation_reasons"]))
+
     def test_exact_report_observation_is_unverified_and_complete(self):
         value = QuantitativeObservation(
             metric_id="weekly downloads", metric_definition="Downloads per week", value=1250,
@@ -218,6 +254,27 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertTrue(duplicate.json()["duplicate"])
         listing = self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets")
         self.assertEqual(len(listing.json()["items"]), 1)
+
+    def test_semicolon_wide_csv_import_persists_mapping_and_unpivoted_metrics(self):
+        report_id = self.create_report()
+        body = {
+            "filename": "sensor-export.csv",
+            "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute);Downloads (YoY Growth)\nApp A;product-a;Android;1200;300\n",
+            "field_mapping": {"entity_id": "Unified ID", "platform": "Platform"},
+            "metric_mappings": [
+                {"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower export"},
+                {"column": "Downloads (YoY Growth)", "metric_id": "downloads_yoy_growth", "metric_definition": "Downloads (YoY Growth)", "unit": "downloads", "methodology": "Sensor Tower export"},
+            ],
+            "explicit_values": {"geo": "US", "period_start": "2026-10-14", "period_end": "2026-11-13", "granularity": "rolling_period"},
+        }
+        preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["total_rows"], 2)
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        self.assertEqual(saved.json()["delimiter"], ";")
+        self.assertEqual(len(saved.json()["metric_mappings"]), 2)
+        self.assertEqual(len(saved.json()["observations"]), 2)
 
     def test_ambiguous_entity_mapping_requires_confirmation_then_accepts_selection(self):
         report_id = self.create_report()

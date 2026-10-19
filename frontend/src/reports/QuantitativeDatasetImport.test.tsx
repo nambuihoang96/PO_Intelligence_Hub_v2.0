@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuantitativeDatasetImport } from './QuantitativeDatasetImport';
 import { reportApi, type ImportedReport } from './api';
@@ -21,7 +21,7 @@ const preview = {
 };
 
 describe('QuantitativeDatasetImport', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { cleanup(); vi.clearAllMocks(); });
 
   it('shows a local file preview and does not persist before explicit confirm', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
@@ -42,5 +42,28 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.click(screen.getByText('4. Xác nhận liên kết với báo cáo này'));
     await waitFor(() => expect(reportApi.importQuantitativeDataset).toHaveBeenCalledTimes(1));
     expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it('detects semicolon wide CSV and sends only confirmed scope plus selected metrics', async () => {
+    vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Import CSV'));
+    const file = new File(['Unified Name;Unified ID;Platform;Downloads (Absolute)\nApp A;id-a;Unified;1200\n'], 'Worldwide Oct 14, 2026 - Nov 13, 2026.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+    expect(screen.getByText(/dấu phân cách ;/)).toBeTruthy();
+    fireEvent.click(screen.getByText('Or map multiple metric columns (wide CSV)'));
+    fireEvent.click(screen.getByLabelText('Downloads (Absolute)'));
+    fireEvent.change(screen.getAllByRole('combobox')[2], { target: { value: 'Platform' } });
+    fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
+    fireEvent.change(screen.getByLabelText('Period start · giá trị xác nhận'), { target: { value: '2026-10-14' } });
+    fireEvent.change(screen.getByLabelText('Period end · giá trị xác nhận'), { target: { value: '2026-11-13' } });
+    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[0][1];
+    expect(payload.csv_content).toContain('Unified ID');
+    expect(payload.field_mapping).toMatchObject({ entity_id: 'Unified ID', platform: 'Platform' });
+    expect(payload.explicit_values).toMatchObject({ geo: 'Worldwide', period_start: '2026-10-14', period_end: '2026-11-13' });
+    expect(payload.metric_mappings).toEqual([expect.objectContaining({ column: 'Downloads (Absolute)', metric_definition: 'Downloads (Absolute)' })]);
   });
 });
