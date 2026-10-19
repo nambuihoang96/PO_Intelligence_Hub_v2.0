@@ -42,7 +42,7 @@ Used the Codex in-app browser against a local backend/frontend using a separate 
 - **Text-only report:** Overview showed “This report needs semantic structure”; no Insights/Entities/Evidence tabs were fabricated, and Full Report remained available.
 - **Existing PO work:** Opened an existing saved report, viewed an Insight and its source, added an entity to Benchmark, saved PO assessment and Next Action, removed/restored selection, refreshed, and reopened the report. Confirmed the saved assessment, action, and selection persisted. All writes were against the isolated copy.
 - **Viewport:** Browser screenshot/interaction was verified at approximately **1265 × 720 CSS pixels**. The available in-app browser controls do not expose viewport resizing, so exact visual UAT at **1440, 1024, 768, and 390 px is NOT VERIFIED**. CSS breakpoints cover responsive layouts, but this is not a substitute for those viewport checks.
-- **Screenshots:** The browser showed the real Overview during UAT. The browser bridge returned a live screenshot but does not expose an export-to-workspace operation; no screenshot file is attached to this handoff.
+- **Screenshot:** [Research Results Overview preview](UX-RECOVERY-01-preview.png), captured from the local app at 1440×1100.
 
 ## Limitations
 
@@ -59,3 +59,4 @@ Used the Codex in-app browser against a local backend/frontend using a separate 
 
 - Branch: `feat/ux-recovery-01-research-results`
 - Implementation commit SHA: `040afa8bf26722fd71724b54dcc3812c366763a3`
+
