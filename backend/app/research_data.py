@@ -102,6 +102,7 @@ class QuantitativeObservation(ResearchModel):
     value: float | None = Field(default=None, strict=True)
     unit: str | None = Field(default=None, max_length=80)
     entity_id: str | None = Field(default=None, max_length=160)
+    entity_name: str | None = Field(default=None, max_length=500)
     geo: str | None = Field(default=None, max_length=100)
     platform: str | None = Field(default=None, max_length=100)
     period_start: str | None = Field(default=None, max_length=10)
@@ -109,6 +110,7 @@ class QuantitativeObservation(ResearchModel):
     granularity: str | None = Field(default=None, max_length=40)
     methodology: str | None = Field(default=None, max_length=500)
     source_reference: str | None = Field(default=None, max_length=2048)
+    evidence_reference: str | None = Field(default=None, max_length=2048)
     verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
     provenance_type: Literal["research_report", "csv_dataset"] = "research_report"
     provenance_id: str | None = Field(default=None, max_length=36)
@@ -128,6 +130,17 @@ class QuantitativeObservation(ResearchModel):
         parsed = urlsplit(value)
         if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError("source_reference must be an HTTP(S) URL without credentials")
+        return value
+
+    @field_validator("evidence_reference")
+    @classmethod
+    def quantitative_evidence_is_http_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        parsed = urlsplit(value)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("evidence_reference must be an HTTP(S) URL without credentials")
         return value
 
     @field_validator("value")
@@ -152,7 +165,6 @@ class QuantitativeObservation(ResearchModel):
             raise ValueError("reported observations must use research_report provenance")
         if self.observation_type == "reported":
             object.__setattr__(self, "import_status", "reported")
-            object.__setattr__(self, "scope_compatible", None)
         if self.observation_type == "imported" and self.provenance_type != "csv_dataset":
             raise ValueError("imported observations must use csv_dataset provenance")
         return self
@@ -170,13 +182,14 @@ class QuantitativeObservation(ResearchModel):
             ("period_start", "period start"),
             ("period_end", "period end"),
             ("granularity", "period granularity"),
-            ("provenance_id", "data provenance"),
         ):
             missing_reason = f"Missing {label}."
             if getattr(self, field_name) is None and missing_reason not in reasons:
                 reasons.append(missing_reason)
         if self.observation_type == "reported" and self.source_reference is None and "Missing source reference." not in reasons:
             reasons.append("Missing source reference.")
+        if self.observation_type == "reported" and self.evidence_reference is None and "Missing evidence reference." not in reasons:
+            reasons.append("Missing evidence reference.")
         for field_name in ("period_start", "period_end"):
             value = getattr(self, field_name)
             if value is not None:
@@ -232,7 +245,10 @@ class UniversalResearchData(ResearchModel):
         for dimension in self.benchmark_dimensions:
             references += [url for item in dimension.observations for url in item.evidence_references]
         quantitative_sources = [
-            item.source_reference for item in self.quantitative_observations if item.source_reference
+            reference
+            for item in self.quantitative_observations
+            for reference in (item.source_reference, item.evidence_reference)
+            if reference
         ]
         relations = [entity for item in self.findings for entity in item.related_entities]
         relations += [entity for item in self.benchmark_dimensions for entity in item.related_entities]
@@ -459,6 +475,14 @@ def normalize_report(content: str, structured_json: str | None) -> tuple[Univers
         source.model_copy(update={"source_location": derived_sources.get(source.url)})
         for source in structured.evidence_references
     ]
+    # Readiness and local provenance are derived by PO Hub from the saved
+    # report, never trusted from the ChatGPT-supplied JSON.
+    structured.quantitative_observations = [item.model_copy(update={
+        "scope_compatible": None,
+        "provenance_id": None,
+        "import_status": "reported",
+        "comparison_ready": False,
+    }) for item in structured.quantitative_observations]
     # ChatGPT should not count lines. Drop claimed JSON locations and retain
     # only URL locations derived from the readable original report above.
     structured.sections = [section.model_copy(update={

@@ -28,6 +28,7 @@ export type QuantitativeObservation = {
   value: number | null;
   unit: string | null;
   entity_id: string | null;
+  entity_name?: string | null;
   geo: string | null;
   platform: string | null;
   period_start: string | null;
@@ -35,6 +36,7 @@ export type QuantitativeObservation = {
   granularity: string | null;
   methodology?: string | null;
   source_reference: string | null;
+  evidence_reference?: string | null;
   verification_status: 'unverified' | 'needs_review' | 'verified';
   provenance_type: 'research_report' | 'csv_dataset';
   provenance_id: string | null;

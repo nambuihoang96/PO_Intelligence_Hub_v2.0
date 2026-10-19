@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport, QuantitativeDataset, new_id
-from backend.app.quantitative import assess_observation_readiness, csv_digest, detect_csv_delimiter, parse_csv_observations
+from backend.app.quantitative import assess_observation_readiness, assess_report_observations, csv_digest, detect_csv_delimiter, parse_csv_observations
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
@@ -55,7 +55,16 @@ def _orphaned_selections(report: ImportedResearchReport) -> list[dict]:
 
 def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured_update_available: bool = False) -> ImportedReportCreated:
     data = ImportedReportSummary.model_validate(report).model_dump()
-    research = report.research_data_json or {}
+    research = dict(report.research_data_json or {})
+    research["quantitative_observations"] = assess_report_observations(
+        research.get("quantitative_observations", []),
+        report_id=report.id,
+        report_geo=report.geo,
+        report_platform=report.os,
+        report_period=report.research_period,
+        entities=research.get("entities", []),
+        evidence_references=research.get("evidence_references", []),
+    )
     has_results = bool(research.get("findings") or research.get("entities") or research.get("benchmark_dimensions") or research.get("quantitative_observations"))
     has_structure = bool(has_results or research.get("key_takeaways") or research.get("research_gaps") or research.get("po_recommendations"))
     research_status = "STRUCTURED_READY" if has_results else ("STRUCTURED_PARTIAL" if has_structure else "TEXT_ONLY")
@@ -64,7 +73,7 @@ def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured
         parse_status=report.parse_status,
         research_status=research_status,
         research_contract_version="po_research_v1",
-        research_data=report.research_data_json,
+        research_data=research,
         extraction_error=report.extraction_error,
         benchmark_selections=report.benchmark_selections_json,
         benchmark_workspace=report.benchmark_workspace_json or {},

@@ -60,7 +60,8 @@ class QuantitativeObservationTest(unittest.TestCase):
             metric_id="weekly downloads", metric_definition="Downloads per week", value=1250,
             unit="count", entity_id="product-a", geo="US", platform="Android",
             period_start="2026-01-01", period_end="2026-01-31", granularity="month",
-            source_reference="https://example.com/data", provenance_type="research_report", provenance_id="report",
+            source_reference="https://example.com/data", evidence_reference="https://example.com/data",
+            provenance_type="research_report", provenance_id="report",
         )
         self.assertEqual(value.metric_id, "weekly_downloads")
         self.assertEqual(value.verification_status, "unverified")
@@ -236,6 +237,74 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()["id"]
+
+    def test_report_supplied_metrics_import_without_csv_bind_provenance_and_persist(self):
+        raw = "ASMR report source: https://example.com/asmr-q2-2025\nExact supplied observations are in PO_RESEARCH_V1."
+        entities = [
+            {"key": "game-a", "entity_type": "test game", "name": "Game A"},
+            {"key": "game-b", "entity_type": "test game", "name": "Game B"},
+            {"key": "game-c", "entity_type": "test game", "name": "Game C"},
+        ]
+        metric_rows = [
+            {"metric_id": "weekly_downloads", "metric_definition": "Weekly downloads reported by source", "value": value,
+             "unit": "downloads", "entity_id": entity["key"], "entity_name": entity["name"], "geo": "US", "platform": "Android",
+             "period_start": "2025-04-01", "period_end": "2025-06-30", "granularity": "quarter",
+             "methodology": "Source-reported estimate", "source_reference": "https://example.com/asmr-q2-2025",
+             "evidence_reference": "https://example.com/asmr-q2-2025", "verification_status": "unverified",
+             "provenance_type": "research_report", "observation_type": "reported",
+             "scope_compatible": True, "provenance_id": "chatgpt-invented-id"}
+            for entity, value in zip(entities, (12000, 9800, 7450), strict=True)
+        ]
+        payload = {"schema_version": "po_research_v1", "research_data": {
+            "entities": entities, "evidence_references": [{"url": "https://example.com/asmr-q2-2025", "title": "Synthetic UAT source", "verified": False}],
+            "quantitative_observations": metric_rows,
+        }}
+        saved = self.client.post("/api/v1/reports", json={
+            "question": "Which ASMR games showed notable download movements in the US Android market during Q2/2025?",
+            "geo": "US", "os": "Android", "research_period": "Q2/2025", "content": raw,
+            "structured_json": json.dumps(payload),
+        })
+        self.assertEqual(saved.status_code, 201, saved.text)
+        report_id = saved.json()["id"]
+        data = self.client.get(f"/api/v1/reports/{report_id}").json()
+        observations = data["research_data"]["quantitative_observations"]
+        self.assertEqual(len(observations), 3)
+        self.assertEqual([row["entity_name"] for row in observations], ["Game A", "Game B", "Game C"])
+        self.assertTrue(all(row["complete_observation"] and row["comparison_ready"] for row in observations), observations)
+        self.assertTrue(all(row["scope_compatible"] is True for row in observations))
+        self.assertTrue(all(row["provenance_id"] == report_id for row in observations))
+        self.assertTrue(all(row["verification_status"] == "unverified" for row in observations))
+        self.assertEqual(data["content"], raw)
+        refreshed = self.client.get(f"/api/v1/reports/{report_id}").json()
+        self.assertEqual(refreshed["research_data"]["quantitative_observations"], observations)
+        self.assertEqual(self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets").json()["items"], [])
+
+    def test_report_metrics_missing_scope_or_entity_are_visible_but_not_chart_ready(self):
+        report_id = self.create_report("ASMR scope validation")
+        report = self.client.get(f"/api/v1/reports/{report_id}").json()
+        data = report["research_data"]
+        data["quantitative_observations"] = [{
+            "metric_id": "downloads", "metric_definition": "Reported downloads", "value": 20, "unit": "downloads",
+            "entity_id": "missing-entity", "entity_name": "Unknown", "geo": "JP", "platform": "iOS",
+            "period_start": "2025-01-01", "period_end": "2025-03-31", "granularity": "quarter",
+            "source_reference": "https://example.com/source", "evidence_reference": "https://example.com/source",
+            "methodology": "Source reported", "verification_status": "unverified", "provenance_type": "research_report", "observation_type": "reported",
+        }]
+        updated = self.client.put(f"/api/v1/reports/{report_id}/structured-data", json={"research_data": data})
+        self.assertEqual(updated.status_code, 200, updated.text)
+        row = self.client.get(f"/api/v1/reports/{report_id}").json()["research_data"]["quantitative_observations"][0]
+        self.assertFalse(row["complete_observation"])
+        self.assertFalse(row["comparison_ready"])
+        self.assertFalse(row["scope_compatible"])
+        self.assertTrue(any("does not resolve" in reason for reason in row["validation_reasons"]))
+        self.assertTrue(any("does not match the report scope" in reason for reason in row["validation_reasons"]))
+
+    def test_unstructured_approximate_metrics_and_chart_images_are_not_extracted(self):
+        content = "The app saw approximately 12K weekly downloads. A chart image was attached but has no machine-readable values. https://example.com/source"
+        response = self.client.post("/api/v1/reports", json={"question": "Metrics?", "geo": "US", "os": "Android", "research_period": "Q2/2025", "content": content})
+        self.assertEqual(response.status_code, 201, response.text)
+        saved = self.client.get(f"/api/v1/reports/{response.json()['id']}").json()
+        self.assertEqual(saved["research_data"]["quantitative_observations"], [])
 
     def test_csv_linking_is_report_scoped_persistent_and_deduplicated(self):
         report_id = self.create_report()

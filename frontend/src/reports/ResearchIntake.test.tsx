@@ -34,6 +34,10 @@ describe('ChatGPT research intake', () => {
     expect(prompt).toContain('evidence_references');
     expect(prompt).toContain('po_research_v1');
     expect(prompt).toContain('schema_version');
+    expect(prompt).toContain('quantitative_observations');
+    expect(prompt).toContain('exact numeric values explicitly stated');
+    expect(prompt).toContain('Do not invent report IDs');
+    expect(prompt).toContain('chart images');
     expect(prompt).not.toContain('# Benchmark candidates');
     expect(prompt).not.toContain('iOS and Android findings separate');
   });

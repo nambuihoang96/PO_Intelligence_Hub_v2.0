@@ -117,6 +117,78 @@ def assess_observation_readiness(
     }
 
 
+def assess_report_observations(
+    raw_rows: list[dict[str, Any]], *, report_id: str, report_geo: str,
+    report_platform: str, report_period: str | None, entities: list[dict[str, Any]],
+    evidence_references: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Bind report-supplied metrics to their report and recalculate readiness.
+
+    Report IDs and canonical display names are local references, so they are
+    resolved from the persisted report at read time rather than guessed by ChatGPT.
+    """
+    entity_by_key = {item.get("key"): item for item in entities if item.get("key")}
+    source_by_url = {item.get("url"): item for item in evidence_references if item.get("url")}
+    report_years = _report_years(report_period)
+    seen: set[tuple[Any, ...]] = set()
+    assessed: list[dict[str, Any]] = []
+    for raw in raw_rows:
+        observation = QuantitativeObservation.model_validate(raw)
+        row = observation.model_dump(mode="json")
+        reasons = list(dict.fromkeys(observation.validation_reasons))
+        entity = entity_by_key.get(observation.entity_id)
+        if not observation.entity_id or entity is None:
+            reasons.append("Entity does not resolve to a report-supplied entity key.")
+        elif observation.entity_name and observation.entity_name.strip().casefold() != str(entity.get("name", "")).strip().casefold():
+            reasons.append("Entity display name does not match the referenced report entity.")
+        elif not observation.entity_name:
+            row["entity_name"] = entity.get("name")
+
+        source = source_by_url.get(observation.source_reference)
+        evidence = source_by_url.get(observation.evidence_reference)
+        if source is None:
+            reasons.append("Source reference is not registered in this report.")
+        if evidence is None:
+            reasons.append("Evidence reference is not registered in this report.")
+        scope_compatible: bool | None = True
+        for supplied, report_scope, dimension in (
+            (observation.geo, report_geo, "geo"),
+            (observation.platform, report_platform, "platform"),
+        ):
+            if not supplied or not report_scope or report_scope.strip().casefold() in {"unknown", "not applicable", "n/a", "not specified", "global / not specified"}:
+                scope_compatible = None
+            elif not _scope_compatible(supplied, report_scope, dimension):
+                scope_compatible = False
+                reasons.append(f"Observation {dimension.upper() if dimension == 'geo' else 'platform'} does not match the report scope.")
+
+        if report_years and observation.period_start and observation.period_end:
+            start, end = _date(observation.period_start), _date(observation.period_end)
+            if start and end and (end.year < report_years[0] or start.year > report_years[1]):
+                reasons.append("Observation period does not overlap the report period.")
+
+        signature = (
+            observation.metric_id, observation.metric_definition, observation.value,
+            observation.unit, observation.entity_id, observation.geo, observation.platform,
+            observation.period_start, observation.period_end, observation.granularity,
+        )
+        if signature in seen:
+            reasons.append("Duplicate report-supplied observation.")
+        seen.add(signature)
+
+        row["provenance_type"] = "research_report"
+        row["provenance_id"] = report_id
+        row["scope_compatible"] = scope_compatible
+        row["validation_reasons"] = list(dict.fromkeys(reasons))
+        row["complete_observation"] = not reasons
+        row["comparison_ready"] = (
+            not reasons and scope_compatible is True
+            and bool(observation.methodology and observation.methodology.strip())
+        )
+        row["import_status"] = "reported"
+        assessed.append(row)
+    return assessed
+
+
 def parse_csv_observations(
     csv_text: str,
     *,
