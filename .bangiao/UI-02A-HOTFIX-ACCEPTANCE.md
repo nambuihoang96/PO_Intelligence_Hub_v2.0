@@ -4,7 +4,7 @@
 
 - Branch: `feat/ux-recovery-01-research-results`
 - Reviewed HEAD before changes: `8e9e9473753bbace284753baf1a483236ada1c1c`
-- Implementation commit: pending
+- Implementation commit: `f043c8af4d99d8d49d6c1a3dab835f676ed20385`
 - Push: pending
 - Production SQLite: not opened or modified. Browser UAT used `.test-tmp/uat-data/po_intelligence_hub.sqlite3`; backend integration tests use their isolated temporary database.
 
@@ -62,4 +62,4 @@ Actual screenshots were captured from the Codex in-app browser during the run: C
 
 ## Final commit
 
-Pending.
+`f043c8af4d99d8d49d6c1a3dab835f676ed20385`
