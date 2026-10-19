@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 import re
+from datetime import date
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
@@ -92,6 +94,100 @@ class BenchmarkDimension(ResearchModel):
     po_notes: str | None = Field(default=None, max_length=4000)
 
 
+class QuantitativeObservation(ResearchModel):
+    """A report-supplied numeric observation; incomplete scope stays explicit."""
+
+    metric_id: str | None = Field(default=None, max_length=160)
+    metric_definition: str | None = Field(default=None, max_length=2000)
+    value: float | None = Field(default=None, strict=True)
+    unit: str | None = Field(default=None, max_length=80)
+    entity_id: str | None = Field(default=None, max_length=160)
+    geo: str | None = Field(default=None, max_length=100)
+    platform: str | None = Field(default=None, max_length=100)
+    period_start: str | None = Field(default=None, max_length=10)
+    period_end: str | None = Field(default=None, max_length=10)
+    granularity: str | None = Field(default=None, max_length=40)
+    source_reference: str | None = Field(default=None, max_length=2048)
+    verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
+    provenance_type: Literal["research_report", "csv_dataset"] = "research_report"
+    provenance_id: str | None = Field(default=None, max_length=36)
+    observation_type: Literal["reported", "imported", "calculated"] = "reported"
+    validation_reasons: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("source_reference")
+    @classmethod
+    def quantitative_source_is_http_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        parsed = urlsplit(value)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("source_reference must be an HTTP(S) URL without credentials")
+        return value
+
+    @field_validator("value")
+    @classmethod
+    def value_must_be_finite(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("value must be a finite exact number")
+        return value
+
+    @field_validator("metric_id")
+    @classmethod
+    def normalize_metric_identifier(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return re.sub(r"[^a-z0-9]+", "_", value.strip().casefold()).strip("_") or None
+
+    @model_validator(mode="after")
+    def keep_reported_claims_unverified(self) -> "QuantitativeObservation":
+        if self.observation_type == "reported" and self.verification_status == "verified":
+            raise ValueError("reported observations cannot be marked verified by the research report")
+        if self.observation_type == "reported" and self.provenance_type != "research_report":
+            raise ValueError("reported observations must use research_report provenance")
+        if self.observation_type == "imported" and self.provenance_type != "csv_dataset":
+            raise ValueError("imported observations must use csv_dataset provenance")
+        return self
+
+    @model_validator(mode="after")
+    def describe_incomplete_observation(self) -> "QuantitativeObservation":
+        reasons = list(self.validation_reasons)
+        for field_name, label in (
+            ("metric_id", "metric identifier"),
+            ("metric_definition", "metric definition"),
+            ("value", "exact numeric value"),
+            ("unit", "unit"),
+            ("geo", "GEO"),
+            ("platform", "platform"),
+            ("period_start", "period start"),
+            ("period_end", "period end"),
+            ("granularity", "period granularity"),
+            ("source_reference", "source reference"),
+        ):
+            if getattr(self, field_name) is None and label not in reasons:
+                reasons.append(f"Missing {label}.")
+        for field_name in ("period_start", "period_end"):
+            value = getattr(self, field_name)
+            if value is not None:
+                try:
+                    date.fromisoformat(value)
+                except ValueError:
+                    message = f"Invalid {field_name}; use YYYY-MM-DD."
+                    if message not in reasons:
+                        reasons.append(message)
+        if self.period_start and self.period_end:
+            try:
+                if date.fromisoformat(self.period_start) > date.fromisoformat(self.period_end):
+                    if "Period start is after period end." not in reasons:
+                        reasons.append("Period start is after period end.")
+            except ValueError:
+                pass
+        if self.entity_id is None and "Entity mapping is not provided." not in reasons:
+            reasons.append("Entity mapping is not provided.")
+        object.__setattr__(self, "validation_reasons", reasons)
+        return self
+
+
 class UniversalResearchData(ResearchModel):
     executive_summary: str | None = Field(default=None, max_length=10000)
     key_takeaways: list[str] = Field(default_factory=list, max_length=100)
@@ -102,6 +198,7 @@ class UniversalResearchData(ResearchModel):
     benchmark_dimensions: list[BenchmarkDimension] = Field(default_factory=list, max_length=1000)
     research_gaps: list[str] = Field(default_factory=list, max_length=1000)
     po_recommendations: list[str] = Field(default_factory=list, max_length=1000)
+    quantitative_observations: list[QuantitativeObservation] = Field(default_factory=list, max_length=10000)
 
     @model_validator(mode="after")
     def validate_relations(self) -> "UniversalResearchData":
@@ -118,6 +215,9 @@ class UniversalResearchData(ResearchModel):
         references += [url for item in self.benchmark_dimensions for url in item.evidence_references]
         for dimension in self.benchmark_dimensions:
             references += [url for item in dimension.observations for url in item.evidence_references]
+        quantitative_sources = [
+            item.source_reference for item in self.quantitative_observations if item.source_reference
+        ]
         relations = [entity for item in self.findings for entity in item.related_entities]
         relations += [entity for item in self.benchmark_dimensions for entity in item.related_entities]
         relations += [item.entity_key for dim in self.benchmark_dimensions for item in dim.observations if item.entity_key]
@@ -125,6 +225,8 @@ class UniversalResearchData(ResearchModel):
             raise ValueError(f"references unknown entity keys: {', '.join(unknown)}")
         if unknown_urls := sorted(set(references) - known_urls):
             raise ValueError("evidence references must match a source URL in the original report: " + ", ".join(unknown_urls))
+        if unknown_urls := sorted(set(quantitative_sources) - known_urls):
+            raise ValueError("quantitative source references must match a source URL in the research report: " + ", ".join(unknown_urls))
         return self
 
 

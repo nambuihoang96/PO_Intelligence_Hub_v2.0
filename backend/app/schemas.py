@@ -1,12 +1,12 @@
 from datetime import date, datetime
 from enum import StrEnum
 import re
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from backend.app.research_data import UniversalResearchData
+from backend.app.research_data import QuantitativeObservation, UniversalResearchData
 
 
 class APIModel(BaseModel):
@@ -585,3 +585,39 @@ class ReportStructuringUpdate(APIModel):
 class ReprocessResult(ImportedReportRead):
     reprocessed: bool
     message: str
+
+
+class QuantitativeDatasetImport(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    filename: str = Field(min_length=1, max_length=255)
+    csv_content: str = Field(min_length=1, max_length=5_000_000)
+    field_mapping: dict[str, str] = Field(min_length=1, max_length=11)
+    entity_mappings: dict[str, str] = Field(default_factory=dict, max_length=1000)
+
+    @field_validator("filename")
+    @classmethod
+    def filename_is_safe(cls, value: str) -> str:
+        name = value.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        if not name.casefold().endswith(".csv"):
+            raise ValueError("dataset file must have a .csv filename")
+        return name
+
+
+class QuantitativeDatasetRead(APIModel):
+    id: str
+    report_id: str
+    filename: str
+    content_sha256: str
+    field_mapping: dict[str, str]
+    entity_mappings: dict[str, str]
+    observations: list[QuantitativeObservation]
+    compatibility_status: Literal["compatible", "partial", "incompatible"]
+    validation_reasons: list[str]
+    created_at: datetime
+    duplicate: bool = False
+
+
+class QuantitativeDatasetPage(APIModel):
+    items: list[QuantitativeDatasetRead]
+    next_cursor: str | None = None
+    limit: int

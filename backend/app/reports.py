@@ -1,5 +1,6 @@
 import hashlib
 import json
+import csv
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -8,7 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
-from backend.app.models import ImportedResearchReport
+from backend.app.models import ImportedResearchReport, QuantitativeDataset, new_id
+from backend.app.quantitative import csv_digest, parse_csv_observations
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
@@ -20,6 +22,8 @@ from backend.app.schemas import (
     ImportedReportRead,
     ImportedReportSummary,
     Page,
+    QuantitativeDatasetImport,
+    QuantitativeDatasetRead,
     ReprocessResult,
     ReportStructuringUpdate,
     StructuredResearchDataUpdate,
@@ -51,7 +55,7 @@ def _orphaned_selections(report: ImportedResearchReport) -> list[dict]:
 def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured_update_available: bool = False) -> ImportedReportCreated:
     data = ImportedReportSummary.model_validate(report).model_dump()
     research = report.research_data_json or {}
-    has_results = bool(research.get("findings") or research.get("entities") or research.get("benchmark_dimensions"))
+    has_results = bool(research.get("findings") or research.get("entities") or research.get("benchmark_dimensions") or research.get("quantitative_observations"))
     has_structure = bool(has_results or research.get("key_takeaways") or research.get("research_gaps") or research.get("po_recommendations"))
     research_status = "STRUCTURED_READY" if has_results else ("STRUCTURED_PARTIAL" if has_structure else "TEXT_ONLY")
     data.update(
@@ -165,6 +169,119 @@ def get_report(report_id: str, session: SessionDependency) -> ImportedReportRead
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
     return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+
+
+def _dataset_read(dataset: QuantitativeDataset, *, duplicate: bool = False) -> QuantitativeDatasetRead:
+    return QuantitativeDatasetRead.model_validate({
+        "id": dataset.id,
+        "report_id": dataset.report_id,
+        "filename": dataset.filename,
+        "content_sha256": dataset.content_sha256,
+        "field_mapping": dataset.field_mapping_json or {},
+        "entity_mappings": dataset.entity_mappings_json or {},
+        "observations": dataset.observations_json or [],
+        "compatibility_status": dataset.compatibility_status,
+        "validation_reasons": dataset.validation_reasons_json or [],
+        "created_at": dataset.created_at,
+        "duplicate": duplicate,
+    })
+
+
+@router.post("/{report_id}/quantitative-datasets", response_model=QuantitativeDatasetRead, status_code=status.HTTP_201_CREATED)
+def import_quantitative_dataset(
+    report_id: str,
+    payload: QuantitativeDatasetImport,
+    response: Response,
+    session: SessionDependency,
+) -> QuantitativeDatasetRead:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    digest = csv_digest(payload.csv_content)
+    existing = session.scalar(select(QuantitativeDataset).where(
+        QuantitativeDataset.report_id == report_id,
+        QuantitativeDataset.content_sha256 == digest,
+    ))
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return _dataset_read(existing, duplicate=True)
+    try:
+        observations, reasons, ambiguities, compatibility = parse_csv_observations(
+            payload.csv_content,
+            report_id=report_id,
+            report_geo=report.geo,
+            report_platform=report.os,
+            report_period=report.research_period,
+            entities=(report.research_data_json or {}).get("entities", []),
+            field_mapping=payload.field_mapping,
+            entity_mappings=payload.entity_mappings,
+        )
+    except (ValueError, csv.Error) as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_QUANTITATIVE_DATASET", "message": str(exc)}) from exc
+    if ambiguities:
+        raise HTTPException(status_code=409, detail={
+            "code": "AMBIGUOUS_ENTITY_MAPPING",
+            "message": "One or more CSV entity names match multiple report entities. Confirm the mappings and retry.",
+            "ambiguous_mappings": ambiguities,
+        })
+    dataset_id = new_id()
+    for item in observations:
+        item["provenance_id"] = dataset_id
+    dataset = QuantitativeDataset(
+        id=dataset_id,
+        report_id=report_id,
+        filename=payload.filename,
+        content_sha256=digest,
+        original_csv=payload.csv_content,
+        field_mapping_json=payload.field_mapping,
+        entity_mappings_json=payload.entity_mappings,
+        observations_json=observations,
+        compatibility_status=compatibility,
+        validation_reasons_json=reasons,
+    )
+    session.add(dataset)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        existing = session.scalar(select(QuantitativeDataset).where(
+            QuantitativeDataset.report_id == report_id,
+            QuantitativeDataset.content_sha256 == digest,
+        ))
+        if existing is None:
+            raise
+        response.status_code = status.HTTP_200_OK
+        return _dataset_read(existing, duplicate=True)
+    session.refresh(dataset)
+    return _dataset_read(dataset)
+
+
+@router.get("/{report_id}/quantitative-datasets", response_model=Page[QuantitativeDatasetRead])
+def list_quantitative_datasets(
+    report_id: str,
+    session: SessionDependency,
+    cursor: str | None = None,
+    limit: LIMIT = 20,
+) -> Page[QuantitativeDatasetRead]:
+    if session.get(ImportedResearchReport, report_id) is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    query = select(QuantitativeDataset).where(QuantitativeDataset.report_id == report_id).order_by(
+        QuantitativeDataset.created_at.desc(), QuantitativeDataset.id.desc()
+    )
+    if cursor:
+        cursor_dataset = session.get(QuantitativeDataset, cursor)
+        if cursor_dataset is None or cursor_dataset.report_id != report_id:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_CURSOR", "message": "Dataset cursor was not found for this report."})
+        query = query.where(
+            or_(
+                QuantitativeDataset.created_at < cursor_dataset.created_at,
+                and_(QuantitativeDataset.created_at == cursor_dataset.created_at, QuantitativeDataset.id < cursor_dataset.id),
+            )
+        )
+    rows = list(session.scalars(query.limit(limit + 1)))
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    return Page(items=[_dataset_read(item) for item in items], next_cursor=items[-1].id if has_more and items else None, limit=limit)
 
 
 @router.put("/{report_id}/benchmark-selections", response_model=ImportedReportRead)

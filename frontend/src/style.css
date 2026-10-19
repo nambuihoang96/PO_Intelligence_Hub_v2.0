@@ -873,6 +873,9 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .results-title-copy > .results-context { gap: 4px 11px; font-size: 12px; }
 .results-title-copy > .results-context > span + span::before { margin-right: 10px; }
 .results-title-copy > .results-context > .quantitative-context { color: #697991; }
+.quantitative-foundation { margin: 0 0 14px; padding: 8px 12px; color: #52647d; font-size: 13px; }
+.quantitative-foundation summary { cursor: pointer; font-weight: 600; }
+.quantitative-foundation p, .quantitative-foundation ul { margin: 8px 0 0; }
 .results-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 14px; }
 .results-header-actions .results-back-link { white-space: nowrap; }
 .results-status { margin: 0; padding: 5px 10px; font-size: 12px; }

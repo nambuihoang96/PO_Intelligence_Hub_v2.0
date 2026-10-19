@@ -4,6 +4,8 @@ import { extractHeadings, MarkdownReport } from './MarkdownReport';
 import { buildStructuringPrompt } from './researchPrompt';
 import { findingIcon, ResultsIcon, type ResultsIconName } from '../ui/ResultsIcon';
 import { ResearchTextHighlighter } from './ResearchTextHighlighter';
+import { quantitativeStateLabels, selectQuantitativeState } from './quantitativeState';
+import type { QuantitativeDataset } from './api';
 
 type Tab = 'overview' | 'insights' | 'entities' | 'benchmark' | 'decisions' | 'evidence' | 'report';
 type WorkspaceSaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
@@ -71,6 +73,7 @@ function workspaceFingerprint(workspace: BenchmarkWorkspace): string {
 
 export function ReportViewer({ reportId }: { reportId: string }) {
   const [report, setReport] = useState<ImportedReport | null>(null);
+  const [quantitativeDatasets, setQuantitativeDatasets] = useState<QuantitativeDataset[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -105,12 +108,18 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   useEffect(() => {
     let active = true;
     const loadSequence = ++reportLoadSequenceRef.current;
+    setQuantitativeDatasets([]);
     reportApi.get(reportId).then((value) => {
       if (!active || loadSequence !== reportLoadSequenceRef.current) return;
       const initialWorkspace = includeSelectedEntries(value.benchmark_workspace || blankWorkspace(), value.benchmark_selections);
       confirmedWorkspaceRef.current = initialWorkspace;
       applyLocalState(value, initialWorkspace);
       setWorkspaceSaveState('saved');
+      reportApi.listQuantitativeDatasets(value.id).then((page) => {
+        if (active && loadSequence === reportLoadSequenceRef.current) setQuantitativeDatasets(Array.isArray(page.items) ? page.items : []);
+      }).catch(() => {
+        // Report reading remains available if this optional foundation endpoint is offline.
+      });
     }).catch((reason: unknown) => { if (active && loadSequence === reportLoadSequenceRef.current) setError(reason instanceof Error ? reason.message : 'Không mở được báo cáo.'); }).finally(() => { if (active && loadSequence === reportLoadSequenceRef.current) setLoading(false); });
     return () => { active = false; };
   }, [reportId]);
@@ -471,13 +480,15 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const visibleMapFindings = mapFocusedFinding
     ? data.findings.filter((finding) => finding.key === mapFocusedFinding)
     : mapExpanded ? data.findings : data.findings.slice(0, 3);
+  const quantitativeState = selectQuantitativeState(data.quantitative_observations ?? [], quantitativeDatasets);
 
   return <article className="report-viewer">
     {imported && <div className="research-success" role="status">{new URLSearchParams(window.location.search).has('duplicate') ? 'Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.' : 'Đã nhập báo cáo.'}</div>}
     <header className="research-panel report-meta results-header">
       <div className="results-breadcrumb"><a href="/" onClick={confirmWorkspaceNavigation}>Workspace</a><span aria-hidden="true">›</span><a href="/reports" onClick={confirmWorkspaceNavigation}>Reports</a><span aria-hidden="true">›</span><span>{report.question}</span></div>
-      <div className="results-title-row"><div className="results-title-copy"><span className="field-label">RESEARCH REPORT · IMPORTED {new Date(report.imported_at).toLocaleString()}</span><h2>{report.question}</h2><p className="results-context"><span>{report.geo || 'GEO not specified'}</span><span>{report.os || 'Environment not specified'}</span>{report.research_period && <span>{report.research_period}</span>}<span>{report.origin === 'chatgpt_user_import' ? 'ChatGPT user import' : report.origin}</span><span className="quantitative-context">Qualitative research · No quantitative dataset linked</span></p></div><div className="results-header-actions"><span className={`results-status${researchStatus === 'TEXT_ONLY' ? ' is-text-only' : ''}`}>{researchStatus === 'STRUCTURED_READY' ? 'Structured results' : researchStatus === 'STRUCTURED_PARTIAL' ? 'Partially structured' : 'Text only'}</span><a className="text-button results-back-link" href="/reports" onClick={confirmWorkspaceNavigation}>← Back to Reports</a></div></div>
+      <div className="results-title-row"><div className="results-title-copy"><span className="field-label">RESEARCH REPORT · IMPORTED {new Date(report.imported_at).toLocaleString()}</span><h2>{report.question}</h2><p className="results-context"><span>{report.geo || 'GEO not specified'}</span><span>{report.os || 'Environment not specified'}</span>{report.research_period && <span>{report.research_period}</span>}<span>{report.origin === 'chatgpt_user_import' ? 'ChatGPT user import' : report.origin}</span><span className="quantitative-context">{quantitativeStateLabels[quantitativeState.state]}</span></p></div><div className="results-header-actions"><span className={`results-status${researchStatus === 'TEXT_ONLY' ? ' is-text-only' : ''}`}>{researchStatus === 'STRUCTURED_READY' ? 'Structured results' : researchStatus === 'STRUCTURED_PARTIAL' ? 'Partially structured' : 'Text only'}</span><a className="text-button results-back-link" href="/reports" onClick={confirmWorkspaceNavigation}>← Back to Reports</a></div></div>
     </header>
+    <details className="quantitative-foundation"><summary>Quantitative data status</summary><p>{quantitativeState.observationCount} observation{quantitativeState.observationCount === 1 ? '' : 's'} · Report and CSV values remain unverified unless independently reviewed.</p>{quantitativeState.reasons.length > 0 && <ul>{quantitativeState.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul>}{quantitativeDatasets.map((dataset) => <p key={dataset.id}>{dataset.filename} · {dataset.compatibility_status} · {dataset.observations.length} rows</p>)}</details>
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     {(report.orphaned_benchmark_selections?.length || report.orphaned_benchmark_entries?.length) ? <div className="research-alert" role="alert">Có {(report.orphaned_benchmark_selections?.length || 0) + (report.orphaned_benchmark_entries?.length || 0)} benchmark reference/PO note đang trỏ tới keys không còn trong structured data. Dữ liệu được giữ nguyên; xem tab Benchmark để xử lý references khi cần.</div> : null}
     <nav className="report-tabs" aria-label="Research result sections" role="tablist">{visibleTabs.map((item, index) => <button key={item.id} role="tab" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? 'active' : ''} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => setTab(item.id)}><ResultsIcon name={item.icon} />{item.label}</button>)}</nav>

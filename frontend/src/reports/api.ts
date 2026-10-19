@@ -20,13 +20,40 @@ export type ResearchData = {
   benchmark_dimensions: { key: string; name: string; related_entities: string[]; evidence_references: string[]; observations: { entity_key: string | null; value: unknown; evidence_references: string[]; source_locations: string[]; evidence_status: string; uncertainty: string | null }[]; po_notes: string | null }[];
   research_gaps: string[];
   po_recommendations: string[];
+  quantitative_observations?: QuantitativeObservation[];
 };
+export type QuantitativeObservation = {
+  metric_id: string | null;
+  metric_definition: string | null;
+  value: number | null;
+  unit: string | null;
+  entity_id: string | null;
+  geo: string | null;
+  platform: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  granularity: string | null;
+  source_reference: string | null;
+  verification_status: 'unverified' | 'needs_review' | 'verified';
+  provenance_type: 'research_report' | 'csv_dataset';
+  provenance_id: string | null;
+  observation_type: 'reported' | 'imported' | 'calculated';
+  validation_reasons: string[];
+};
+export type QuantitativeDataset = {
+  id: string; report_id: string; filename: string; content_sha256: string;
+  field_mapping: Record<string, string>; entity_mappings: Record<string, string>;
+  observations: QuantitativeObservation[]; compatibility_status: 'compatible' | 'partial' | 'incompatible';
+  validation_reasons: string[]; created_at: string; duplicate: boolean;
+};
+export type QuantitativeDatasetPage = { items: QuantitativeDataset[]; next_cursor: string | null; limit: number };
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
 export type BenchmarkWorkspaceEntry = BenchmarkSelection & { po_assessment: string; notes: string; next_action: string; dimension_assessments: Record<string, string>; observation_finding_links?: Record<string, string[]> };
 export type BenchmarkWorkspace = { custom_dimensions: string[]; entries: BenchmarkWorkspaceEntry[] };
 export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY'; research_contract_version?: 'po_research_v1'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };
 export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { content: string; structured_json?: string };
+export type QuantitativeDatasetInput = { filename: string; csv_content: string; field_mapping: Record<string, string>; entity_mappings?: Record<string, string> };
 
 function readableValidationErrors(errors: unknown): string[] {
   if (!Array.isArray(errors)) return [];
@@ -98,4 +125,6 @@ export const reportApi = {
   structureFromResponse: (id: string, response: string) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/structure-from-response`, { method: 'PUT', body: JSON.stringify({ response }) }),
   updateBenchmarkState: (id: string, selections: BenchmarkSelection[], workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-state`, { method: 'PUT', body: JSON.stringify({ ...workspace, selections }) }),
   updateBenchmarkWorkspace: (id: string, workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-workspace`, { method: 'PUT', body: JSON.stringify(workspace) }),
+  listQuantitativeDatasets: (id: string, cursor?: string) => request<QuantitativeDatasetPage>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  importQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDataset>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets`, { method: 'POST', body: JSON.stringify(input) }),
 };

@@ -164,6 +164,31 @@ class ImportedResearchReport(Base):
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class QuantitativeDataset(Base):
+    """CSV observations linked to one report; never globally applied."""
+
+    __tablename__ = "quantitative_datasets"
+    __table_args__ = (
+        UniqueConstraint("report_id", "content_sha256", name="uq_quant_datasets_report_hash"),
+        CheckConstraint("compatibility_status IN ('compatible','partial','incompatible')", name="ck_quant_datasets_compatibility"),
+        Index("ix_quant_datasets_report_created", "report_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    report_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("imported_research_reports.id", ondelete="RESTRICT"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_csv: Mapped[str] = mapped_column(Text, nullable=False)
+    field_mapping_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    entity_mappings_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    observations_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    compatibility_status: Mapped[str] = mapped_column(String(24), nullable=False, default="partial")
+    validation_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class SourceRegistry(Base):
     __tablename__ = "source_registry"
     __table_args__ = (
