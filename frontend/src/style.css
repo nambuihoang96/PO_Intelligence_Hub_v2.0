@@ -1078,6 +1078,69 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .report-viewer .overview-quantitative-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; color: #5c6d83; background: #f6f8fb; }
 .report-viewer .overview-quantitative-note > span { font-size: 11px; font-weight: 650; }
 .report-viewer .overview-quantitative-note p { margin: 0; color: #6c7b8f; font-size: 11px; }
+
+/* Report-scoped analytics data selection */
+.report-viewer .analytics-selection { display: grid; gap: 16px; min-width: 0; padding: 20px; scroll-margin-top: 88px; }
+.analytics-selection-heading, .analytics-record-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-width: 0; }
+.analytics-selection-heading h3 { margin: 3px 0 0; color: #172b45; font-size: 20px; }
+.analytics-selection-heading p { max-width: 850px; margin: 6px 0 0; color: #5e6f83; font-size: 13px; line-height: 1.55; }
+.analytics-filters { display: grid; grid-template-columns: repeat(4, minmax(145px, 1fr)); gap: 12px; align-items: end; }
+.analytics-filter { display: grid; gap: 5px; min-width: 0; color: #405773; font-size: 12px; font-weight: 650; }
+.analytics-filter select { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #d8e2ed; border-radius: 8px; color: #263b55; background: #fff; font: inherit; font-weight: 500; }
+.analytics-filter select:focus-visible, .analytics-selection button:focus-visible, .analytics-selection a:focus-visible { outline: 3px solid #9fc5fc; outline-offset: 2px; }
+.analytics-reset { justify-self: start; min-height: 38px; }
+.analytics-reset:disabled { opacity: .5; cursor: default; }
+.analytics-readiness { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.analytics-readiness > div { display: grid; gap: 4px; min-width: 0; padding: 10px 11px; border-radius: 9px; background: #f4f7fb; }
+.analytics-readiness strong { color: #193654; font-size: 19px; font-variant-numeric: tabular-nums; }
+.analytics-readiness span { color: #65758a; font-size: 11px; line-height: 1.3; }
+.analytics-selection-status { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #dfe8f3; border-radius: 9px; background: #f8faff; color: #52657c; font-size: 13px; }
+.analytics-selection-status strong { color: #243b58; }
+.analytics-limitations { color: #586b82; font-size: 12px; }
+.analytics-limitations summary, .analytics-comparison-groups summary { width: fit-content; color: #3c5d82; cursor: pointer; font-weight: 650; }
+.analytics-limitations ul { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 20px; }
+.analytics-record-heading { align-items: baseline; padding-top: 2px; }
+.analytics-record-heading h4 { margin: 0; color: #223851; font-size: 16px; }
+.analytics-record-heading span, .analytics-provenance-note { color: #68788c; font-size: 12px; }
+.analytics-observation-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.analytics-observation { display: grid; gap: 9px; min-width: 0; padding: 13px 14px; border: 1px solid #e2e9f1; border-radius: 10px; background: #fff; }
+.analytics-observation.is-excluded { background: #fcfcfd; }
+.analytics-observation-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.analytics-observation-main h4 { margin: 3px 0 0; color: #243b57; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.analytics-observation-entity { color: #526882; font-size: 12px; font-weight: 650; }
+.analytics-observation-value { flex: 0 0 auto; color: #173e69; font-size: 17px; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.analytics-observation-value small { color: #65758a; font-size: 11px; font-weight: 500; }
+.analytics-observation-meta { display: grid; gap: 4px; color: #65758a; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.analytics-observation-status { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; color: #62748a; font-size: 11px; }
+.analytics-status-chip { padding: 3px 7px; border-radius: 999px; font-weight: 650; }
+.analytics-status-chip.is-ready { color: #166148; background: #e8f6ef; }
+.analytics-status-chip.is-muted { color: #5c6572; background: #eef1f5; }
+.analytics-observation-status details { flex-basis: 100%; font-size: 11px; }
+.analytics-observation-status details summary { width: fit-content; cursor: pointer; color: #405d7b; }
+.analytics-observation-status details ul { margin: 5px 0 0; padding-left: 20px; }
+.analytics-observation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border-top: 1px solid #edf1f5; padding-top: 8px; font-size: 12px; }
+.analytics-observation-actions a { color: #315f97; }
+.analytics-observation-actions small { color: #738197; }
+.analytics-empty, .analytics-empty-filter { padding: 14px; border-radius: 9px; background: #f6f8fb; color: #576a81; }
+.analytics-empty strong { color: #263c56; }
+.analytics-empty p { margin: 6px 0 10px; font-size: 13px; }
+.analytics-comparison-groups { display: grid; gap: 8px; color: #576a81; font-size: 12px; }
+.analytics-comparison-groups > div { padding: 10px 12px; border-left: 3px solid #a8bfde; background: #f8faff; }
+.analytics-comparison-groups p { margin: 4px 0 0; }
+.analytics-provenance-note { margin: 0; line-height: 1.5; }
+@media (max-width: 900px) {
+  .analytics-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-readiness { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .report-viewer .analytics-selection { padding: 14px; }
+  .analytics-selection-heading { flex-direction: column; }
+  .analytics-filters { grid-template-columns: minmax(0, 1fr); }
+  .analytics-readiness { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-observation-list { grid-template-columns: minmax(0, 1fr); }
+  .analytics-observation-main { flex-wrap: wrap; }
+  .analytics-observation-value { text-align: left; }
+}
 .report-viewer .overview-research-map { padding: 14px 17px; }
 .report-viewer .overview-research-map .overview-muted { margin: -3px 0 10px; font-size: 11px; }
 .research-map-list { display: grid; gap: 6px; }

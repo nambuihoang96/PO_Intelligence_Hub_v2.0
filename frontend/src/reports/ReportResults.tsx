@@ -8,6 +8,8 @@ import { quantitativeStateLabels, selectQuantitativeState } from './quantitative
 import type { QuantitativeDataset } from './api';
 import { QuantitativeDatasetImport } from './QuantitativeDatasetImport';
 import { QuantitativeEvidence } from './QuantitativeEvidence';
+import { AnalyticsDataSelection } from './AnalyticsDataSelection';
+import type { AnalyticsRecord } from './analyticsSelection';
 
 type Tab = 'overview' | 'insights' | 'entities' | 'benchmark' | 'decisions' | 'evidence' | 'report';
 type WorkspaceSaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
@@ -84,6 +86,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const [workspaceSaveError, setWorkspaceSaveError] = useState('');
   const [tab, setTab] = useState<Tab>('overview');
   const [quantEvidenceIndex, setQuantEvidenceIndex] = useState<number | null>(null);
+  const [quantEvidenceTarget, setQuantEvidenceTarget] = useState<string | null>(null);
   const [structureResponse, setStructureResponse] = useState('');
   const [structurePrompt, setStructurePrompt] = useState('');
   const [workspace, setWorkspace] = useState<BenchmarkWorkspace>(blankWorkspace());
@@ -118,9 +121,16 @@ export function ReportViewer({ reportId }: { reportId: string }) {
       confirmedWorkspaceRef.current = initialWorkspace;
       applyLocalState(value, initialWorkspace);
       setWorkspaceSaveState('saved');
-      reportApi.listQuantitativeDatasets(value.id).then((page) => {
-        if (active && loadSequence === reportLoadSequenceRef.current) setQuantitativeDatasets(Array.isArray(page.items) ? page.items : []);
-      }).catch(() => {
+      (async () => {
+        const datasets: QuantitativeDataset[] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await reportApi.listQuantitativeDatasets(value.id, cursor);
+          datasets.push(...(Array.isArray(page.items) ? page.items : []));
+          cursor = page.next_cursor || undefined;
+        } while (cursor);
+        if (active && loadSequence === reportLoadSequenceRef.current) setQuantitativeDatasets(datasets);
+      })().catch(() => {
         // Report reading remains available if this optional foundation endpoint is offline.
       });
     }).catch((reason: unknown) => { if (active && loadSequence === reportLoadSequenceRef.current) setError(reason instanceof Error ? reason.message : 'Không mở được báo cáo.'); }).finally(() => { if (active && loadSequence === reportLoadSequenceRef.current) setLoading(false); });
@@ -128,9 +138,9 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   }, [reportId]);
 
   useEffect(() => {
-    if (tab !== 'evidence' || quantEvidenceIndex === null) return;
-    document.getElementById(`quant-observation-${quantEvidenceIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [tab, quantEvidenceIndex]);
+    if (tab !== 'evidence' || !quantEvidenceTarget) return;
+    document.getElementById(quantEvidenceTarget)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [tab, quantEvidenceIndex, quantEvidenceTarget]);
 
   useEffect(() => {
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
@@ -490,6 +500,17 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     : mapExpanded ? data.findings : data.findings.slice(0, 3);
   const quantitativeState = selectQuantitativeState(data.quantitative_observations ?? [], quantitativeDatasets);
 
+  function viewQuantitativeEvidence(record: AnalyticsRecord) {
+    if (record.source === 'research_report') {
+      setQuantEvidenceIndex(record.index);
+      setQuantEvidenceTarget(`quant-observation-${record.index}`);
+    } else {
+      setQuantEvidenceIndex(null);
+      setQuantEvidenceTarget(`quant-dataset-summary-observation-${record.sourceId}-${record.index}`);
+    }
+    setTab('evidence');
+  }
+
   return <article className="report-viewer">
     {imported && <div className="research-success" role="status">{new URLSearchParams(window.location.search).has('duplicate') ? 'Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.' : 'Đã nhập báo cáo.'}</div>}
     <header className="research-panel report-meta results-header">
@@ -498,7 +519,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     </header>
     <section className="quantitative-foundation" aria-label="Data Sources"><div className="quant-data-heading"><strong>Data Sources</strong><span className={`quant-state quant-state-${quantitativeState.state}`}>{quantitativeStateLabels[quantitativeState.state]}</span></div>
       {(data.quantitative_observations ?? []).some((row) => row.observation_type === 'reported') && <p className="quant-data-summary">{data.quantitative_observations!.filter((row) => row.observation_type === 'reported').length} report-supplied observation(s) · unverified. <button className="text-button" onClick={() => setTab('overview')}>View quantitative evidence</button></p>}
-      {quantitativeDatasets.length > 0 && <ul className="quant-dataset-list">{quantitativeDatasets.map((dataset) => <li key={dataset.id}><strong>{dataset.filename}</strong><span>Linked to this report · {dataset.observations.length} rows · {dataset.complete_observations} complete · {dataset.scope_compatible_observations} scope compatible · {dataset.comparison_ready_observations} eligible for pairwise checks</span><span>{dataset.compatibility_status === 'compatible' ? 'All rows currently compatible' : dataset.compatibility_status === 'incompatible' ? 'No observations match the report scope' : 'Partial coverage; inspect row details'}</span>{dataset.validation_reasons.length > 0 && <details><summary>Validation notes</summary><ul>{dataset.validation_reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details>}{dataset.observations.map((observation, index) => <details key={`${dataset.id}-${index}`}><summary>{observation.metric_definition || observation.metric_id || 'Unknown metric'} · {observation.value ?? 'Unknown'} {observation.unit ?? ''} · {observation.complete_observation ? 'Complete observation' : 'Incomplete observation'}</summary><p>{observation.scope_compatible ? 'Scope compatible' : 'Scope missing or incompatible'} · {observation.verification_status === 'verified' ? 'Independently verified' : 'Unverified'} · {observation.provenance_type === 'csv_dataset' ? 'CSV imported' : 'Report-supplied'}</p>{observation.validation_reasons.length > 0 && <ul>{observation.validation_reasons.map((reason, reasonIndex) => <li key={reasonIndex}>{reason}</li>)}</ul>}</details>)}</li>)}</ul>}
+      {quantitativeDatasets.length > 0 && <ul className="quant-dataset-list">{quantitativeDatasets.map((dataset) => <li key={dataset.id}><strong>{dataset.filename}</strong><span>Linked to this report · {dataset.observations.length} rows · {dataset.complete_observations} complete · {dataset.scope_compatible_observations} scope compatible · {dataset.comparison_ready_observations} eligible for pairwise checks</span><span>{dataset.compatibility_status === 'compatible' ? 'All rows currently compatible' : dataset.compatibility_status === 'incompatible' ? 'No observations match the report scope' : 'Partial coverage; inspect row details'}</span>{dataset.validation_reasons.length > 0 && <details><summary>Validation notes</summary><ul>{dataset.validation_reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details>}{dataset.observations.map((observation, index) => <details key={`${dataset.id}-${index}`}><summary>{observation.metric_definition || observation.metric_id || 'Unknown metric'} · {observation.value ?? 'Unknown'} {observation.unit ?? ''} · {observation.complete_observation ? 'Complete observation' : 'Incomplete observation'}</summary><p>{observation.scope_compatible ? 'Scope compatible' : observation.scope_compatible === false ? 'Incompatible scope' : 'Scope compatibility unknown'} · {observation.verification_status === 'verified' ? 'Independently verified' : 'Unverified'} · CSV imported</p>{observation.validation_reasons.length > 0 && <ul>{observation.validation_reasons.map((reason, reasonIndex) => <li key={reasonIndex}>{reason}</li>)}</ul>}</details>)}</li>)}</ul>}
       {quantitativeState.reasons.length > 0 && <details><summary>Readiness reasons</summary><ul>{quantitativeState.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details>}
       <QuantitativeDatasetImport report={report} onImported={(dataset) => setQuantitativeDatasets((current) => [dataset, ...current.filter((item) => item.id !== dataset.id)])} />
     </section>
@@ -511,7 +532,8 @@ export function ReportViewer({ reportId }: { reportId: string }) {
         {data.executive_summary && <section className="research-panel executive-card"><div className="overview-section-heading"><OverviewHeading icon="conclusion" eyebrow="RESEARCH CONCLUSION" title="Research conclusion" /></div><p className={`executive-summary${summaryExpanded ? ' is-expanded' : ''}`}><ResearchTextHighlighter text={data.executive_summary} /></p><button className="text-button summary-toggle" aria-expanded={summaryExpanded} onClick={() => setSummaryExpanded(!summaryExpanded)}>{summaryExpanded ? 'Show less' : 'Read full summary'}</button></section>}
         {keyTakeaways.length > 0 && <section className="research-panel overview-takeaways"><div className="overview-section-heading"><OverviewHeading icon="takeaways" eyebrow="REPORT-SUPPLIED" title="Key takeaways" /></div><ol>{(takeawaysExpanded ? keyTakeaways : keyTakeaways.slice(0, 3)).map((item, index) => <li key={index}><span className="takeaway-number">{index + 1}</span><span className="takeaway-copy"><ResearchTextHighlighter text={item} /></span></li>)}</ol>{keyTakeaways.length > 3 && <button className="text-button" aria-expanded={takeawaysExpanded} onClick={() => setTakeawaysExpanded(!takeawaysExpanded)}>{takeawaysExpanded ? 'Show fewer takeaways' : `View all ${keyTakeaways.length} takeaways`}</button>}</section>}
       </div>
-      <QuantitativeEvidence observations={data.quantitative_observations ?? []} onViewEvidence={(index) => { setQuantEvidenceIndex(index); setTab('evidence'); }} />
+      <QuantitativeEvidence observations={data.quantitative_observations ?? []} onViewEvidence={(index) => { setQuantEvidenceIndex(index); setQuantEvidenceTarget(`quant-observation-${index}`); setTab('evidence'); }} />
+      <AnalyticsDataSelection reportId={report.id} observations={data.quantitative_observations ?? []} datasets={quantitativeDatasets} onViewEvidence={viewQuantitativeEvidence} onImportCsv={() => document.querySelector('.quantitative-foundation')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
       <div className="overview-main-grid">
         <section className="research-panel overview-insights"><div className="overview-section-heading"><OverviewHeading icon="findings" eyebrow="REPORT-SUPPLIED CONCLUSIONS" title="Key findings" detail={data.findings.length ? `${data.findings.length} from this research` : undefined} />{data.findings.length > 0 && <button className="text-button" onClick={() => setTab('insights')}>View all findings <ResultsIcon name="arrow" /></button>}</div>
           {data.findings.length > 0 ? <div className="finding-groups"><div className="insight-dashboard-list">{data.findings.map((finding) => {
@@ -563,6 +585,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
         const sourceExcerpt = source?.source_location ? excerptAtLocations(report.content, [source.source_location]) : [];
         return <article id={`quant-observation-${index}`} className={quantEvidenceIndex === index ? 'is-focused' : ''} key={`${row.metric_id}:${index}`}><strong>{row.metric_definition || row.metric_id || 'Metric not identified'}</strong><span>{row.entity_name || data.entities.find((entity) => entity.key === row.entity_id)?.name || row.entity_id || 'Entity not resolved'} · {row.value ?? 'Unknown'} {row.unit ?? ''}</span><span>{[row.geo, row.platform, row.period_start && row.period_end ? `${row.period_start} – ${row.period_end}` : 'Period not provided'].filter(Boolean).join(' · ')}</span><span>Report-supplied · {row.verification_status === 'verified' ? 'Independently verified' : 'Unverified'}{row.provenance_id ? ` · Report ${row.provenance_id}` : ''}</span>{source?.source_location ? <details><summary>Supporting passage · {source.source_location}</summary>{sourceExcerpt.map((line) => <pre className="quant-source-excerpt" key={line}>{line}</pre>)}</details> : <small>No reliable in-report location was provided; the source link and full original report remain available.</small>}{row.validation_reasons.length > 0 && <ul>{row.validation_reasons.map((reason, reasonIndex) => <li key={reasonIndex}>{reason}</li>)}</ul>}{row.evidence_reference && <a href={row.evidence_reference} target="_blank" rel="noreferrer">Open evidence source</a>}{row.source_reference && row.source_reference !== row.evidence_reference && <a href={row.source_reference} target="_blank" rel="noreferrer">Open data source</a>}<button className="text-button" onClick={() => setTab('report')}>Open original report</button></article>;
       })}</section>}
+      {quantitativeDatasets.length > 0 && <section className="quantitative-evidence-records"><h4>CSV observations linked to this report</h4><p>Imported values retain their dataset provenance and remain unverified unless independently checked.</p>{quantitativeDatasets.flatMap((dataset) => dataset.observations.map((row, index) => <article id={`quant-dataset-summary-observation-${dataset.id}-${index}`} key={`${dataset.id}:${index}`}><strong>{row.metric_definition || row.metric_id || 'Metric not identified'}</strong><span>{row.entity_name || data.entities.find((entity) => entity.key === row.entity_id)?.name || row.entity_id || 'Entity not resolved'} · {row.value ?? 'Unknown'} {row.unit ?? ''}</span><span>{[row.geo || 'GEO not provided', row.platform || 'Platform not provided', row.period_start && row.period_end ? `${row.period_start} – ${row.period_end}` : 'Period not provided', row.granularity || 'Granularity not provided'].join(' · ')}</span><span>{dataset.filename} · CSV imported · {row.verification_status === 'verified' ? 'Independently verified' : 'Unverified'}</span>{row.validation_reasons.length > 0 && <ul>{row.validation_reasons.map((reason, reasonIndex) => <li key={reasonIndex}>{reason}</li>)}</ul>}{row.evidence_reference && <a href={row.evidence_reference} target="_blank" rel="noreferrer">Open evidence reference</a>}{row.source_reference && row.source_reference !== row.evidence_reference && <a href={row.source_reference} target="_blank" rel="noreferrer">Open data source</a>}<button className="text-button" onClick={() => setTab('report')}>Open original report</button></article>))}</section>}
     </section>}
     {tab === 'report' && <section className="research-panel report-body full-report"><div className="panel-heading"><div><span className="field-label">ORIGINAL REPORT</span><h3>Full Report</h3></div><span className="unverified-chip">Verbatim</span></div>{headings.length > 0 && <nav className="report-toc" aria-label="Mục lục"><strong>Contents</strong><ol>{headings.map((heading, index) => <li key={`${heading.id}-${index}`} style={{ marginLeft: `${Math.max(0, heading.level - 1) * 8}px` }}><a href={`#${heading.id}`}>{heading.text}</a></li>)}</ol></nav>}<MarkdownReport markdown={report.content} /></section>}
     {report.structured_update_available && <div role="status" className="research-alert">This duplicate contains different structured results. They were not applied automatically; the saved report and PO workspace are unchanged.</div>}
