@@ -54,7 +54,7 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     expect(screen.getByText(/dấu phân cách ;/)).toBeTruthy();
-    expect(screen.getByText(/1 metric được nhận diện/)).toBeTruthy();
+    expect(screen.getByText(/1 cột chỉ số được nhận diện/)).toBeTruthy();
     fireEvent.change(screen.getAllByRole('combobox')[2], { target: { value: 'Platform' } });
     fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
     fireEvent.change(screen.getByLabelText('Period start · giá trị xác nhận'), { target: { value: '2026-10-14' } });
@@ -68,6 +68,23 @@ describe('QuantitativeDatasetImport', () => {
     expect(payload.metric_mappings).toEqual([expect.objectContaining({ column: 'Downloads (Absolute)', metric_definition: 'Downloads (Absolute)' })]);
   });
 
+  it('shows a name-only entity mapping as selected and keeps date and descriptive columns out of metric choices', async () => {
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
+    const file = new File(['Unified Name;Date;Category;Publisher ID;Publisher Name;Downloads (Absolute)\nApp A;14/10/2026;Games;publisher-1;Publisher One;1200\n'], 'app-metrics.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+
+    expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('Unified Name');
+    expect(screen.getByText('Tên ứng dụng: Unified Name · 1 cột chỉ số được nhận diện')).toBeTruthy();
+    expect(screen.queryByText('Entity name: Unified Name · Name: Unified Name')).toBeNull();
+    fireEvent.click(screen.getByText('1 cột chỉ số được chọn'));
+    expect(screen.queryByLabelText('Date')).toBeNull();
+    expect(screen.queryByLabelText('Category')).toBeNull();
+    expect(screen.queryByLabelText('Publisher ID')).toBeNull();
+    expect(screen.queryByLabelText('Publisher Name')).toBeNull();
+  });
+
   it('auto-detects entity ID and name plus distinct Sensor Tower growth metrics', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
@@ -78,8 +95,8 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
 
-    expect(screen.getByText(/2 metric được nhận diện/)).toBeTruthy();
-    expect(screen.getByText(/Entity ID: Unified ID · Name: Unified Name/)).toBeTruthy();
+    expect(screen.getByText(/2 cột chỉ số được nhận diện/)).toBeTruthy();
+    expect(screen.getByText(/Ứng dụng: ID Unified ID · tên Unified Name/)).toBeTruthy();
     const geo = screen.getByRole('combobox', { name: 'GEO' });
     expect([...geo.querySelectorAll('option')].map((option) => option.textContent)).not.toContain('All Title');
     expect(screen.getByRole('button', { name: 'Xác nhận GEO: Worldwide' })).toBeTruthy();
@@ -120,7 +137,7 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
-    fireEvent.click(screen.getByText('Chọn thêm metric columns'));
+    fireEvent.click(screen.getByText('Chọn thêm cột chỉ số'));
     fireEvent.click(screen.getByLabelText('Value'));
     fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
     await screen.findByText(/Chưa ghép được 3 app/);
@@ -159,7 +176,7 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
-    fireEvent.click(screen.getByText('Chọn thêm metric columns'));
+    fireEvent.click(screen.getByText('Chọn thêm cột chỉ số'));
     fireEvent.click(screen.getByLabelText('Value'));
     fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
     await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));

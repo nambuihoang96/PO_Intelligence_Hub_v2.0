@@ -47,3 +47,8 @@ UAT data was written only to a disposable, isolated database under the task work
 - Unresolved rows use their CSV ID/name for duplicate detection. Different unmapped apps with identical metric values are no longer falsely counted as duplicates because their canonical entity ID is null.
 - The preview now surfaces the exact GEO/platform scope mismatch returned by validation and explains that `Unified` remains unchanged.
 - Follow-up regression: backend 36 passed; frontend 88 passed across 9 files; TypeScript check and production build passed.
+
+## Purpose and mapping clarity
+
+The importer adds CSV measurements to the current report so they can be reviewed and compared with that report's scope. It keeps the original CSV unchanged. The UI now states this purpose directly, shows the selected entity ID or name in the selector, and excludes dates, categories, publisher identifiers, and publisher names from metric choices.
+- Follow-up frontend regression: 89 passed across 9 files; TypeScript check and production build passed.

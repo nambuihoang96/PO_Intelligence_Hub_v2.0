@@ -978,6 +978,7 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .quant-import-steps section { min-width:0; }
 .quant-import-steps h4 { margin:0 0 8px; font-size:15px; }
 .quant-import-steps p, .quant-import-note { line-height:1.5; }
+.quant-import-purpose { padding:10px 12px; border-left:3px solid #5b8def; background:#f3f7ff; color:#304c6c; }
 .quant-file-picker { display:inline-flex; align-items:center; border:1px solid #cdd8e4; border-radius:8px; padding:8px 12px; color:#173b64; cursor:pointer; }
 .quant-file-picker input { position:absolute; width:1px; height:1px; opacity:0; }
 .quant-file-picker:focus-within { outline:3px solid #93c5fd; outline-offset:2px; }
