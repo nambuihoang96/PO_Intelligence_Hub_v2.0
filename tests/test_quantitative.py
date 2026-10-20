@@ -55,6 +55,81 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertFalse(rows[0]["complete_observation"])
         self.assertIn("intentionally left unmapped", " ".join(rows[0]["validation_reasons"]))
 
+    def test_sensor_tower_entity_id_and_display_name_auto_match_without_mapping(self):
+        rows, _, unresolved, _ = parse_csv_observations(
+            "Unified Name;Unified ID;Platform;Downloads (Absolute)\nApp A;id-a;Unified;1200\n",
+            report_id="report", report_geo="Worldwide", report_platform="Unified", report_period="2026",
+            entities=[{"key": "app-a", "name": "App A", "unified_id": "id-a"}],
+            field_mapping={"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            entity_mappings={}, metric_mappings=[{
+                "column": "Downloads (Absolute)", "metric_id": "downloads_absolute",
+                "metric_definition": "Downloads (Absolute)", "unit": "downloads",
+            }], explicit_values={"geo": "Worldwide", "period_start": "2026-09-14", "period_end": "2026-10-13"},
+        )
+        self.assertEqual(rows[0]["entity_id"], "app-a")
+        self.assertEqual(rows[0]["entity_name"], "App A")
+        self.assertEqual(unresolved, [])
+
+    def test_entity_display_name_resolves_unknown_export_id_automatically(self):
+        rows, _, unresolved, _ = parse_csv_observations(
+            "Unified Name;Unified ID;Downloads (Absolute)\nApp A;export-only-id;1200\n",
+            report_id="report", report_geo="Worldwide", report_platform="Unified", report_period=None,
+            entities=[{"key": "app-a", "name": "App A"}],
+            field_mapping={"entity_id": "Unified ID", "entity_name": "Unified Name"}, entity_mappings={},
+            metric_mappings=[{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+        )
+        self.assertEqual(rows[0]["entity_id"], "app-a")
+        self.assertEqual(unresolved, [])
+
+    def test_csv_rejects_semantically_wrong_geo_mapping(self):
+        with self.assertRaisesRegex(ValueError, "does not look like a geo field"):
+            parse_csv_observations(
+                "Unified Name;All Title;Downloads (Absolute)\nApp A;Game;12\n",
+                report_id="r", report_geo="Worldwide", report_platform="Unified", report_period=None,
+                entities=[{"key": "a", "name": "App A"}],
+                field_mapping={"entity_name": "Unified Name", "geo": "All Title"}, entity_mappings={},
+                metric_mappings=[{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            )
+
+    def test_percent_and_absolute_sensor_tower_metrics_keep_distinct_ids_and_units(self):
+        rows, _, _, _ = parse_csv_observations(
+            "Unified Name;Downloads (YoY Growth);Downloads (YoY Growth %)\nApp A;120;12.5\n",
+            report_id="r", report_geo="Worldwide", report_platform="Unified", report_period=None,
+            entities=[{"key": "a", "name": "App A"}], field_mapping={"entity_name": "Unified Name"}, entity_mappings={},
+            metric_mappings=[
+                {"column": "Downloads (YoY Growth)", "metric_id": "downloads_yoy_growth_absolute", "metric_definition": "Downloads (YoY Growth)", "unit": "downloads"},
+                {"column": "Downloads (YoY Growth %)", "metric_id": "downloads_yoy_growth_percent", "metric_definition": "Downloads (YoY Growth %)", "unit": "%"},
+            ],
+        )
+        self.assertEqual([row["metric_id"] for row in rows], ["downloads_yoy_growth_absolute", "downloads_yoy_growth_percent"])
+        self.assertEqual([row["unit"] for row in rows], ["downloads", "%"])
+        self.assertEqual([row["value"] for row in rows], [120, 12.5])
+
+    def test_wide_metric_identity_collisions_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unique metric identity"):
+            parse_csv_observations(
+                "Unified Name;Absolute;Growth\nApp A;10;2\n", report_id="r", report_geo="Worldwide",
+                report_platform="Unified", report_period=None, entities=[{"key": "a", "name": "App A"}],
+                field_mapping={"entity_name": "Unified Name"}, entity_mappings={}, metric_mappings=[
+                    {"column": "Absolute", "metric_id": "downloads_yoy_growth", "metric_definition": "Absolute", "unit": "downloads"},
+                    {"column": "Growth", "metric_id": "downloads_yoy_growth", "metric_definition": "Growth", "unit": "%"},
+                ],
+            )
+
+    def test_percentage_metrics_require_percent_unit_and_exact_numeric_values(self):
+        rows, reasons, _, _ = parse_csv_observations(
+            "Unified Name;Downloads (YoY Growth %)\nApp A;12%\n",
+            report_id="r", report_geo="Worldwide", report_platform="Unified", report_period=None,
+            entities=[{"key": "a", "name": "App A"}], field_mapping={"entity_name": "Unified Name"}, entity_mappings={},
+            metric_mappings=[{
+                "column": "Downloads (YoY Growth %)", "metric_id": "downloads_yoy_growth_percent",
+                "metric_definition": "Downloads (YoY Growth %)", "unit": "downloads",
+            }],
+        )
+        self.assertIsNone(rows[0]["value"])
+        self.assertTrue(any("non-numeric" in reason for reason in reasons))
+        self.assertTrue(any("requires unit '%'" in reason for reason in reasons))
+
     def test_exact_report_observation_is_unverified_and_complete(self):
         value = QuantitativeObservation(
             metric_id="weekly downloads", metric_definition="Downloads per week", value=1250,

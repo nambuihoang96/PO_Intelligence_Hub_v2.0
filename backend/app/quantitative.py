@@ -17,10 +17,63 @@ from backend.app.research_data import QuantitativeObservation
 
 CSV_FIELD_NAMES = {
     "metric_id", "metric_definition", "value", "unit", "entity_id", "geo",
-    "platform", "period_start", "period_end", "granularity", "source_reference", "methodology",
+    "entity_name", "platform", "period_start", "period_end", "granularity", "source_reference", "methodology",
 }
 UNIT_ALIASES = {"percent": "%", "percentage": "%", "pct": "%", "seconds": "s", "minutes": "min"}
 EXACT_NUMBER = re.compile(r"^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
+
+
+def sensor_tower_metric(header: str) -> dict[str, str | None] | None:
+    """Recognize common Sensor Tower wide-export metrics without guessing values."""
+    normalized = re.sub(r"\s+", " ", header.strip().casefold())
+    normalized = re.sub(r"\s*\(\s*", " (", normalized)
+    metric = re.sub(r"[^a-z0-9%]+", " ", normalized).strip()
+    if re.search(r"\bdownloads\b", metric) and re.search(r"\byoy\b", metric):
+        percent = "%" in header or bool(re.search(r"\bpercent(?:age)?\b|\bpct\b", metric))
+        return {
+            "metric_id": "downloads_yoy_growth_percent" if percent else "downloads_yoy_growth_absolute",
+            "metric_definition": header.strip(),
+            "unit": "%" if percent else "downloads",
+        }
+    if re.search(r"\bdownloads\b", metric) and re.search(r"\babsolute\b", metric):
+        return {"metric_id": "downloads_absolute", "metric_definition": header.strip(), "unit": "downloads"}
+    if re.search(r"\brevenue\b", metric) and re.search(r"\byoy\b", metric):
+        percent = "%" in header or bool(re.search(r"\bpercent(?:age)?\b|\bpct\b", metric))
+        return {
+            "metric_id": "revenue_yoy_growth_percent" if percent else "revenue_yoy_growth_absolute",
+            "metric_definition": header.strip(),
+            "unit": "%" if percent else None,
+        }
+    if re.search(r"\brevenue\b", metric) and re.search(r"\babsolute\b", metric):
+        return {"metric_id": "revenue_absolute", "metric_definition": header.strip(), "unit": None}
+    if re.search(r"\bdau\b", metric):
+        if re.search(r"\byoy\b", metric):
+            percent = "%" in header or bool(re.search(r"\bpercent(?:age)?\b|\bpct\b", metric))
+            return {
+                "metric_id": "dau_yoy_growth_percent" if percent else "dau_yoy_growth_absolute",
+                "metric_definition": header.strip(),
+                "unit": "%" if percent else "users",
+            }
+        if re.search(r"\babsolute\b", metric):
+            return {"metric_id": "dau_absolute", "metric_definition": header.strip(), "unit": "users"}
+    return None
+
+
+def _header_matches_field(field: str, header: str) -> bool:
+    value = re.sub(r"[^a-z0-9]+", " ", header.casefold()).strip()
+    rules: dict[str, tuple[str, ...]] = {
+        "entity_id": (r"\b(unified|entity|product|app) id\b", r"\b(unified|entity|product|app) name\b", r"^entity$", r"^product$", r"^app$"),
+        "entity_name": (r"\b(unified|entity|product|app) name\b", r"^entity name$", r"^product name$", r"^app name$"),
+        "geo": (r"^geo$", r"^country$", r"^market$", r"^region$"),
+        "platform": (r"^platform$", r"^os$", r"^environment$"),
+        "period_start": (r"^period start$", r"^start date$", r"^date start$", r"^start$", r"^date$"),
+        "period_end": (r"^period end$", r"^end date$", r"^date end$", r"^end$"),
+        "granularity": (r"^granularity$", r"^frequency$", r"^period$"),
+        "unit": (r"^unit$", r"^units$"),
+        "source_reference": (r"^source$", r"^source url$", r"^source reference$", r"^url$"),
+        "methodology": (r"^methodology$", r"^method$"),
+    }
+    return any(re.fullmatch(pattern, value) for pattern in rules.get(field, ()))
 
 
 def normalize_metric_id(value: str | None) -> str | None:
@@ -221,6 +274,12 @@ def parse_csv_observations(
         if unknown_headers:
             details.append("CSV header(s) not found: " + ", ".join(sorted(unknown_headers)))
         raise ValueError("; ".join(details))
+    for field, header in field_mapping.items():
+        if field in {"entity_id", "entity_name", "geo", "platform", "period_start", "period_end", "granularity", "unit", "source_reference", "methodology"} and not _header_matches_field(field, header):
+            label = "GEO" if field == "geo" else field.replace("_", " ").capitalize()
+            raise ValueError(f"The selected {label} column '{header}' does not look like a {label.casefold()} field. Choose a semantically matching CSV column.")
+    if "entity_id" not in field_mapping and "entity_name" not in field_mapping:
+        raise ValueError("Map an entity ID or entity name column so CSV rows can be matched to report entities.")
 
     metric_mappings = metric_mappings or []
     explicit_values = explicit_values or {}
@@ -228,6 +287,9 @@ def parse_csv_observations(
         metric_columns = [str(item.get("column", "")) for item in metric_mappings]
         if len(set(metric_columns)) != len(metric_columns):
             raise ValueError("Each metric column can only be mapped once.")
+        metric_ids = [normalize_metric_id(str(item.get("metric_id") or "")) for item in metric_mappings]
+        if None in metric_ids or len(set(metric_ids)) != len(metric_ids):
+            raise ValueError("Each selected metric column needs a unique metric identity. Give percentage and absolute metrics different IDs.")
         missing_metric_columns = set(metric_columns) - set(reader.fieldnames)
         if missing_metric_columns:
             raise ValueError("CSV metric column(s) not found: " + ", ".join(sorted(missing_metric_columns)))
@@ -241,7 +303,16 @@ def parse_csv_observations(
     entity_by_key = {str(item["key"]): item for item in entities}
     names: dict[str, list[str]] = {}
     for entity in entities:
-        names.setdefault(str(entity["name"]).strip().casefold(), []).append(str(entity["key"]))
+        entity_key = str(entity["key"])
+        aliases: list[Any] = [entity.get("key"), entity.get("name"), entity.get("display_name"), entity.get("unified_id"), entity.get("unified_name"), entity.get("entity_id"), entity.get("id"), entity.get("publisher_id"), entity.get("aliases")]
+        for alias in aliases:
+            values = alias if isinstance(alias, list) else [alias]
+            for value in values:
+                if value is not None and str(value).strip():
+                    normalized = str(value).strip().casefold()
+                    names.setdefault(normalized, [])
+                    if entity_key not in names[normalized]:
+                        names[normalized].append(entity_key)
     rows: list[dict[str, Any]] = []
     reasons: list[str] = []
     ambiguities: list[dict[str, Any]] = []
@@ -261,13 +332,16 @@ def parse_csv_observations(
         raw = {target: (row.get(header) or "").strip() for target, header in field_mapping.items()}
         for field_name, value in explicit_values.items():
             raw[field_name] = value.strip()
-        raw_entity = raw.get("entity_id") or None
+        raw_entity_id = raw.get("entity_id") or None
+        raw_entity_name = raw.get("entity_name") or None
+        raw_entity = raw_entity_id or raw_entity_name
         entity_id = None
         entity_reasons: list[str] = []
         if raw_entity:
-            if raw_entity in entity_by_key:
-                entity_id = raw_entity
-            elif raw_entity in entity_mappings:
+            id_candidates = names.get(raw_entity_id.casefold(), []) if raw_entity_id else []
+            name_candidates = names.get(raw_entity_name.casefold(), []) if raw_entity_name else []
+            resolved_candidates = id_candidates or name_candidates
+            if raw_entity in entity_mappings:
                 mapped_key = entity_mappings[raw_entity]
                 if mapped_key == "__unmapped__":
                     entity_reasons.append("Entity intentionally left unmapped by the user.")
@@ -276,18 +350,20 @@ def parse_csv_observations(
                 else:
                     entity_id = mapped_key
             else:
-                candidates = names.get(raw_entity.casefold(), [])
-                if len(candidates) == 1:
-                    entity_id = candidates[0]
-                elif len(candidates) > 1:
-                    ambiguities.append({"csv_value": raw_entity, "row": row_number, "candidates": candidates})
+                if id_candidates and name_candidates and not set(id_candidates).intersection(name_candidates):
+                    conflict_candidates = list(dict.fromkeys([*id_candidates, *name_candidates]))
+                    ambiguities.append({"csv_value": raw_entity_id, "row": row_number, "candidates": conflict_candidates})
                     entity_reasons.append("Entity mapping needs user confirmation.")
+                elif len(resolved_candidates) == 1:
+                    entity_id = resolved_candidates[0]
+                elif len(resolved_candidates) > 1:
+                    ambiguities.append({"csv_value": raw_entity_id or raw_entity_name or raw_entity, "row": row_number, "candidates": resolved_candidates})
+                    entity_reasons.append("Entity mapping needs user confirmation.")
+                elif raw_entity in entity_by_key:
+                    entity_id = raw_entity
                 else:
                     unmatched_entities.append({"csv_value": raw_entity, "row": row_number, "candidates": []})
-                    if raw_entity in entity_mappings:
-                        entity_reasons.append(f"Entity mapping for '{raw_entity}' is invalid.")
-                    else:
-                        entity_reasons.append(f"No report entity matches '{raw_entity}'.")
+                    entity_reasons.append(f"No report entity matches '{raw_entity}'.")
         else:
             entity_reasons.append("Entity mapping is not provided.")
 
@@ -368,6 +444,7 @@ def parse_csv_observations(
                 value=value,
                 unit=normalize_unit(str(measure.get("unit") or raw.get("unit") or "")),
                 entity_id=entity_id,
+                entity_name=str(entity_by_key[entity_id].get("name")) if entity_id in entity_by_key and entity_by_key[entity_id].get("name") else None,
                 geo=geo,
                 platform=platform,
                 period_start=period_start,
@@ -383,6 +460,17 @@ def parse_csv_observations(
                 scope_compatible=scope_compatible,
                 import_status="imported",
             )
+            metric_header = str(measure.get("metric_definition") or "")
+            unit = observation.unit
+            metric_id = observation.metric_id or ""
+            percentage_metric = "%" in metric_header or bool(re.search(r"\bpercent(?:age)?\b|\bpct\b", metric_header, re.IGNORECASE)) or metric_id.endswith("_percent")
+            expected_unit = "%" if percentage_metric else ("downloads" if re.search(r"\bdownloads\b", metric_header, re.IGNORECASE) and re.search(r"\byoy\b|\babsolute\b", metric_header, re.IGNORECASE) else None)
+            if expected_unit and unit != expected_unit:
+                observation = observation.model_copy(update={
+                    "validation_reasons": [*observation.validation_reasons, f"CSV row {row_number} metric '{metric_header}' requires unit '{expected_unit}'. Check the metric unit before importing."],
+                    "complete_observation": False,
+                    "comparison_ready": False,
+                })
             identity = tuple(str(getattr(observation, field) or "").strip().casefold() for field in (
                 "metric_id", "metric_definition", "unit", "entity_id", "geo", "platform",
                 "period_start", "period_end", "granularity", "methodology", "value",

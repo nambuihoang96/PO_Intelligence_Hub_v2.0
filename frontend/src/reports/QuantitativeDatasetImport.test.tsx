@@ -28,14 +28,14 @@ describe('QuantitativeDatasetImport', () => {
     vi.mocked(reportApi.importQuantitativeDataset).mockResolvedValue({ id: 'dataset-1', report_id: 'report-1', filename: 'metrics.csv', content_sha256: 'hash', field_mapping: {}, entity_mappings: {}, observations: preview.observations as never, compatibility_status: 'compatible', validation_reasons: [], created_at: '2026-01-01', duplicate: false } as never);
     const onImported = vi.fn();
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={onImported} />);
-    fireEvent.click(screen.getByText('Import CSV'));
+    fireEvent.click(screen.getByText('CSV import · upload, review, confirm'));
     const file = new File(['metric,definition,value,unit,entity,geo,platform,start,end,granularity,source\nweekly_downloads,Weekly downloads,10,downloads,App A,US,Android,2026-01-01,2026-01-07,week,https://example.com'], 'metrics.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText('metrics.csv');
-    expect(screen.getByText(/Xem trước/)).toBeTruthy();
+    expect(screen.getByText(/dòng có nội dung/)).toBeTruthy();
     expect(reportApi.previewQuantitativeDataset).not.toHaveBeenCalled();
     expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    fireEvent.click(screen.getByText('3. Xem trước và tìm ngoại lệ'));
     await screen.findByText(/Kết quả xác thực/);
     expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1);
     expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
@@ -47,24 +47,59 @@ describe('QuantitativeDatasetImport', () => {
   it('detects semicolon wide CSV and sends only confirmed scope plus selected metrics', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
-    fireEvent.click(screen.getByText('Import CSV'));
+    fireEvent.click(screen.getByText('CSV import · upload, review, confirm'));
     const file = new File(['Unified Name;Unified ID;Platform;Downloads (Absolute)\nApp A;id-a;Unified;1200\n'], 'Worldwide Oct 14, 2026 - Nov 13, 2026.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     expect(screen.getByText(/dấu phân cách ;/)).toBeTruthy();
-    fireEvent.click(screen.getByText('Or map multiple metric columns (wide CSV)'));
-    fireEvent.click(screen.getByLabelText('Downloads (Absolute)'));
+    expect(screen.getByText(/1 metric được nhận diện/)).toBeTruthy();
     fireEvent.change(screen.getAllByRole('combobox')[2], { target: { value: 'Platform' } });
     fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
     fireEvent.change(screen.getByLabelText('Period start · giá trị xác nhận'), { target: { value: '2026-10-14' } });
     fireEvent.change(screen.getByLabelText('Period end · giá trị xác nhận'), { target: { value: '2026-11-13' } });
-    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    fireEvent.click(screen.getByText('3. Xem trước và tìm ngoại lệ'));
     await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[0][1];
     expect(payload.csv_content).toContain('Unified ID');
     expect(payload.field_mapping).toMatchObject({ entity_id: 'Unified ID', platform: 'Platform' });
     expect(payload.explicit_values).toMatchObject({ geo: 'Worldwide', period_start: '2026-10-14', period_end: '2026-11-13' });
     expect(payload.metric_mappings).toEqual([expect.objectContaining({ column: 'Downloads (Absolute)', metric_definition: 'Downloads (Absolute)' })]);
+  });
+
+  it('auto-detects entity ID and name plus distinct Sensor Tower growth metrics', async () => {
+    vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('CSV import · upload, review, confirm'));
+    const file = new File([
+      'Unified Name;Unified ID;All Title;Platform;Downloads (YoY Growth);Downloads (YoY Growth %)\nApp A;app-a;Brain Puzzle;Unified;120;12.5\n',
+    ], 'Worldwide 2026-09-14 to 2026-10-13.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+
+    expect(screen.getByText(/2 metric được nhận diện/)).toBeTruthy();
+    expect(screen.getByText(/Entity ID: Unified ID · Name: Unified Name/)).toBeTruthy();
+    const geo = screen.getByRole('combobox', { name: 'GEO' });
+    expect([...geo.querySelectorAll('option')].map((option) => option.textContent)).not.toContain('All Title');
+    expect(screen.getByRole('button', { name: 'Xác nhận GEO: Worldwide' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Xác nhận ngày bắt đầu: 2026-09-14' })).toBeTruthy();
+    expect(reportApi.previewQuantitativeDataset).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận GEO: Worldwide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận ngày bắt đầu: 2026-09-14' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận ngày kết thúc: 2026-10-13' }));
+    expect(screen.queryByRole('button', { name: 'Xác nhận GEO: Worldwide' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xác nhận ngày bắt đầu: 2026-09-14' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xác nhận ngày kết thúc: 2026-10-13' })).toBeNull();
+
+    fireEvent.click(screen.getByText('3. Xem trước và tìm ngoại lệ'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[0][1];
+    expect(payload.field_mapping).toMatchObject({ entity_id: 'Unified ID', entity_name: 'Unified Name', platform: 'Platform' });
+    expect(payload.metric_mappings).toEqual([
+      expect.objectContaining({ column: 'Downloads (YoY Growth)', metric_id: 'downloads_yoy_growth_absolute', unit: 'downloads' }),
+      expect.objectContaining({ column: 'Downloads (YoY Growth %)', metric_id: 'downloads_yoy_growth_percent', unit: '%' }),
+    ]);
+    expect(payload.explicit_values).toEqual({ geo: 'Worldwide', period_start: '2026-09-14', period_end: '2026-10-13' });
   });
 
   it('keeps three unresolved entity mappings visible, preserves choices, and requires a fresh preview', async () => {
@@ -78,14 +113,14 @@ describe('QuantitativeDatasetImport', () => {
       .mockResolvedValueOnce(preview as never);
     vi.mocked(reportApi.importQuantitativeDataset).mockResolvedValue({ id: 'dataset-3', report_id: 'report-1', filename: 'three.csv', content_sha256: 'hash', field_mapping: {}, entity_mappings: {}, observations: preview.observations as never, compatibility_status: 'partial', validation_reasons: [], created_at: '2026-01-01', duplicate: false } as never);
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
-    fireEvent.click(screen.getByText('Import CSV'));
+    fireEvent.click(screen.getByText('CSV import · upload, review, confirm'));
     const file = new File(['Entity;Value\nTwin;1\nUnknown One;bad\nUnknown Two;3\n'], 'three.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
-    fireEvent.click(screen.getByText('Or map multiple metric columns (wide CSV)'));
+    fireEvent.click(screen.getByText('Chọn thêm metric columns'));
     fireEvent.click(screen.getByLabelText('Value'));
-    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    fireEvent.click(screen.getByText('3. Xem trước và tìm ngoại lệ'));
     await screen.findByText('Entity cần mapping');
     fireEvent.change(screen.getByLabelText('Map entity Twin'), { target: { value: 'app-a' } });
     expect(screen.getByLabelText('Map entity Twin')).toBeTruthy();
@@ -116,14 +151,14 @@ describe('QuantitativeDatasetImport', () => {
       .mockImplementationOnce(() => new Promise((resolve) => { resolveStale = resolve as (result: typeof preview) => void; }))
       .mockResolvedValueOnce(preview as never);
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
-    fireEvent.click(screen.getByText('Import CSV'));
+    fireEvent.click(screen.getByText('CSV import · upload, review, confirm'));
     const file = new File(['Entity;Value\nAlpha;1\n'], 'stale.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
-    fireEvent.click(screen.getByText('Or map multiple metric columns (wide CSV)'));
+    fireEvent.click(screen.getByText('Chọn thêm metric columns'));
     fireEvent.click(screen.getByLabelText('Value'));
-    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    fireEvent.click(screen.getByText('3. Xem trước và tìm ngoại lệ'));
     await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
@@ -131,7 +166,7 @@ describe('QuantitativeDatasetImport', () => {
     await waitFor(() => expect(screen.queryByText('Old input')).toBeNull());
     expect(screen.queryByText('4. Xác nhận liên kết với báo cáo này')).toBeNull();
 
-    fireEvent.click(screen.getByText('3. Kiểm tra dữ liệu'));
+    fireEvent.click(screen.getByText('3. Xem trước và tìm ngoại lệ'));
     await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(2));
     expect(vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[1]?.[1].explicit_values?.geo).toBe('Worldwide');
     expect(await screen.findByText('4. Xác nhận liên kết với báo cáo này')).toBeTruthy();

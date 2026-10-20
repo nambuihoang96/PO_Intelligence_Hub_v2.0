@@ -35,13 +35,56 @@ function safeMetricId(header: string): string {
   return header.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 160) || 'metric';
 }
 
+function sensorTowerMetric(header: string): QuantitativeMetricColumnMapping | undefined {
+  const value = header.trim().toLocaleLowerCase();
+  const percent = /%|percent|percentage|\bpct\b/.test(value);
+  let metric_id: string | undefined;
+  let unit: string | undefined;
+  if (/\bdownloads\b/.test(value) && /\byoy\b/.test(value)) {
+    metric_id = percent ? 'downloads_yoy_growth_percent' : 'downloads_yoy_growth_absolute';
+    unit = percent ? '%' : 'downloads';
+  } else if (/\bdownloads\b/.test(value) && /\babsolute\b/.test(value)) {
+    metric_id = 'downloads_absolute'; unit = 'downloads';
+  } else if (/\brevenue\b/.test(value) && /\byoy\b/.test(value)) {
+    metric_id = percent ? 'revenue_yoy_growth_percent' : 'revenue_yoy_growth_absolute';
+    unit = percent ? '%' : '';
+  } else if (/\brevenue\b/.test(value) && /\babsolute\b/.test(value)) {
+    metric_id = 'revenue_absolute'; unit = '';
+  } else if (/\bdau\b/.test(value) && /\byoy\b/.test(value)) {
+    metric_id = percent ? 'dau_yoy_growth_percent' : 'dau_yoy_growth_absolute';
+    unit = percent ? '%' : 'users';
+  } else if (/\bdau\b/.test(value) && /\babsolute\b/.test(value)) {
+    metric_id = 'dau_absolute'; unit = 'users';
+  }
+  return metric_id ? { column: header, metric_id, metric_definition: header, unit, methodology: '' } : undefined;
+}
+
+function semanticHeader(field: string, header: string): boolean {
+  const normalized = header.trim().toLocaleLowerCase().replace(/[_-]+/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+  const patterns: Record<string, RegExp> = {
+    entity_id: /^(?:(?:unified|entity|product|app) id|entity|product|app)$/,
+    geo: /^(?:geo|country|market|region)$/,
+    platform: /^(?:platform|os|environment)$/,
+    period_start: /^(?:period start|start date|date start|start|date)$/,
+    period_end: /^(?:period end|end date|date end|end)$/,
+    granularity: /^(?:granularity|frequency|period)$/,
+    unit: /^(?:unit|units)$/,
+    source_reference: /^(?:source|source url|source reference|url)$/,
+    methodology: /^(?:methodology|method)$/,
+    metric_id: /^(?:metric|metric id|metric name)$/,
+    metric_definition: /^(?:metric definition|definition)$/,
+    value: /^(?:value|amount|count)$/,
+  };
+  return patterns[field]?.test(normalized) ?? false;
+}
+
 function headerFor(field: string, headers: string[]): string | undefined {
   if (field === 'entity_id') {
-    const idColumn = headers.find((header) => /(?:^|\b)(?:unified|entity|product|app)\s*id\b/i.test(header.trim()));
+    const idColumn = headers.find((header) => semanticHeader(field, header) && /\bid\b/i.test(header.trim()));
     if (idColumn) return idColumn;
   }
   const aliases: Record<string, string[]> = {
-    entity_id: ['entity', 'entity_id', 'product', 'app', 'unified name', 'unified id'],
+    entity_id: ['entity', 'entity_id', 'product', 'app', 'unified id', 'entity id', 'product id', 'app id'],
     geo: ['geo', 'country', 'market', 'region'], platform: ['platform', 'os', 'environment'],
     period_start: ['period_start', 'start_date', 'date_start'], period_end: ['period_end', 'end_date', 'date_end'],
     granularity: ['granularity', 'frequency'], unit: ['unit', 'units'],
@@ -56,6 +99,12 @@ function headerFor(field: string, headers: string[]): string | undefined {
 function dateHints(filename: string): { geo?: string; period_start?: string; period_end?: string } {
   const hints: { geo?: string; period_start?: string; period_end?: string } = {};
   if (/\bworldwide\b/i.test(filename)) hints.geo = 'Worldwide';
+  const isoDates = [...filename.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map((match) => match[1]);
+  if (isoDates.length >= 2) {
+    hints.period_start = isoDates[0];
+    hints.period_end = isoDates[1];
+    return hints;
+  }
   const matches = [...filename.matchAll(/(\w{3,9})\s+(\d{1,2}),?\s+(20\d{2})/g)];
   const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12', january: '01', february: '02', march: '03', april: '04', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
   if (matches.length >= 2) {
@@ -108,14 +157,23 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
     if (!file.name.toLocaleLowerCase().endsWith('.csv')) { setFailure('Chọn file .csv để tiếp tục.'); return; }
     try {
       const content = await readLocalFile(file); const parsed = parseDelimited(content); const next: Record<string, string> = {};
-      for (const [field] of LONG_FIELDS) { const match = headerFor(field, parsed.rows[0] ?? []); if (match && !Object.values(next).includes(match)) next[field] = match; }
+      const fileHeaders = parsed.rows[0] ?? [];
+      for (const [field] of LONG_FIELDS) {
+        const match = headerFor(field, fileHeaders);
+        if (match && !Object.values(next).includes(match) && semanticHeader(field, match)) next[field] = match;
+      }
+      const entityName = fileHeaders.find((header) => /^(?:unified|entity|product|app)\s*name$/i.test(header.trim()));
+      if (entityName && entityName !== next.entity_id) next.entity_name = entityName;
+      const autoMetrics = fileHeaders.filter((header) => !Object.values(next).includes(header)).map(sensorTowerMetric).filter((item): item is QuantitativeMetricColumnMapping => Boolean(item));
+      const uniqueMetricMappings = autoMetrics.map((item, index) => autoMetrics.findIndex((candidate) => candidate.metric_id === item.metric_id) === index ? item : { ...item, metric_id: `${item.metric_id}_${safeMetricId(item.column)}` });
       if (!('metric_id' in next) || !('value' in next)) {
         delete next.metric_id; delete next.metric_definition; delete next.value;
         for (const field of ['entity_id', 'platform', 'geo', 'period_start', 'period_end', 'granularity', 'source_reference', 'methodology']) {
-          const match = headerFor(field, parsed.rows[0] ?? []); if (match) next[field] = match;
+          const match = headerFor(field, fileHeaders); if (match && semanticHeader(field, match)) next[field] = match;
         }
+        if (entityName && entityName !== next.entity_id) next.entity_name = entityName;
       }
-      setFilename(file.name); setCsvContent(content); setFieldMapping(next);
+      setFilename(file.name); setCsvContent(content); setFieldMapping(next); setMetricMappings(uniqueMetricMappings);
     } catch { setFailure('Không đọc được file. Hãy chọn lại file CSV.'); }
   }
 
@@ -140,6 +198,11 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
     setMetricMappings((current) => current.map((metric) => metric.column === column ? { ...metric, ...patch } : metric)); invalidatePreview();
   }
   async function validate() {
+    const metricIds = metricMappings.map((item) => item.metric_id.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''));
+    if (metricIds.some((metricId, index) => !metricId || metricIds.indexOf(metricId) !== index)) {
+      setFailure('Mỗi metric cần một Metric identity riêng. Giữ ID tăng trưởng tuyệt đối và tăng trưởng % khác nhau.');
+      return;
+    }
     const requestRevision = ++validationRevision.current;
     const requestInput = input();
     setBusy('validating'); setFailure(''); setMessage('');
@@ -163,18 +226,19 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
   }
 
   return <details className="quant-import-flow">
-    <summary>Import CSV</summary>
+    <summary>CSV import · upload, review, confirm</summary>
     <div className="quant-import-steps">
-      <section><h4>1. Chọn CSV</h4><label className="quant-file-picker">Chọn file CSV<input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>{filename && <span className="quant-file-name">{filename}</span>}
-        {headers.length > 0 && <div className="quant-preview-table"><strong>Xem trước · {dataRows.length.toLocaleString('vi-VN')} dòng có nội dung · dấu phân cách {delimiter === '\t' ? 'tab' : delimiter}</strong><div className="quant-table-scroll"><table><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header || `Column ${index + 1}`}</th>)}</tr></thead><tbody>{sampleRows.map((sample, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index}>{sample[index] ?? ''}</td>)}</tr>)}</tbody></table></div></div>}
+      <section><h4>1. Tải CSV lên</h4><label className="quant-file-picker">Chọn file CSV<input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>{filename && <span className="quant-file-name">{filename}</span>}
+        {headers.length > 0 && <div className="quant-preview-table"><strong>Xem trước · {dataRows.length.toLocaleString('vi-VN')} dòng có nội dung · dấu phân cách {delimiter === '\t' ? 'tab' : delimiter}</strong><div className="quant-table-scroll"><table style={headers.length > 8 ? { minWidth: `${headers.length * 96}px` } : undefined}><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`} style={{ whiteSpace: 'nowrap' }}>{header || `Column ${index + 1}`}</th>)}</tr></thead><tbody>{sampleRows.map((sample, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index} style={{ whiteSpace: index === 0 ? 'normal' : 'nowrap' }}>{sample[index] ?? ''}</td>)}</tr>)}</tbody></table></div></div>}
       </section>
-      {headers.length > 0 && <section><h4>2. Map cột và xác nhận scope</h4><p>Importer nhận diện dấu phân cách và cấu trúc cột; các giá trị GEO/kỳ gợi ý từ tên file chỉ được dùng sau khi bạn xác nhận.</p>
-        <div className="quant-map-grid">{dimensions.map(([field, label]) => <label key={field}>{label}<select value={fieldMapping[field] ?? ''} onChange={(event) => setField(field, event.target.value)}><option value="">Không lấy từ cột</option>{headers.map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select>{field === 'entity_id' && <small>Map cột nhận diện entity, ví dụ Unified ID hoặc Unified Name.</small>}</label>)}</div>
+      {headers.length > 0 && <section><h4>2. Mapping tự động · xem lại ngoại lệ</h4><p>CSV gốc được giữ nguyên. Cột được nhận diện theo ý nghĩa; mỗi lựa chọn chỉ hiển thị cột phù hợp. Gợi ý scope từ tên file cần bạn xác nhận.</p>
+        <div className="quant-auto-summary" role="status">{fieldMapping.entity_id ? `Entity ID: ${fieldMapping.entity_id}` : fieldMapping.entity_name ? `Entity name: ${fieldMapping.entity_name}` : 'Entity: cần chọn cột'}{fieldMapping.entity_name && fieldMapping.entity_name !== fieldMapping.entity_id ? ` · Name: ${fieldMapping.entity_name}` : ''}{fieldMapping.geo ? ` · GEO: ${fieldMapping.geo}` : ''}{fieldMapping.platform ? ` · Platform: ${fieldMapping.platform}` : ''}{metricMappings.length ? ` · ${metricMappings.length} metric được nhận diện` : ''}</div>
+        <div className="quant-map-grid">{dimensions.map(([field, label]) => <label key={field}>{label}<select value={fieldMapping[field] ?? ''} onChange={(event) => setField(field, event.target.value)}><option value="">Không lấy từ cột</option>{headers.filter((header) => semanticHeader(field, header)).map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select>{field === 'entity_id' && <small>Tự dò Unified ID và Unified Name, rồi so với entity trong báo cáo.</small>}</label>)}</div>
         <div className="quant-map-grid">{dimensions.filter(([field]) => !['entity_id', 'source_reference', 'methodology'].includes(field)).map(([field, label]) => <label key={`constant-${field}`}>{label} · giá trị xác nhận<input value={explicitValues[field] ?? ''} disabled={Boolean(fieldMapping[field])} onChange={(event) => setConstant(field, event.target.value)} placeholder={field === 'geo' && hints.geo ? `Gợi ý từ tên file: ${hints.geo}` : field.startsWith('period_') && hints[field as 'period_start' | 'period_end'] ? `Gợi ý từ tên file: ${hints[field as 'period_start' | 'period_end']}` : 'Để trống nếu chưa biết'} /></label>)}</div>
-        {(hints.geo || hints.period_start || hints.period_end) && <div className="quant-suggestions"><strong>Gợi ý đọc được từ tên file — cần bạn xác nhận:</strong>{hints.geo && !fieldMapping.geo && <button type="button" className="text-button" onClick={() => setConstant('geo', hints.geo!)}>Dùng GEO: {hints.geo}</button>}{hints.period_start && !fieldMapping.period_start && <button type="button" className="text-button" onClick={() => setConstant('period_start', hints.period_start!)}>Dùng ngày bắt đầu: {hints.period_start}</button>}{hints.period_end && !fieldMapping.period_end && <button type="button" className="text-button" onClick={() => setConstant('period_end', hints.period_end!)}>Dùng ngày kết thúc: {hints.period_end}</button>}</div>}
-        {!wide && <div className="quant-map-grid">{(['metric_id', 'metric_definition', 'value'] as const).map((field) => <label key={field}>{field === 'metric_id' ? 'Metric identity' : field === 'metric_definition' ? 'Metric definition' : 'Exact value'}<select value={fieldMapping[field] ?? ''} onChange={(event) => setField(field, event.target.value)}><option value="">Chọn cột…</option>{headers.map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select></label>)}</div>}
-        <details className="quant-metric-columns"><summary>{wide ? `${metricMappings.length} metric columns selected` : 'Or map multiple metric columns (wide CSV)'}</summary><p>Chọn cột cần nhập làm quan sát. Tên cột được giữ làm định nghĩa ban đầu; unit và methodology cần khai báo nếu biết. Cột không chọn vẫn được giữ trong CSV gốc.</p>{metricColumns.map((column) => { const selected = metricMappings.find((metric) => metric.column === column); return <div className="quant-metric-row" key={column}><label><input type="checkbox" checked={Boolean(selected)} onChange={(event) => toggleMetric(column, event.target.checked)} />{column}</label>{selected && <><label>Metric identity<input value={selected.metric_id} onChange={(event) => patchMetric(column, { metric_id: event.target.value })} /></label><label>Definition<input value={selected.metric_definition} onChange={(event) => patchMetric(column, { metric_definition: event.target.value })} /></label><label>Unit<input value={selected.unit ?? ''} onChange={(event) => patchMetric(column, { unit: event.target.value })} placeholder="Ví dụ: downloads" /></label><label>Methodology<input value={selected.methodology ?? ''} onChange={(event) => patchMetric(column, { methodology: event.target.value })} placeholder="Nếu được cung cấp" /></label></>}</div>; })}</details>
-        <button type="button" className="secondary-action" disabled={busy !== null || (!wide && (!fieldMapping.metric_id || !fieldMapping.value))} onClick={() => void validate()}>{busy === 'validating' ? 'Đang xác thực…' : '3. Kiểm tra dữ liệu'}</button>
+        {(hints.geo || hints.period_start || hints.period_end) && <div className="quant-suggestions"><strong>Gợi ý scope từ tên file — chỉ dùng sau khi bạn xác nhận:</strong>{hints.geo && !fieldMapping.geo && !explicitValues.geo && <button type="button" className="text-button" onClick={() => setConstant('geo', hints.geo!)}>Xác nhận GEO: {hints.geo}</button>}{hints.period_start && !fieldMapping.period_start && !explicitValues.period_start && <button type="button" className="text-button" onClick={() => setConstant('period_start', hints.period_start!)}>Xác nhận ngày bắt đầu: {hints.period_start}</button>}{hints.period_end && !fieldMapping.period_end && !explicitValues.period_end && <button type="button" className="text-button" onClick={() => setConstant('period_end', hints.period_end!)}>Xác nhận ngày kết thúc: {hints.period_end}</button>}</div>}
+        {!wide && <div className="quant-map-grid">{(['metric_id', 'metric_definition', 'value'] as const).map((field) => <label key={field}>{field === 'metric_id' ? 'Metric identity' : field === 'metric_definition' ? 'Metric definition' : 'Exact value'}<select value={fieldMapping[field] ?? ''} onChange={(event) => setField(field, event.target.value)}><option value="">Chọn cột…</option>{headers.filter((header) => semanticHeader(field, header)).map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select></label>)}</div>}
+        <details className="quant-metric-columns"><summary>{wide ? `${metricMappings.length} metric columns selected` : 'Chọn thêm metric columns'}</summary><p>Các metric Sensor Tower quen thuộc được nhận diện sẵn. Tăng trưởng tuyệt đối và phần trăm có ID/unit riêng. Cột khác vẫn được giữ trong CSV gốc tới khi bạn chọn.</p>{metricColumns.map((column) => { const selected = metricMappings.find((metric) => metric.column === column); return <div className="quant-metric-row" key={column}><label><input type="checkbox" checked={Boolean(selected)} onChange={(event) => toggleMetric(column, event.target.checked)} />{column}</label>{selected && <><label>Metric identity<input value={selected.metric_id} onChange={(event) => patchMetric(column, { metric_id: event.target.value })} /></label><label>Definition<input value={selected.metric_definition} onChange={(event) => patchMetric(column, { metric_definition: event.target.value })} /></label><label>Unit<input value={selected.unit ?? ''} onChange={(event) => patchMetric(column, { unit: event.target.value })} placeholder="Ví dụ: downloads hoặc %" /></label><label>Methodology<input value={selected.methodology ?? ''} onChange={(event) => patchMetric(column, { methodology: event.target.value })} placeholder="Nếu được cung cấp" /></label></>}</div>; })}</details>
+        <button type="button" className="secondary-action" disabled={busy !== null || (!wide && (!fieldMapping.metric_id || !fieldMapping.value)) || (!fieldMapping.entity_id && !fieldMapping.entity_name)} onClick={() => void validate()}>{busy === 'validating' ? 'Đang xem lại…' : '3. Xem trước và tìm ngoại lệ'}</button>
       </section>}
       {preview && <section className="quant-validation" aria-live="polite"><h4>Kết quả xác thực · {preview.total_rows.toLocaleString('vi-VN')} observations</h4><div className="quant-readiness-counts"><span>Đầy đủ: <b>{preview.complete_observations}</b></span><span>Đúng scope: <b>{preview.scope_compatible_observations}</b></span><span>Có thể so sánh: <b>{preview.comparison_ready_observations}</b></span><span>Dòng trùng: <b>{preview.duplicate_rows}</b></span></div><p>{preview.compatibility_status === 'compatible' ? 'Phạm vi khớp với báo cáo.' : preview.compatibility_status === 'incompatible' ? 'Không có dòng nào khớp scope báo cáo.' : 'Một phần dữ liệu chưa đầy đủ hoặc cần xem lại.'} Lưu thành công không đồng nghĩa mọi quan sát sẵn sàng phân tích.</p>
         <details className="quant-row-details"><summary>Xem observations và lý do validation</summary><div className="quant-table-scroll"><table><thead><tr><th>Metric</th><th>Value</th><th>Entity</th><th>GEO / Platform</th><th>Readiness</th><th>Validation</th></tr></thead><tbody>{preview.observations.map((observation, index) => <tr key={`${index}-${observation.metric_id}`}><td>{observation.metric_definition || observation.metric_id || 'Unknown metric'}</td><td>{observation.value ?? 'Unknown'} {observation.unit ?? ''}</td><td>{report.research_data.entities.find((entity) => entity.key === observation.entity_id)?.name ?? 'Not mapped'}</td><td>{observation.geo ?? 'GEO missing'} / {observation.platform ?? 'Platform missing'}</td><td>{observation.comparison_ready ? 'Ready for pair check' : observation.scope_compatible === false ? 'Scope mismatch' : 'Incomplete'}</td><td>{observation.validation_reasons.length ? observation.validation_reasons.join(' ') : 'No validation issues detected'}</td></tr>)}</tbody></table></div></details>
