@@ -32,3 +32,10 @@ This hotfix addresses CSV mapping and review usability for Sensor Tower style ex
 ## Data and release status
 
 UAT data was written only to a disposable, isolated database under the task workspace. The original CSV and application data were not modified. No merge to `master` was performed. The task branch is ready for PO review.
+
+## Follow-up from PO screenshot
+
+- The CSV banner now explicitly distinguishes the total number of data rows from the three-row sample shown on screen.
+- Steps and actions now explain that preview does not save data and identify the final action as saving observations to the report.
+- If the API returns `Unsupported mapped field(s): entity_name`, the UI explains that validation did not import data and directs the operator to restart `run.bat` from the updated task-branch checkout.
+- Follow-up frontend regression: 87 passed across 9 files; TypeScript check and production build passed.
