@@ -81,6 +81,30 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertEqual(rows[0]["entity_id"], "app-a")
         self.assertEqual(unresolved, [])
 
+    def test_entity_name_matching_ignores_multiline_whitespace(self):
+        rows, _, unresolved, _ = parse_csv_observations(
+            "Unified Name;Unified ID;Downloads (Absolute)\n\"App\nA\";export-id;12\n",
+            report_id="report", report_geo="Worldwide", report_platform="Unified", report_period=None,
+            entities=[{"key": "app-a", "name": "App A"}],
+            field_mapping={"entity_id": "Unified ID", "entity_name": "Unified Name"}, entity_mappings={},
+            metric_mappings=[{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+        )
+        self.assertEqual(rows[0]["entity_id"], "app-a")
+        self.assertEqual(unresolved, [])
+
+    def test_unmatched_entity_rows_keep_display_name_and_do_not_create_false_duplicates(self):
+        rows, reasons, unresolved, _ = parse_csv_observations(
+            "Unified Name;Unified ID;Downloads (Absolute)\nApp A;export-a;10\nApp B;export-b;10\n",
+            report_id="report", report_geo="Worldwide", report_platform="Unified", report_period=None,
+            entities=[{"key": "other", "name": "Other App"}],
+            field_mapping={"entity_id": "Unified ID", "entity_name": "Unified Name"}, entity_mappings={},
+            metric_mappings=[{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+        )
+        self.assertEqual([item["csv_value"] for item in unresolved], ["export-a", "export-b"])
+        self.assertEqual([item["csv_name"] for item in unresolved], ["App A", "App B"])
+        self.assertEqual(len(rows), 2)
+        self.assertFalse(any("duplicate observation" in reason.casefold() for reason in reasons))
+
     def test_csv_rejects_semantically_wrong_geo_mapping(self):
         with self.assertRaisesRegex(ValueError, "does not look like a geo field"):
             parse_csv_observations(

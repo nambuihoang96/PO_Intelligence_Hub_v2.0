@@ -108,7 +108,7 @@ describe('QuantitativeDatasetImport', () => {
     const unresolvedPreview = {
       ...preview,
       ambiguities: [{ csv_value: 'Twin', row: 2, candidates: ['app-a'] }],
-      unmatched_entities: [{ csv_value: 'Unknown One', row: 3, candidates: [] }, { csv_value: 'Unknown Two', row: 4, candidates: [] }],
+      unmatched_entities: [{ csv_value: 'Unknown One', csv_name: 'Unknown One', row: 3, candidates: [] }, { csv_value: 'Unknown Two', row: 4, candidates: [] }],
     };
     vi.mocked(reportApi.previewQuantitativeDataset)
       .mockResolvedValueOnce(unresolvedPreview as never)
@@ -123,7 +123,8 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.click(screen.getByText('Chọn thêm metric columns'));
     fireEvent.click(screen.getByLabelText('Value'));
     fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
-    await screen.findByText('Entity cần mapping');
+    await screen.findByText(/Chưa ghép được 3 app/);
+    expect(screen.getByText('Unknown One · ID: Unknown One')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Map entity Twin'), { target: { value: 'app-a' } });
     expect(screen.getByLabelText('Map entity Twin')).toBeTruthy();
     expect(screen.getByLabelText('Map entity Unknown One')).toBeTruthy();
@@ -188,5 +189,22 @@ describe('QuantitativeDatasetImport', () => {
     expect(await screen.findByText(/Backend đang chạy phiên bản cũ/)).toBeTruthy();
     expect(screen.getByText(/Chưa có dữ liệu nào được nhập/)).toBeTruthy();
     expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
+  });
+
+  it('states the scope mismatch and makes clear that Unified is not converted into a store platform', async () => {
+    vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue({
+      ...preview,
+      compatibility_status: 'incompatible',
+      validation_reasons: ["Platform 'Unified' differs from report scope 'Android'."],
+    } as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
+    const file = new File(['Unified Name;Unified ID;Platform;Downloads (Absolute)\nApp A;app-a;Unified;1200\n'], 'unified.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+    fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
+
+    expect(await screen.findByText(/Platform 'Unified' differs from report scope 'Android'/)).toBeTruthy();
+    expect(screen.getByText(/không tự đổi thành Android hoặc iOS/)).toBeTruthy();
   });
 });

@@ -39,3 +39,11 @@ UAT data was written only to a disposable, isolated database under the task work
 - Steps and actions now explain that preview does not save data and identify the final action as saving observations to the report.
 - If the API returns `Unsupported mapped field(s): entity_name`, the UI explains that validation did not import data and directs the operator to restart `run.bat` from the updated task-branch checkout.
 - Follow-up frontend regression: 87 passed across 9 files; TypeScript check and production build passed.
+
+## Follow-up from second PO screenshot
+
+- Entity names are normalized for Unicode and repeated whitespace before exact matching, so harmless line breaks or spacing in export cells do not force manual mappings.
+- Unresolved entity choices show the CSV display name alongside its ID.
+- Unresolved rows use their CSV ID/name for duplicate detection. Different unmapped apps with identical metric values are no longer falsely counted as duplicates because their canonical entity ID is null.
+- The preview now surfaces the exact GEO/platform scope mismatch returned by validation and explains that `Unified` remains unchanged.
+- Follow-up regression: backend 36 passed; frontend 88 passed across 9 files; TypeScript check and production build passed.

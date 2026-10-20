@@ -8,6 +8,7 @@ import hashlib
 import io
 import math
 import re
+import unicodedata
 from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
@@ -87,6 +88,11 @@ def normalize_unit(value: str | None) -> str | None:
         return None
     trimmed = value.strip()
     return UNIT_ALIASES.get(trimmed.casefold(), trimmed)
+
+
+def _entity_match_key(value: Any) -> str:
+    """Normalize harmless whitespace and Unicode differences in exported entity labels."""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(value)).strip()).casefold()
 
 
 def _date(value: str | None) -> date | None:
@@ -309,7 +315,7 @@ def parse_csv_observations(
             values = alias if isinstance(alias, list) else [alias]
             for value in values:
                 if value is not None and str(value).strip():
-                    normalized = str(value).strip().casefold()
+                    normalized = _entity_match_key(value)
                     names.setdefault(normalized, [])
                     if entity_key not in names[normalized]:
                         names[normalized].append(entity_key)
@@ -338,8 +344,8 @@ def parse_csv_observations(
         entity_id = None
         entity_reasons: list[str] = []
         if raw_entity:
-            id_candidates = names.get(raw_entity_id.casefold(), []) if raw_entity_id else []
-            name_candidates = names.get(raw_entity_name.casefold(), []) if raw_entity_name else []
+            id_candidates = names.get(_entity_match_key(raw_entity_id), []) if raw_entity_id else []
+            name_candidates = names.get(_entity_match_key(raw_entity_name), []) if raw_entity_name else []
             resolved_candidates = id_candidates or name_candidates
             if raw_entity in entity_mappings:
                 mapped_key = entity_mappings[raw_entity]
@@ -352,17 +358,17 @@ def parse_csv_observations(
             else:
                 if id_candidates and name_candidates and not set(id_candidates).intersection(name_candidates):
                     conflict_candidates = list(dict.fromkeys([*id_candidates, *name_candidates]))
-                    ambiguities.append({"csv_value": raw_entity_id, "row": row_number, "candidates": conflict_candidates})
+                    ambiguities.append({"csv_value": raw_entity_id, "csv_name": raw_entity_name, "row": row_number, "candidates": conflict_candidates})
                     entity_reasons.append("Entity mapping needs user confirmation.")
                 elif len(resolved_candidates) == 1:
                     entity_id = resolved_candidates[0]
                 elif len(resolved_candidates) > 1:
-                    ambiguities.append({"csv_value": raw_entity_id or raw_entity_name or raw_entity, "row": row_number, "candidates": resolved_candidates})
+                    ambiguities.append({"csv_value": raw_entity_id or raw_entity_name or raw_entity, "csv_name": raw_entity_name, "row": row_number, "candidates": resolved_candidates})
                     entity_reasons.append("Entity mapping needs user confirmation.")
                 elif raw_entity in entity_by_key:
                     entity_id = raw_entity
                 else:
-                    unmatched_entities.append({"csv_value": raw_entity, "row": row_number, "candidates": []})
+                    unmatched_entities.append({"csv_value": raw_entity_id or raw_entity, "csv_name": raw_entity_name, "row": row_number, "candidates": []})
                     entity_reasons.append(f"No report entity matches '{raw_entity}'.")
         else:
             entity_reasons.append("Entity mapping is not provided.")
@@ -475,6 +481,9 @@ def parse_csv_observations(
                 "metric_id", "metric_definition", "unit", "entity_id", "geo", "platform",
                 "period_start", "period_end", "granularity", "methodology", "value",
             ))
+            if not entity_id:
+                raw_entity_identity = _entity_match_key(raw_entity_id or raw_entity_name or "")
+                identity = (*identity[:3], f"unresolved:{raw_entity_identity or row_number}", *identity[4:])
             if identity in seen_observations:
                 duplicate_rows += 1
                 duplicate_reason = f"Duplicate observation of CSV row {seen_observations[identity]}."

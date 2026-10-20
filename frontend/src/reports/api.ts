@@ -65,7 +65,7 @@ export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'resea
 export type QuantitativeMetricColumnMapping = { column: string; metric_id: string; metric_definition: string; unit?: string | null; methodology?: string | null };
 export type QuantitativeDatasetInput = { filename: string; csv_content: string; field_mapping: Record<string, string>; entity_mappings?: Record<string, string>; metric_mappings?: QuantitativeMetricColumnMapping[]; explicit_values?: Record<string, string> };
 export type QuantitativeDatasetPreview = {
-  observations: QuantitativeObservation[]; validation_reasons: string[]; ambiguities: { csv_value: string; row: number; candidates: string[] }[]; unmatched_entities?: { csv_value: string; row: number; candidates: string[] }[];
+  observations: QuantitativeObservation[]; validation_reasons: string[]; ambiguities: { csv_value: string; csv_name?: string | null; row: number; candidates: string[] }[]; unmatched_entities?: { csv_value: string; csv_name?: string | null; row: number; candidates: string[] }[];
   compatibility_status: 'compatible' | 'partial' | 'incompatible'; total_rows: number; complete_observations: number;
   scope_compatible_observations: number; comparison_ready_observations: number; duplicate_rows: number;
 };
