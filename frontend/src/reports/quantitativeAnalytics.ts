@@ -1,7 +1,7 @@
 import type { QuantitativeObservation } from './api';
 
 export type QuantitativeView = {
-  kind: 'comparison' | 'time_series' | 'two_point' | 'ranking';
+  kind: 'comparison' | 'time_series' | 'two_point' | 'period_matrix' | 'ranking' | 'observation';
   label: string;
   observations: { index: number; row: QuantitativeObservation }[];
 };
@@ -13,6 +13,8 @@ const hasExactScope = (row: QuantitativeObservation) => Boolean(
   && row.complete_observation && row.scope_compatible === true && row.comparison_ready,
 );
 
+// Keep methodology and the complete metric definition in the identity. Similar labels
+// alone are not enough to compare observations.
 function baseKey(row: QuantitativeObservation): string {
   return JSON.stringify([
     row.metric_id, row.metric_definition, row.unit, row.geo, row.platform,
@@ -20,10 +22,19 @@ function baseKey(row: QuantitativeObservation): string {
   ]);
 }
 
+function periodKey(row: QuantitativeObservation): string {
+  return `${row.period_start}|${row.period_end}`;
+}
+
 function isRanking(row: QuantitativeObservation): boolean {
   const id = row.metric_id?.toLocaleLowerCase() || '';
   const unit = row.unit?.toLocaleLowerCase() || '';
   return /(^|_)(rank|ranking|position)(_|$)/.test(id) || ['rank', 'ranking position', 'position'].includes(unit);
+}
+
+function chronological(a: { row: QuantitativeObservation }, b: { row: QuantitativeObservation }): number {
+  return (a.row.period_start || '').localeCompare(b.row.period_start || '')
+    || (a.row.period_end || '').localeCompare(b.row.period_end || '');
 }
 
 export function selectQuantitativeViews(rows: QuantitativeObservation[]): QuantitativeView[] {
@@ -36,35 +47,61 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
 
   const views: QuantitativeView[] = [];
   for (const group of groups.values()) {
-    const periods = new Map<string, typeof group>();
+    const byPeriod = new Map<string, typeof group>();
+    const byEntity = new Map<string, typeof group>();
     for (const point of group) {
-      const key = `${point.row.period_start}|${point.row.period_end}`;
-      periods.set(key, [...(periods.get(key) ?? []), point]);
+      const pKey = periodKey(point.row);
+      byPeriod.set(pKey, [...(byPeriod.get(pKey) ?? []), point]);
+      const eKey = point.row.entity_id!;
+      byEntity.set(eKey, [...(byEntity.get(eKey) ?? []), point]);
     }
-    const allRanked = group.every(({ row }) => isRanking(row));
-    if (allRanked && group.length >= 2) {
-      for (const samePeriod of periods.values()) {
-        if (new Set(samePeriod.map(({ row }) => row.entity_id)).size >= 2) {
-          views.push({ kind: 'ranking', label: samePeriod[0].row.metric_definition || 'Reported ranking position', observations: [...samePeriod].sort((a, b) => Number(a.row.value) - Number(b.row.value)) });
-        }
+
+    if (group.every(({ row }) => isRanking(row))) {
+      for (const period of byPeriod.values()) {
+        const comparableEntities = new Set(period.map(({ row }) => row.entity_id)).size;
+        views.push({
+          kind: comparableEntities >= 2 ? 'ranking' : 'observation',
+          label: period[0].row.metric_definition || 'Reported ranking position',
+          observations: comparableEntities >= 2 ? [...period].sort((a, b) => Number(a.row.value) - Number(b.row.value)) : [...period],
+        });
       }
       continue;
     }
 
-    const byEntity = new Map<string, typeof group>();
-    for (const point of group) byEntity.set(point.row.entity_id!, [...(byEntity.get(point.row.entity_id!) ?? []), point]);
-    const series = [...byEntity.values()].find((items) => new Set(items.map(({ row }) => `${row.period_start}|${row.period_end}`)).size >= 2);
-    if (series) {
-      const ordered = [...series].sort((a, b) => (a.row.period_start || '').localeCompare(b.row.period_start || ''));
-      const distinctPeriods = new Set(ordered.map(({ row }) => `${row.period_start}|${row.period_end}`)).size;
-      views.push({ kind: distinctPeriods === 2 ? 'two_point' : 'time_series', label: ordered[0].row.metric_definition || ordered[0].row.metric_id || 'Reported metric', observations: ordered });
+    const distinctPeriods = new Set(group.map(({ row }) => periodKey(row)));
+    const entitiesWithMultiplePeriods = [...byEntity.values()].filter((entity) => new Set(entity.map(({ row }) => periodKey(row))).size >= 2);
+    const hasMultipleEntities = byEntity.size >= 2;
+
+    // Multi-entity observations across periods are shown as a date-labeled matrix.
+    // Missing cells remain empty and each supplied observation retains its own evidence action.
+    if (hasMultipleEntities && distinctPeriods.size >= 2) {
+      views.push({
+        kind: 'period_matrix',
+        label: group[0].row.metric_definition || group[0].row.metric_id || 'Reported metric',
+        observations: [...group].sort((a, b) => chronological(a, b)
+          || (a.row.entity_name || a.row.entity_id || '').localeCompare(b.row.entity_name || b.row.entity_id || '')),
+      });
       continue;
     }
 
-    const comparablePeriod = [...periods.values()].find((items) => new Set(items.map(({ row }) => row.entity_id)).size >= 2);
+    if (entitiesWithMultiplePeriods.length) {
+      const series = [...entitiesWithMultiplePeriods[0]].sort(chronological);
+      const distinct = new Set(series.map(({ row }) => periodKey(row))).size;
+      views.push({
+        kind: distinct === 2 ? 'two_point' : 'time_series',
+        label: series[0].row.metric_definition || series[0].row.metric_id || 'Reported metric',
+        observations: series,
+      });
+      continue;
+    }
+
+    const comparablePeriod = [...byPeriod.values()].find((period) => new Set(period.map(({ row }) => row.entity_id)).size >= 2);
     if (comparablePeriod) {
       const ordered = [...comparablePeriod].sort((a, b) => (a.row.entity_name || a.row.entity_id || '').localeCompare(b.row.entity_name || b.row.entity_id || ''));
       views.push({ kind: 'comparison', label: ordered[0].row.metric_definition || ordered[0].row.metric_id || 'Reported metric', observations: ordered });
+    } else if (group.length) {
+      // A lone complete observation is still useful as a sourced fact; do not silently omit it.
+      views.push({ kind: 'observation', label: group[0].row.metric_definition || group[0].row.metric_id || 'Reported metric', observations: [...group] });
     }
   }
   return views;

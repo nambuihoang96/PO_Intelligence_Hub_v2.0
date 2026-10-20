@@ -937,6 +937,37 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
   .quant-two-point, .quant-point-list { grid-template-columns: minmax(0, 1fr); }
 }
 .quant-data-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.quantitative-evidence { scroll-margin-top: 84px; }
+.quant-comparison-row { grid-template-columns: minmax(150px, 1.15fr) minmax(100px, 2fr) minmax(105px, auto); min-width: 0; padding: 9px 8px; }
+.quant-matrix-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; border: 1px solid #e3eaf2; border-radius: 8px; }
+.quant-period-matrix { width: 100%; min-width: 570px; border-collapse: separate; border-spacing: 0; color: #263c56; font-size: 13px; }
+.quant-period-matrix th, .quant-period-matrix td { min-width: 150px; padding: 9px; border-right: 1px solid #e8edf3; border-bottom: 1px solid #e8edf3; text-align: left; vertical-align: top; }
+.quant-period-matrix thead th { position: sticky; top: 0; z-index: 1; background: #f4f7fb; color: #50647d; font-size: 12px; }
+.quant-period-matrix tbody th { position: sticky; left: 0; z-index: 1; width: 160px; background: #fbfcfe; overflow-wrap: anywhere; }
+.quant-period-matrix tr:last-child th, .quant-period-matrix tr:last-child td { border-bottom: 0; }
+.quant-period-matrix th:last-child, .quant-period-matrix td:last-child { border-right: 0; }
+.quant-matrix-point { display: grid; gap: 4px; width: 100%; padding: 7px; border: 1px solid #e1e8f0; border-radius: 7px; color: #263c56; background: #fff; text-align: left; cursor: pointer; }
+.quant-matrix-point:hover, .quant-matrix-point:focus-visible { background: #eff5fc; outline-color: #4c83c7; }
+.quant-matrix-point strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.quant-matrix-point span { color: #687a90; font-size: 11px; }
+.quant-matrix-point u { color: #315f9e; font-size: 12px; }
+.quant-matrix-missing { color: #79879a; font-size: 12px; }
+.quant-single-observations { display: grid; gap: 6px; }
+.quant-single-observations button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; padding: 9px; border: 1px solid #e3eaf2; border-radius: 7px; color: #263c56; background: #fff; text-align: left; cursor: pointer; }
+.quant-single-observations button > span { font-weight: 650; overflow-wrap: anywhere; }
+.quant-single-observations button > strong { font-variant-numeric: tabular-nums; }
+.quant-single-observations button > small { grid-column: 1 / -1; color: #687a90; font-size: 12px; }
+.quant-time-series svg text { fill: #52647a; font-size: 12px; }
+.quant-time-series > p { font-size: 12px; }
+@media (max-width: 600px) {
+  .quant-comparison-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; font-size: 13px; }
+  .quant-comparison-track { grid-column: 1 / -1; grid-row: 2; }
+  .quant-comparison-row > small { font-size: 12px; overflow-wrap: anywhere; }
+  .quantitative-view { padding: 12px; }
+  .quantitative-view-heading { align-items: flex-start; }
+  .quantitative-view-heading > span { white-space: nowrap; }
+  .quant-matrix-scroll { border-radius: 7px; }
+}
 .quant-state { color:#435b76; font-weight:600; }
 .quant-observation-list, .quant-dataset-list { display:grid; gap:8px; margin:10px 0; padding:0; list-style:none; }
 .quant-observation-list details, .quant-dataset-list > li { min-width:0; padding:10px 12px; border:1px solid #e4eaf0; border-radius:9px; background:#fbfcfe; }
