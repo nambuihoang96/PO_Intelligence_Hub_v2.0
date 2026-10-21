@@ -50,14 +50,14 @@ The pre-existing user changes in `scripts/setup.ps1`, `.devcrew/`, and `.test-tm
 - At 390px, the document width stayed within the viewport (`scrollWidth` 375px, viewport 390px); the dataset table used contained horizontal scrolling. Main navigation, breadcrumb, and report tabs also scroll horizontally at mobile width.
 - A real browser screenshot of the mobile view was captured and displayed during this task. The in-app browser capture interface exposed it as an image result but did not provide a path/export operation to write the PNG into the repository. Therefore screenshot files under `.bangiao/screenshots/csv-import-p0-r2/` are **NOT VERIFIED / NOT COMMITTED**.
 - The initial synthetic browser UAT seeded the linked dataset through the local API; that pass did not exercise the file chooser. Frontend import interactions are covered by component tests.
-- During follow-up review, the owner's October Sensor Tower file was selected in the browser and its preview confirmed semicolon parsing, 25 app rows, nine metric columns, `Unified` platform retention, and explicit Worldwide/date-range confirmation. That preview came from the pre-fix backend and marked the observations incomplete solely because no standalone granularity label was provided. The readiness fix now accepts explicit start/end bounds without guessing a granularity; the isolated API regression verifies this behavior. The owner file was not confirmed/imported after this fix, so end-to-end persistence for that file is **NOT VERIFIED**.
+- During follow-up review, the owner's October Sensor Tower file was selected in the browser and its preview confirmed semicolon parsing, 25 app rows, nine metric columns, `Unified` platform retention, and explicit Worldwide/date-range confirmation. That preview came from the pre-fix backend and marked the observations incomplete because no standalone granularity label was provided. After the readiness fix, the exact owner file was previewed and imported through the API into isolated SQLite, then reopened from the report dataset list: 25 apps × 9 metrics = 225 retained observations; 110 complete and 115 incomplete (blank/invalid values or units remain explicit); `Unified` remained unchanged. Dataset persistence passed. Browser file selection was tested before the fix, while post-fix persistence was verified through the integration API rather than a fresh browser import.
 - The browser tab at `127.0.0.1:15173` later showed the owner's separate local app with its backend unavailable. I did not restart or alter that process. Fresh post-fix browser UAT is therefore **NOT VERIFIED**.
 - A real browser screenshot of the synthetic mobile view was captured and displayed during the earlier UAT, but the in-app browser capture interface provided no image export path. No screenshot file was committed. Repository screenshot artifacts are **NOT VERIFIED / NOT COMMITTED**.
 
 ## Limitations
 
 - Multi-period observations that share an app/metric cell are surfaced as ambiguous rather than combined. The explorer does not aggregate incompatible periods or scopes.
-- The owner's actual CSV preview was exercised, but its post-fix confirmation, persistence, refresh, and reopen flow remain unverified. Repository screenshot artifacts could not be saved through the available browser capture interface.
+- The owner's actual CSV post-fix preview, import, and API reopen were verified against isolated SQLite. A fresh post-fix browser save/refresh/reopen interaction remains unverified because the local browser page at `127.0.0.1:15173` had no backend connection. Repository screenshot artifacts could not be saved through the available browser capture interface.
 - `Unified` platform is intentionally treated as its own scope; comparisons that require a native mobile OS remain incompatible until explicitly mapped with valid evidence.
 
 ## Commits
@@ -65,4 +65,4 @@ The pre-existing user changes in `scripts/setup.ps1`, `.devcrew/`, and `.test-tm
 - Implementation commit SHA: `2ece4c8` (`feat: add source-aware CSV dataset explorer`).
 - Readiness correction commit SHA: `feb8b019ca0c2474ae699defb78f0004112d4db5` (`fix: accept explicit quantitative period bounds`).
 - Explicit period bounds satisfy observation completeness without inventing cadence. Comparison readiness still requires explicit methodology and compatible scope.
-- This handoff was updated with the follow-up test and owner-file preview results after `feb8b01`.
+- This handoff was updated with the follow-up test and owner-file import results after `feb8b01`.
