@@ -175,7 +175,7 @@ def assess_observation_readiness(
         source_reasons = [reason for reason in observation.validation_reasons if reason not in compatibility_reasons and not reason.startswith("Entity does not resolve") and not (reason == "Entity mapping is not provided." and source_identity)]
     display_ready = bool(observation.metric_id and observation.value is not None and source_identity)
     required = (observation.metric_id, observation.metric_definition, observation.value, observation.unit, source_identity,
-                observation.geo, observation.platform, observation.period_start, observation.period_end, observation.granularity)
+                observation.geo, observation.platform, observation.period_start, observation.period_end)
     complete = all(value not in (None, "") for value in required) and not source_reasons
     analysis_ready = complete
     report_compatibility = "incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and observation.geo and observation.platform and observation.period_start and observation.period_end else "unknown")
@@ -525,11 +525,12 @@ def parse_csv_observations(
                 "platform": observation.platform,
                 "period start": observation.period_start,
                 "period end": observation.period_end,
-                "granularity": observation.granularity,
             }
             for label, supplied in missing.items():
                 if supplied in (None, ""):
                     source_reasons.append(f"CSV row {row_number} is missing {label}.")
+            if not observation.granularity and not (observation.period_start and observation.period_end):
+                source_reasons.append(f"CSV row {row_number} is missing granularity or explicit period bounds.")
             display_ready = bool(observation.metric_id and observation.value is not None and observation.source_entity_id)
             complete = not source_reasons and observation.value is not None
             observation = observation.model_copy(update={

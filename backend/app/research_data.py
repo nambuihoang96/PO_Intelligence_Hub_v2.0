@@ -193,6 +193,11 @@ class QuantitativeObservation(ResearchModel):
             ("period_end", "period end"),
             ("granularity", "period granularity"),
         ):
+            # Explicit period bounds define an observation interval even when the
+            # source does not provide a separate cadence label. Keep that interval
+            # usable without silently inventing a day/week/month granularity.
+            if field_name == "granularity" and self.period_start and self.period_end:
+                continue
             missing_reason = f"Missing {label}."
             if getattr(self, field_name) is None and missing_reason not in reasons:
                 reasons.append(missing_reason)

@@ -448,6 +448,39 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(len(saved.json()["metric_mappings"]), 2)
         self.assertEqual(len(saved.json()["observations"]), 2)
 
+    def test_explicit_period_bounds_are_sufficient_without_invented_granularity(self):
+        report_id = self.create_report("Explicit interval without cadence")
+        body = {
+            "filename": "explicit-interval.csv",
+            "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nExternal App;st-interval;Unified;120\n",
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-14", "period_end": "2026-11-13"},
+        }
+        preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        observation = preview.json()["observations"][0]
+        self.assertIsNone(observation["granularity"])
+        self.assertTrue(observation["complete_observation"], observation)
+        self.assertTrue(observation["analysis_ready"], observation)
+        self.assertFalse(observation["comparison_ready"], "A distinct cadence/methodology must not be invented for comparison readiness.")
+
+    def test_missing_period_bounds_and_granularity_remains_incomplete(self):
+        report_id = self.create_report("Missing interval remains incomplete")
+        body = {
+            "filename": "missing-interval.csv",
+            "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nExternal App;st-no-period;Unified;120\n",
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            "explicit_values": {"geo": "Worldwide"},
+        }
+        preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        observation = preview.json()["observations"][0]
+        self.assertFalse(observation["complete_observation"])
+        self.assertTrue(any("period start" in reason for reason in observation["source_validation_reasons"]))
+        self.assertTrue(any("granularity or explicit period bounds" in reason for reason in observation["source_validation_reasons"]))
+
     def test_hundred_csv_apps_keep_ten_report_matches_and_ninety_source_only(self):
         report_id = self.create_report("100 app source identity")
         report = self.client.get(f"/api/v1/reports/{report_id}").json()
