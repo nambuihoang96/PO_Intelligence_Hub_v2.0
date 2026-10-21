@@ -110,6 +110,16 @@ Metric value validation from the actual file:
 
 Imported-content SHA-256: `dfed2e06ef40c23ef95a0558ac337d2487f42d81541510cc80ef0029c7b99b3f`.
 
+### Newer copy found on a second read
+
+The file at the same path was modified after the first check (its current modification time is 2026-10-21 15:49; byte size is now 6,254). The current copy has 27 rows: 25 dated `14/10/2026` and only two dated `14/11/2026`.
+
+The November rows are `Surprise Dumpling: ASMR Box` and `Mystery Dumpling: Unbox ASMR`. Each matches its October row in every other CSV field, including all metric values; only `Date` differs. The other 23 products have no November row. `14/11/2026` is also in the future relative to this check (2026-10-21). This is not a complete or credible two-period comparison dataset without owner confirmation; the repeated values must not be treated as measured change.
+
+The current copy still parses as 27 × 9 = 243 observations when the single `Date` column is mapped as one period bound, but it remains partial: GEO and the other period bound are absent, 18 populated percentage cells are non-numeric, and 0 observations are complete, analytics-ready, or comparison-ready. No values were inferred or corrected. Current file SHA-256 (raw bytes): `F049C844F22438E4CF63E8B97B9F5EB9059F08AD5282C885576B7D53E5901E60`.
+
+This newer copy received a read-only structural/parser check; the previous isolated SQLite persistence round trip above used the earlier 25-row copy. Browser UAT remains NOT VERIFIED.
+
 **Browser UAT remains NOT VERIFIED.** This check exercised the report route logic and isolated SQLite directly; it did not operate the UI. The previous browser policy restriction remains in effect, so no screenshots or UI-pass claim were added.
 
 ### Owner-run UAT checklist
@@ -130,7 +140,7 @@ Expected result: out-of-scope data is clearly marked as valid in its original sc
 ## Remaining risks and acceptance
 
 - **Technical acceptance: PASS.** Regression, identity, readiness, granularity, large-list, chooser, persistence-fixture, TypeScript, build, and diff checks passed.
-- **Product acceptance: PENDING UAT.** Exact-file backend/import checks now pass, but the end-to-end browser journey, responsive behavior, and actual linking to the intended research report still require UI UAT.
+- **Product acceptance: PENDING UAT.** Backend/import checks passed for the earlier file copy; the newer 27-row copy received structural/parser checks only. End-to-end browser behavior, responsive layout, and linking to the intended research report still require UI UAT.
 - No M2/M3 features, CSV analytics, migrations, or master merge were started.
 
 ## Commit
