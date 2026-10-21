@@ -2,8 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { reportApi, type ImportedReport, type QuantitativeDataset, type QuantitativeDatasetInput, type QuantitativeDatasetPreview, type QuantitativeMetricColumnMapping } from './api';
 
 const dimensions = [
-  ['entity_id', 'Ứng dụng (ID / tên)'], ['geo', 'GEO'], ['platform', 'Platform'], ['period_start', 'Period start'],
-  ['period_end', 'Period end'], ['granularity', 'Granularity'], ['unit', 'Unit'],
+  ['entity_id', 'Ứng dụng (ID / tên)'], ['geo', 'GEO'], ['platform', 'Platform'], ['snapshot_date', 'Snapshot date'],
+  ['period_start', 'Period start'], ['period_end', 'Period end'], ['granularity', 'Granularity'], ['unit', 'Unit'],
   ['source_reference', 'Source URL'], ['methodology', 'Methodology'],
 ] as const;
 const LONG_FIELDS = [...dimensions, ['metric_id', 'Metric identity'], ['metric_definition', 'Metric definition'], ['value', 'Exact value']] as const;
@@ -66,8 +66,9 @@ function semanticHeader(field: string, header: string): boolean {
     entity_name: /^(?:(?:unified|entity|product|app) name)$/,
     geo: /^(?:geo|country|market|region)$/,
     platform: /^(?:platform|os|environment)$/,
-    period_start: /^(?:period start|start date|date start|start|date)$/,
+    period_start: /^(?:period start|start date|date start|start)$/,
     period_end: /^(?:period end|end date|date end|end)$/,
+    snapshot_date: /^(?:snapshot date|date|as of date|as of)$/,
     granularity: /^(?:granularity|frequency|period)$/,
     unit: /^(?:unit|units)$/,
     source_reference: /^(?:source|source url|source reference|url)$/,
@@ -88,6 +89,7 @@ function headerFor(field: string, headers: string[]): string | undefined {
     entity_id: ['entity', 'entity_id', 'product', 'app', 'unified id', 'entity id', 'product id', 'app id'],
     geo: ['geo', 'country', 'market', 'region'], platform: ['platform', 'os', 'environment'],
     period_start: ['period_start', 'start_date', 'date_start'], period_end: ['period_end', 'end_date', 'date_end'],
+    snapshot_date: ['snapshot_date', 'snapshot date', 'date', 'as of date'],
     granularity: ['granularity', 'frequency'], unit: ['unit', 'units'],
     source_reference: ['source', 'source_url', 'source_reference', 'url'], methodology: ['methodology', 'method'],
     metric_id: ['metric', 'metric_id', 'metric_name'], metric_definition: ['metric_definition', 'definition'], value: ['value', 'amount', 'count'],
@@ -143,7 +145,7 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
   const hints = dateHints(filename);
   const dataRows = rows.slice(1);
   const metricColumns = headers.filter((header) => !Object.values(fieldMapping).includes(header)
-    && !['entity_id', 'entity_name', 'geo', 'platform', 'period_start', 'period_end', 'granularity', 'unit', 'source_reference', 'methodology'].some((field) => semanticHeader(field, header))
+    && !['entity_id', 'entity_name', 'geo', 'platform', 'period_start', 'period_end', 'snapshot_date', 'granularity', 'unit', 'source_reference', 'methodology'].some((field) => semanticHeader(field, header))
     && !/^(?:category|all title|publisher id|publisher name)$/i.test(header.trim()));
   const unresolved = mappingRequirements;
   const scopeMismatchReasons = [...new Set((preview?.validation_reasons ?? []).filter((reason) => /^(?:GEO '.+ differs from report scope|Platform '.+ differs from report scope)/.test(reason)))].slice(0, 2);
@@ -172,12 +174,14 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
       const uniqueMetricMappings = autoMetrics.map((item, index) => autoMetrics.findIndex((candidate) => candidate.metric_id === item.metric_id) === index ? item : { ...item, metric_id: `${item.metric_id}_${safeMetricId(item.column)}` });
       if (!('metric_id' in next) || !('value' in next)) {
         delete next.metric_id; delete next.metric_definition; delete next.value;
-        for (const field of ['entity_id', 'platform', 'geo', 'period_start', 'period_end', 'granularity', 'source_reference', 'methodology']) {
+        for (const field of ['entity_id', 'platform', 'geo', 'snapshot_date', 'period_start', 'period_end', 'granularity', 'source_reference', 'methodology']) {
           const match = headerFor(field, fileHeaders); if (match && semanticHeader(field, match)) next[field] = match;
         }
         if (entityName && entityName !== next.entity_id) next.entity_name = entityName;
       }
+      const explicitPeriodMeaning = next.period_start && next.period_end ? 'reporting_interval' : 'unknown';
       setFilename(file.name); setCsvContent(content); setFieldMapping(next); setMetricMappings(uniqueMetricMappings);
+      setExplicitValues((current) => ({ ...current, period_semantics: explicitPeriodMeaning }));
     } catch { setFailure('Không đọc được file. Hãy chọn lại file CSV.'); }
   }
 
@@ -201,8 +205,33 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
     setExplicitValues((current) => { const next = { ...current }; delete next[field]; return next; }); invalidatePreview();
   }
   function setConstant(field: string, value: string) {
-    setExplicitValues((current) => { const next = { ...current }; if (value) next[field] = value; else delete next[field]; return next; });
-    setFieldMapping((current) => { const next = { ...current }; delete next[field]; return next; }); invalidatePreview();
+    setExplicitValues((current) => {
+      const next = { ...current };
+      if (value) next[field] = value; else delete next[field];
+      if (field === 'period_start' || field === 'period_end') {
+        if (next.period_start && next.period_end) next.period_semantics = 'reporting_interval';
+        else if (next.period_semantics === 'reporting_interval') next.period_semantics = 'unknown';
+        if (value) delete next.snapshot_date;
+      }
+      if (field === 'snapshot_date' && value) next.period_semantics = 'snapshot';
+      return next;
+    });
+    setFieldMapping((current) => { const next = { ...current }; delete next[field]; if ((field === 'period_start' || field === 'period_end') && value) delete next.snapshot_date; return next; }); invalidatePreview();
+  }
+  function setPeriodSemantics(value: string) {
+    setExplicitValues((current) => {
+      const next: Record<string, string> = { ...current, period_semantics: value };
+      if (value === 'snapshot') { delete next.period_start; delete next.period_end; }
+      if (value === 'reporting_interval' || value === 'rolling_interval') delete next.snapshot_date;
+      return next;
+    });
+    setFieldMapping((current) => {
+      const next = { ...current };
+      if (value === 'snapshot') { delete next.period_start; delete next.period_end; }
+      if (value === 'reporting_interval' || value === 'rolling_interval') delete next.snapshot_date;
+      return next;
+    });
+    invalidatePreview();
   }
   function toggleMetric(column: string, enabled: boolean) {
     setMetricMappings((current) => enabled
@@ -257,6 +286,7 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
       {headers.length > 0 && <section><h4>2. Nhận diện dữ liệu và kiểm tra mapping</h4><p>ID/tên từ CSV được giữ làm danh tính nguồn. App khớp rõ ràng với report được liên kết; app không có trong report vẫn hợp lệ ở cấp dataset và không cần thao tác thủ công. Chỉ ID/tên mâu thuẫn hoặc nhiều kết quả mới cần review.</p>
         <div className="quant-auto-summary" role="status">{fieldMapping.entity_id && fieldMapping.entity_name ? `Source identity: ID ${fieldMapping.entity_id} · name ${fieldMapping.entity_name}` : fieldMapping.entity_id ? `Source identity column: ${fieldMapping.entity_id}` : fieldMapping.entity_name ? `Source name column: ${fieldMapping.entity_name}` : 'Choose an ID or name column to preserve each source app'}{fieldMapping.geo ? ` · GEO: ${fieldMapping.geo}` : ''}{fieldMapping.platform ? ` · Platform: ${fieldMapping.platform}` : ''}{metricMappings.length ? ` · ${metricMappings.length} metric columns recognized` : ''}</div>
         <div className="quant-map-grid">{dimensions.map(([field, label]) => <label key={field}>{label}<select value={field === 'entity_id' ? (fieldMapping.entity_id || fieldMapping.entity_name || '') : (fieldMapping[field] ?? '')} onChange={(event) => setField(field, event.target.value)}><option value="">Không lấy từ cột</option>{headers.filter((header) => field === 'entity_id' ? semanticHeader('entity_id', header) || semanticHeader('entity_name', header) : semanticHeader(field, header)).map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select>{field === 'entity_id' && <small>Giữ source ID ổn định; chỉ liên kết report khi khớp chính xác, không mơ hồ. App còn lại là source-only.</small>}</label>)}</div>
+        <label className="quant-period-semantics">Ý nghĩa của ngày / kỳ<select value={explicitValues.period_semantics ?? 'unknown'} onChange={(event) => setPeriodSemantics(event.target.value)}><option value="unknown">Chưa xác nhận</option><option value="snapshot">Ngày snapshot (một thời điểm)</option><option value="reporting_interval">Khoảng báo cáo</option><option value="rolling_interval">Khoảng trượt</option></select><small>Cột Date được giữ nguyên như giá trị ngày. Hãy xác nhận đó là ngày snapshot hay mốc thuộc một khoảng đo; không suy ra kỳ từ tên file.</small></label>
         <div className="quant-map-grid">{dimensions.filter(([field]) => !['entity_id', 'source_reference', 'methodology'].includes(field)).map(([field, label]) => <label key={`constant-${field}`}>{label} · giá trị xác nhận<input value={explicitValues[field] ?? ''} disabled={Boolean(fieldMapping[field])} onChange={(event) => setConstant(field, event.target.value)} placeholder={field === 'geo' && hints.geo ? `Gợi ý từ tên file: ${hints.geo}` : field.startsWith('period_') && hints[field as 'period_start' | 'period_end'] ? `Gợi ý từ tên file: ${hints[field as 'period_start' | 'period_end']}` : 'Để trống nếu chưa biết'} /></label>)}</div>
         {(hints.geo || hints.period_start || hints.period_end) && <div className="quant-suggestions"><strong>Gợi ý scope từ tên file — chỉ dùng sau khi bạn xác nhận:</strong>{hints.geo && !fieldMapping.geo && !explicitValues.geo && <button type="button" className="text-button" onClick={() => setConstant('geo', hints.geo!)}>Xác nhận GEO: {hints.geo}</button>}{hints.period_start && !fieldMapping.period_start && !explicitValues.period_start && <button type="button" className="text-button" onClick={() => setConstant('period_start', hints.period_start!)}>Xác nhận ngày bắt đầu: {hints.period_start}</button>}{hints.period_end && !fieldMapping.period_end && !explicitValues.period_end && <button type="button" className="text-button" onClick={() => setConstant('period_end', hints.period_end!)}>Xác nhận ngày kết thúc: {hints.period_end}</button>}</div>}
         {!wide && <div className="quant-map-grid">{(['metric_id', 'metric_definition', 'value'] as const).map((field) => <label key={field}>{field === 'metric_id' ? 'Metric identity' : field === 'metric_definition' ? 'Metric definition' : 'Exact value'}<select value={fieldMapping[field] ?? ''} onChange={(event) => setField(field, event.target.value)}><option value="">Chọn cột…</option>{headers.filter((header) => semanticHeader(field, header)).map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select></label>)}</div>}

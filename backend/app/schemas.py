@@ -609,7 +609,7 @@ class QuantitativeDatasetImport(APIModel):
     def validate_mapping_configuration(self) -> "QuantitativeDatasetImport":
         if len({item.column for item in self.metric_mappings}) != len(self.metric_mappings):
             raise ValueError("Each metric column can only be mapped once.")
-        allowed_explicit = {"unit", "geo", "platform", "period_start", "period_end", "granularity", "methodology", "source_reference"}
+        allowed_explicit = {"unit", "geo", "platform", "period_start", "period_end", "snapshot_date", "period_semantics", "granularity", "methodology", "source_reference"}
         unknown = set(self.explicit_values) - allowed_explicit
         if unknown:
             raise ValueError("Unsupported explicit value field(s): " + ", ".join(sorted(unknown)))
@@ -684,3 +684,147 @@ class QuantitativeDatasetPage(APIModel):
     items: list[QuantitativeDatasetRead]
     next_cursor: str | None = None
     limit: int
+
+
+class QuantitativeComparisonMetric(APIModel):
+    metric_id: str | None
+    metric_definition: str | None
+    unit: str | None
+    methodology: str | None
+    observations: int
+    usable_observations: int
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuantitativeComparisonPeriod(APIModel):
+    key: str
+    semantics: Literal["reporting_interval", "rolling_interval", "snapshot", "unknown"]
+    period_start: str | None = None
+    period_end: str | None = None
+    snapshot_date: str | None = None
+    snapshot_date_candidate: str | None = None
+    granularity: str | None = None
+    observations: int
+    usable_observations: int
+    metric_keys: list[str] = Field(default_factory=list)
+    geos: list[str] = Field(default_factory=list)
+    platforms: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuantitativeDatasetCatalogItem(APIModel):
+    id: str
+    report_id: str
+    report_question: str
+    filename: str
+    content_sha256: str
+    created_at: datetime
+    compatibility_status: Literal["compatible", "partial", "incompatible"]
+    metrics: list[QuantitativeComparisonMetric]
+    periods: list[QuantitativeComparisonPeriod]
+    geo_values: list[str] = Field(default_factory=list)
+    platform_values: list[str] = Field(default_factory=list)
+    source_apps: int
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuantitativeDatasetCatalogPage(APIModel):
+    items: list[QuantitativeDatasetCatalogItem]
+    next_cursor: str | None = None
+    limit: int
+
+
+class QuantitativeComparisonPreviewRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    baseline_dataset_id: str = Field(min_length=1, max_length=36)
+    current_dataset_id: str = Field(min_length=1, max_length=36)
+    metric_id: str = Field(min_length=1, max_length=160)
+    metric_definition: str = Field(min_length=1, max_length=2000)
+    unit: str = Field(min_length=1, max_length=80)
+    methodology: str = Field(min_length=1, max_length=500)
+    geo: str = Field(min_length=1, max_length=100)
+    platform: str = Field(min_length=1, max_length=100)
+    baseline_period_key: str = Field(min_length=1, max_length=128)
+    current_period_key: str = Field(min_length=1, max_length=128)
+    baseline_semantics_confirmation: Literal["reporting_interval", "rolling_interval", "snapshot"] | None = None
+    current_semantics_confirmation: Literal["reporting_interval", "rolling_interval", "snapshot"] | None = None
+
+    @model_validator(mode="after")
+    def datasets_must_be_distinct(self) -> "QuantitativeComparisonPreviewRequest":
+        if self.baseline_dataset_id == self.current_dataset_id:
+            raise ValueError("Choose two different CSV datasets.")
+        return self
+
+
+class QuantitativeComparisonSource(APIModel):
+    value: float | None
+    value_precision: Literal["exact", "approximate"]
+    unit: str | None
+    geo: str | None
+    platform: str | None
+    period_start: str | None
+    period_end: str | None
+    snapshot_date: str | None
+    period_semantics: Literal["reporting_interval", "rolling_interval", "snapshot", "unknown"]
+    granularity: str | None
+    methodology: str | None
+    entity_name: str | None
+    source_entity_id: str | None
+    source_provider: str | None
+    verification_status: Literal["unverified", "needs_review", "verified"]
+    dataset_id: str
+    filename: str
+    report_id: str
+    report_question: str
+    source_row_number: int | None
+    source_reference: str | None
+    provenance_id: str | None
+    validation_reasons: list[str] = Field(default_factory=list)
+
+
+class QuantitativeComparisonRow(APIModel):
+    entity_key: str
+    entity_name: str
+    matched_by: Literal["provider_source_id", "unmatched_source_id"]
+    status: Literal["comparable", "missing_baseline", "missing_current", "identity_conflict", "duplicate_observations", "incompatible_periods", "needs_review"]
+    baseline: QuantitativeComparisonSource | None
+    current: QuantitativeComparisonSource | None
+    absolute_change: float | None = None
+    change_unit: str | None = None
+    percentage_change: float | None = None
+    percentage_change_unavailable_reason: str | None = None
+    formula: str | None = None
+    evidence: list[QuantitativeComparisonSource] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+
+
+class QuantitativeComparisonPeriodReadiness(APIModel):
+    compatible: bool
+    kind: Literal["reporting_interval", "rolling_interval", "snapshot", "unknown"]
+    reasons: list[str] = Field(default_factory=list)
+
+
+class QuantitativeComparisonSummary(APIModel):
+    matched_apps: int
+    baseline_only_apps: int
+    current_only_apps: int
+    distinct_apps: int
+    comparable_apps: int
+    missing_data_apps: int
+    ambiguous_apps: int
+    duplicate_observation_apps: int
+    invalid_observations: int
+
+
+class QuantitativeComparisonPreview(APIModel):
+    baseline: QuantitativeDatasetCatalogItem
+    current: QuantitativeDatasetCatalogItem
+    metric: QuantitativeComparisonMetric
+    geo: str
+    platform: str
+    baseline_period: QuantitativeComparisonPeriod
+    current_period: QuantitativeComparisonPeriod
+    period_readiness: QuantitativeComparisonPeriodReadiness
+    summary: QuantitativeComparisonSummary
+    rows: list[QuantitativeComparisonRow]
+    metric_warnings: list[str] = Field(default_factory=list)

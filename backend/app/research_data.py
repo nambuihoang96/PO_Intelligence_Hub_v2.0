@@ -113,10 +113,13 @@ class QuantitativeObservation(ResearchModel):
     platform: str | None = Field(default=None, max_length=100)
     period_start: str | None = Field(default=None, max_length=10)
     period_end: str | None = Field(default=None, max_length=10)
+    snapshot_date: str | None = Field(default=None, max_length=10)
+    period_semantics: Literal["reporting_interval", "rolling_interval", "snapshot", "unknown"] = "unknown"
     granularity: str | None = Field(default=None, max_length=40)
     methodology: str | None = Field(default=None, max_length=500)
     source_reference: str | None = Field(default=None, max_length=2048)
     evidence_reference: str | None = Field(default=None, max_length=2048)
+    source_row_number: int | None = Field(default=None, ge=2)
     verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
     provenance_type: Literal["research_report", "csv_dataset"] = "research_report"
     provenance_id: str | None = Field(default=None, max_length=36)
@@ -184,6 +187,11 @@ class QuantitativeObservation(ResearchModel):
     @model_validator(mode="after")
     def describe_incomplete_observation(self) -> "QuantitativeObservation":
         reasons = list(self.validation_reasons)
+        # Two explicit interval bounds establish an interval. A date value alone
+        # does not reveal whether it is a snapshot or a reporting-window bound.
+        if self.period_semantics == "unknown":
+            if self.period_start and self.period_end:
+                object.__setattr__(self, "period_semantics", "reporting_interval")
         for field_name, label in (
             ("metric_id", "metric identifier"),
             ("metric_definition", "metric definition"),
@@ -191,18 +199,33 @@ class QuantitativeObservation(ResearchModel):
             ("unit", "unit"),
             ("geo", "GEO"),
             ("platform", "platform"),
-            ("period_start", "period start"),
-            ("period_end", "period end"),
-            ("granularity", "period granularity"),
         ):
             # Explicit period bounds define an observation interval even when the
             # source does not provide a separate cadence label. Keep that interval
             # usable without silently inventing a day/week/month granularity.
-            if field_name == "granularity" and self.period_start and self.period_end:
-                continue
             missing_reason = f"Missing {label}."
             if getattr(self, field_name) is None and missing_reason not in reasons:
                 reasons.append(missing_reason)
+        period_fields = (
+            (("snapshot_date", "snapshot date"),)
+            if self.period_semantics == "snapshot"
+            else (("period_start", "period start"), ("period_end", "period end"))
+            if self.period_semantics in {"reporting_interval", "rolling_interval"}
+            else (("period_semantics", "period meaning"),)
+            if self.snapshot_date
+            else (("period_start", "period start"), ("period_end", "period end"), ("period_semantics", "period meaning"))
+        )
+        for field_name, label in period_fields:
+            if getattr(self, field_name) in (None, ""):
+                reason = f"Missing {label}."
+                if reason not in reasons:
+                    reasons.append(reason)
+        if self.period_semantics in {"reporting_interval", "rolling_interval"} and not self.granularity and not (self.period_start and self.period_end):
+            if "Missing period granularity or explicit period bounds." not in reasons:
+                reasons.append("Missing period granularity or explicit period bounds.")
+        elif self.period_semantics == "unknown" and not self.snapshot_date and not (self.period_start and self.period_end):
+            if "Missing period granularity or explicit period bounds." not in reasons:
+                reasons.append("Missing period granularity or explicit period bounds.")
         if self.observation_type == "reported" and self.source_reference is None and "Missing source reference." not in reasons:
             reasons.append("Missing source reference.")
         if self.observation_type == "reported" and self.evidence_reference is None and "Missing evidence reference." not in reasons:
@@ -216,6 +239,23 @@ class QuantitativeObservation(ResearchModel):
                     message = f"Invalid {field_name}; use YYYY-MM-DD."
                     if message not in reasons:
                         reasons.append(message)
+        if self.snapshot_date is not None:
+            try:
+                date.fromisoformat(self.snapshot_date)
+            except ValueError:
+                message = "Invalid snapshot_date; use YYYY-MM-DD."
+                if message not in reasons:
+                    reasons.append(message)
+        if self.period_semantics == "snapshot":
+            if not self.snapshot_date and not (self.period_start and not self.period_end):
+                if "Snapshot date is not provided." not in reasons:
+                    reasons.append("Snapshot date is not provided.")
+            if self.period_start and self.period_end:
+                if "Snapshot observations must not use an interval." not in reasons:
+                    reasons.append("Snapshot observations must not use an interval.")
+        elif self.snapshot_date:
+            if "Snapshot date semantics must be selected before comparison." not in reasons:
+                reasons.append("Snapshot date semantics must be selected before comparison.")
         if self.period_start and self.period_end:
             try:
                 if date.fromisoformat(self.period_start) > date.fromisoformat(self.period_end):

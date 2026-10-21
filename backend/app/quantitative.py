@@ -18,7 +18,7 @@ from backend.app.research_data import QuantitativeObservation
 
 CSV_FIELD_NAMES = {
     "metric_id", "metric_definition", "value", "unit", "entity_id", "geo",
-    "entity_name", "platform", "period_start", "period_end", "granularity", "source_reference", "methodology",
+    "entity_name", "platform", "period_start", "period_end", "snapshot_date", "period_semantics", "granularity", "source_reference", "methodology",
 }
 UNIT_ALIASES = {"percent": "%", "percentage": "%", "pct": "%", "seconds": "s", "minutes": "min"}
 EXACT_NUMBER = re.compile(r"^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
@@ -67,8 +67,9 @@ def _header_matches_field(field: str, header: str) -> bool:
         "entity_name": (r"\b(unified|entity|product|app) name\b", r"^entity name$", r"^product name$", r"^app name$"),
         "geo": (r"^geo$", r"^country$", r"^market$", r"^region$"),
         "platform": (r"^platform$", r"^os$", r"^environment$"),
-        "period_start": (r"^period start$", r"^start date$", r"^date start$", r"^start$", r"^date$"),
+        "period_start": (r"^period start$", r"^start date$", r"^date start$", r"^start$"),
         "period_end": (r"^period end$", r"^end date$", r"^date end$", r"^end$"),
+        "snapshot_date": (r"^snapshot date$", r"^date$", r"^as of date$", r"^as of$"),
         "granularity": (r"^granularity$", r"^frequency$", r"^period$"),
         "unit": (r"^unit$", r"^units$"),
         "source_reference": (r"^source$", r"^source url$", r"^source reference$", r"^url$"),
@@ -180,10 +181,17 @@ def assess_observation_readiness(
         source_reasons = [reason for reason in source_reasons if reason != "Missing period granularity."]
     display_ready = bool(observation.metric_id and observation.value is not None and source_identity)
     required = (observation.metric_id, observation.metric_definition, observation.value, observation.unit, source_identity,
-                observation.geo, observation.platform, observation.period_start, observation.period_end)
-    complete = all(value not in (None, "") for value in required) and not source_reasons
+                observation.geo, observation.platform)
+    period_complete = (
+        bool(observation.snapshot_date)
+        if observation.period_semantics == "snapshot"
+        else bool(observation.period_start and observation.period_end)
+        if observation.period_semantics in {"reporting_interval", "rolling_interval"}
+        else False
+    )
+    complete = all(value not in (None, "") for value in required) and period_complete and not source_reasons
     analysis_ready = complete
-    report_compatibility = "incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and observation.geo and observation.platform and observation.period_start and observation.period_end else "unknown")
+    report_compatibility = "incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and observation.geo and observation.platform and period_complete else "unknown")
     dataset_comparison_ready = analysis_ready and bool(observation.methodology and observation.methodology.strip())
     comparison_ready = dataset_comparison_ready and report_compatibility == "compatible"
     return observation.model_dump(mode="json") | {
@@ -306,7 +314,7 @@ def parse_csv_observations(
             details.append("CSV header(s) not found: " + ", ".join(sorted(unknown_headers)))
         raise ValueError("; ".join(details))
     for field, header in field_mapping.items():
-        if field in {"entity_id", "entity_name", "geo", "platform", "period_start", "period_end", "granularity", "unit", "source_reference", "methodology"} and not _header_matches_field(field, header):
+        if field in {"entity_id", "entity_name", "geo", "platform", "period_start", "period_end", "snapshot_date", "granularity", "unit", "source_reference", "methodology"} and not _header_matches_field(field, header):
             label = "GEO" if field == "geo" else field.replace("_", " ").capitalize()
             raise ValueError(f"The selected {label} column '{header}' does not look like a {label.casefold()} field. Choose a semantically matching CSV column.")
     if "entity_id" not in field_mapping and "entity_name" not in field_mapping:
@@ -412,7 +420,9 @@ def parse_csv_observations(
 
         period_start = raw.get("period_start") or None
         period_end = raw.get("period_end") or None
+        snapshot_date = raw.get("snapshot_date") or None
         start_date, end_date = _date(period_start), _date(period_end)
+        snapshot = _date(snapshot_date)
         if start_date and period_start:
             period_start = start_date.isoformat()
         if end_date and period_end:
@@ -425,6 +435,20 @@ def parse_csv_observations(
             source_dimension_reasons.append(f"CSV row {row_number} has an invalid period_end; use YYYY-MM-DD or an unambiguous day-first date.")
         if start_date and end_date and start_date > end_date:
             source_dimension_reasons.append(f"CSV row {row_number} period_start is after period_end.")
+        if snapshot_date and snapshot is None:
+            source_dimension_reasons.append(f"CSV row {row_number} has an invalid snapshot_date; use YYYY-MM-DD or an unambiguous day-first date.")
+        period_semantics = (raw.get("period_semantics") or "unknown").strip().casefold()
+        if period_semantics == "unknown":
+            if period_start and period_end:
+                period_semantics = "reporting_interval"
+        if period_semantics not in {"reporting_interval", "rolling_interval", "snapshot", "unknown"}:
+            source_dimension_reasons.append(f"CSV row {row_number} has unsupported period semantics.")
+            period_semantics = "unknown"
+        if period_semantics == "snapshot" and not snapshot_date and period_start and not period_end:
+            # Backward-compatible correction for earlier imports that mapped a
+            # header named Date to period_start. The date is exposed as a
+            # snapshot candidate by the catalog; no period is inferred here.
+            snapshot_date, snapshot, period_start = period_start, start_date, None
 
         geo = raw.get("geo") or None
         platform = raw.get("platform") or None
@@ -497,6 +521,8 @@ def parse_csv_observations(
                 platform=platform,
                 period_start=period_start,
                 period_end=period_end,
+                snapshot_date=snapshot.isoformat() if snapshot else snapshot_date,
+                period_semantics=period_semantics,
                 granularity=raw.get("granularity") or None,
                 methodology=str(measure.get("methodology") or raw.get("methodology") or "").strip() or None,
                 source_reference=source_reference,
@@ -507,9 +533,10 @@ def parse_csv_observations(
                 validation_reasons=row_reasons,
                 source_validation_reasons=row_reasons,
                 report_compatibility_reasons=compatibility_reasons,
-                report_compatibility="incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and geo and platform and period_start and period_end else "unknown"),
+                report_compatibility="incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and geo and platform and ((period_start and period_end) or (period_semantics == "snapshot" and snapshot)) else "unknown"),
                 scope_compatible=scope_compatible,
                 import_status="imported",
+                source_row_number=row_number,
             )
             metric_header = str(measure.get("metric_definition") or "")
             unit = observation.unit
@@ -530,13 +557,25 @@ def parse_csv_observations(
                 "source entity identity": observation.source_entity_id,
                 "GEO": observation.geo,
                 "platform": observation.platform,
-                "period start": observation.period_start,
-                "period end": observation.period_end,
             }
             for label, supplied in missing.items():
                 if supplied in (None, ""):
                     source_reasons.append(f"CSV row {row_number} is missing {label}.")
-            if not observation.granularity and not (observation.period_start and observation.period_end):
+            period_missing = (
+                {"snapshot date": observation.snapshot_date}
+                if observation.period_semantics == "snapshot"
+                else {"period start": observation.period_start, "period end": observation.period_end}
+                if observation.period_semantics in {"reporting_interval", "rolling_interval"}
+                else {"period meaning": None}
+                if observation.snapshot_date
+                else {"period start": observation.period_start, "period end": observation.period_end, "period meaning": None}
+            )
+            for label, supplied in period_missing.items():
+                if supplied in (None, ""):
+                    source_reasons.append(f"CSV row {row_number} is missing {label}.")
+            if observation.period_semantics in {"reporting_interval", "rolling_interval"} and not observation.granularity and not (observation.period_start and observation.period_end):
+                source_reasons.append(f"CSV row {row_number} is missing granularity or explicit period bounds.")
+            elif observation.period_semantics == "unknown" and not observation.snapshot_date and not (observation.period_start and observation.period_end):
                 source_reasons.append(f"CSV row {row_number} is missing granularity or explicit period bounds.")
             display_ready = bool(observation.metric_id and observation.value is not None and observation.source_entity_id)
             complete = not source_reasons and observation.value is not None

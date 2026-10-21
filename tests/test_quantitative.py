@@ -216,6 +216,15 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertTrue(any("period start" in item for item in value.validation_reasons))
         self.assertTrue(any("source reference" in item for item in value.validation_reasons))
 
+    def test_date_value_without_period_meaning_stays_unclassified(self):
+        value = QuantitativeObservation(
+            metric_id="downloads", metric_definition="Downloads", value=8, unit="downloads",
+            entity_id="a", geo="Worldwide", platform="Unified", snapshot_date="2026-10-01",
+            observation_type="imported", provenance_type="csv_dataset", source_reference="https://example.com/data",
+        )
+        self.assertEqual(value.period_semantics, "unknown")
+        self.assertTrue(any("semantics" in reason or "period meaning" in reason for reason in value.validation_reasons))
+
     def test_reported_observation_cannot_claim_independent_verification(self):
         with self.assertRaises(ValidationError):
             QuantitativeObservation(metric_id="x", value=1, unit="users", observation_type="reported", verification_status="verified")

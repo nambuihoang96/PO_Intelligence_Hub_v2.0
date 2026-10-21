@@ -39,6 +39,8 @@ export type QuantitativeObservation = {
   platform: string | null;
   period_start: string | null;
   period_end: string | null;
+  snapshot_date?: string | null;
+  period_semantics?: 'reporting_interval' | 'rolling_interval' | 'snapshot' | 'unknown';
   granularity: string | null;
   methodology?: string | null;
   source_reference: string | null;
@@ -58,6 +60,7 @@ export type QuantitativeObservation = {
   analysis_ready?: boolean;
   dataset_comparison_ready?: boolean;
   comparison_ready?: boolean;
+  source_row_number?: number | null;
 };
 export type QuantitativeDataset = {
   id: string; report_id: string; filename: string; content_sha256: string;
@@ -87,6 +90,15 @@ export type QuantitativeDatasetPreview = {
   dataset_analysis_ready_observations?: number; dataset_comparison_ready_observations?: number;
   report_compatible_observations?: number;
 };
+
+export type ComparisonMetric = { metric_id: string | null; metric_definition: string | null; unit: string | null; methodology: string | null; observations: number; usable_observations: number; warnings: string[] };
+export type ComparisonPeriod = { key: string; semantics: 'reporting_interval' | 'rolling_interval' | 'snapshot' | 'unknown'; period_start: string | null; period_end: string | null; snapshot_date: string | null; snapshot_date_candidate: string | null; granularity: string | null; observations: number; usable_observations: number; metric_keys: string[]; geos: string[]; platforms: string[]; warnings: string[] };
+export type ComparisonDataset = { id: string; report_id: string; report_question: string; filename: string; content_sha256: string; created_at: string; compatibility_status: 'compatible' | 'partial' | 'incompatible'; metrics: ComparisonMetric[]; periods: ComparisonPeriod[]; geo_values: string[]; platform_values: string[]; source_apps: number; warnings: string[] };
+export type ComparisonDatasetPage = { items: ComparisonDataset[]; next_cursor: string | null; limit: number };
+export type QuantitativeComparisonRow = { entity_key: string; entity_name: string; matched_by: 'provider_source_id' | 'unmatched_source_id'; status: 'comparable' | 'missing_baseline' | 'missing_current' | 'identity_conflict' | 'duplicate_observations' | 'incompatible_periods' | 'needs_review'; baseline: ComparisonSource | null; current: ComparisonSource | null; absolute_change: number | null; change_unit: string | null; percentage_change: number | null; percentage_change_unavailable_reason: string | null; formula: string | null; evidence: ComparisonSource[]; reasons: string[] };
+export type ComparisonSource = { value: number | null; value_precision: 'exact' | 'approximate'; unit: string | null; geo: string | null; platform: string | null; period_start: string | null; period_end: string | null; snapshot_date: string | null; period_semantics: 'reporting_interval' | 'rolling_interval' | 'snapshot' | 'unknown'; granularity: string | null; methodology: string | null; entity_name: string | null; source_entity_id: string | null; source_provider: string | null; verification_status: 'unverified' | 'needs_review' | 'verified'; dataset_id: string; filename: string; report_id: string; report_question: string; source_row_number: number | null; source_reference: string | null; provenance_id: string | null; validation_reasons: string[] };
+export type QuantitativeComparisonPreview = { baseline: ComparisonDataset; current: ComparisonDataset; metric: ComparisonMetric; geo: string; platform: string; baseline_period: ComparisonPeriod; current_period: ComparisonPeriod; period_readiness: { compatible: boolean; kind: 'reporting_interval' | 'rolling_interval' | 'snapshot' | 'unknown'; reasons: string[] }; summary: { matched_apps: number; baseline_only_apps: number; current_only_apps: number; distinct_apps: number; comparable_apps: number; missing_data_apps: number; ambiguous_apps: number; duplicate_observation_apps: number; invalid_observations: number }; rows: QuantitativeComparisonRow[]; metric_warnings: string[] };
+export type QuantitativeComparisonInput = { baseline_dataset_id: string; current_dataset_id: string; metric_id: string; metric_definition: string; unit: string; methodology: string; geo: string; platform: string; baseline_period_key: string; current_period_key: string; baseline_semantics_confirmation?: 'reporting_interval' | 'rolling_interval' | 'snapshot'; current_semantics_confirmation?: 'reporting_interval' | 'rolling_interval' | 'snapshot' };
 
 function readableValidationErrors(errors: unknown): string[] {
   if (!Array.isArray(errors)) return [];
@@ -159,6 +171,8 @@ export const reportApi = {
   updateBenchmarkState: (id: string, selections: BenchmarkSelection[], workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-state`, { method: 'PUT', body: JSON.stringify({ ...workspace, selections }) }),
   updateBenchmarkWorkspace: (id: string, workspace: BenchmarkWorkspace) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-workspace`, { method: 'PUT', body: JSON.stringify(workspace) }),
   listQuantitativeDatasets: (id: string, cursor?: string) => request<QuantitativeDatasetPage>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  listComparisonDatasets: (cursor?: string) => request<ComparisonDatasetPage>(`/api/v1/quantitative-comparisons/datasets?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  previewQuantitativeComparison: (input: QuantitativeComparisonInput) => request<QuantitativeComparisonPreview>('/api/v1/quantitative-comparisons/preview', { method: 'POST', body: JSON.stringify(input) }),
   previewQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDatasetPreview>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets/preview`, { method: 'POST', body: JSON.stringify(input) }),
   importQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDataset>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets`, { method: 'POST', body: JSON.stringify(input) }),
   revalidateQuantitativeDataset: (reportId: string, datasetId: string) => request<QuantitativeDataset>(`/api/v1/reports/${encodeURIComponent(reportId)}/quantitative-datasets/${encodeURIComponent(datasetId)}/revalidate`, { method: 'POST' }),

@@ -10,6 +10,7 @@ from backend.app.api import router
 from backend.app.config import get_data_root
 from backend.app.db import create_database_engine
 from backend.app.reports import router as reports_router
+from backend.app.quantitative_comparisons import router as quantitative_comparisons_router
 from backend.app.sources import router as sources_router
 
 
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     application.include_router(sources_router)
     application.include_router(apps_router)
     application.include_router(reports_router)
+    application.include_router(quantitative_comparisons_router)
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(HTTPException, http_error_handler)
 

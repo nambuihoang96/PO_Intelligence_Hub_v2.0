@@ -5,6 +5,7 @@ import { ResearchWorkspace } from './research/ResearchWorkspace';
 import { ResearchRunsWorkspace } from './research/ResearchRunsWorkspace';
 import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import { ReportHistory, ReportViewer, ResearchIntake } from './reports/ResearchIntake';
+import { QuantitativePeriodComparison } from './reports/QuantitativePeriodComparison';
 import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
 import './style.css';
 
@@ -69,6 +70,16 @@ const pages: Page[] = [
     intro: 'Find completed research outputs and the decisions they inform.',
     emptyTitle: 'No reports are available',
     emptyCopy: 'Completed research reports will appear here. No example or placeholder findings are shown.',
+  },
+  {
+    path: '/compare-periods',
+    label: 'Period comparison',
+    icon: 'comparison',
+    eyebrow: 'QUANTITATIVE WORKSPACE',
+    title: 'Compare CSV periods',
+    intro: 'Compare compatible source exports while preserving the complete app universe and evidence trail.',
+    emptyTitle: 'No comparison data is available',
+    emptyCopy: 'Import CSV exports linked to a research report to compare measurement periods.',
   },
 ];
 
@@ -195,7 +206,7 @@ function App() {
             )}
           </section>
 
-          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
+          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/compare-periods' ? <QuantitativePeriodComparison /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

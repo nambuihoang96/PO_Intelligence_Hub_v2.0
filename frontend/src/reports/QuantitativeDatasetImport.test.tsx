@@ -68,6 +68,27 @@ describe('QuantitativeDatasetImport', () => {
     expect(payload.metric_mappings).toEqual([expect.objectContaining({ column: 'Downloads (Absolute)', metric_definition: 'Downloads (Absolute)' })]);
   });
 
+  it('keeps a Date-only column semantically unknown until the user confirms snapshot meaning', async () => {
+    vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
+    const file = new File(['Unified Name;Unified ID;Platform;Date;Downloads (Absolute)\nApp A;st-a;Unified;2026-10-01;1200\n'], 'snapshot.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText(file.name);
+    expect((screen.getByLabelText('Snapshot date') as HTMLSelectElement).value).toBe('Date');
+    expect((screen.getByLabelText('Period start') as HTMLSelectElement).value).toBe('');
+    const meaning = screen.getByLabelText(/Ý nghĩa của ngày \/ kỳ/) as HTMLSelectElement;
+    expect(meaning.value).toBe('unknown');
+    fireEvent.change(meaning, { target: { value: 'snapshot' } });
+    fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
+    fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[0][1];
+    expect(payload.field_mapping).toMatchObject({ snapshot_date: 'Date' });
+    expect(payload.field_mapping).not.toHaveProperty('period_start');
+    expect(payload.explicit_values?.period_semantics).toBe('snapshot');
+  });
+
   it('shows a name-only entity mapping as selected and keeps date and descriptive columns out of metric choices', async () => {
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
     fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
@@ -118,7 +139,7 @@ describe('QuantitativeDatasetImport', () => {
       expect.objectContaining({ column: 'Downloads (YoY Growth)', metric_id: 'downloads_yoy_growth_absolute', unit: 'downloads' }),
       expect.objectContaining({ column: 'Downloads (YoY Growth %)', metric_id: 'downloads_yoy_growth_percent', unit: '%' }),
     ]);
-    expect(payload.explicit_values).toEqual({ geo: 'Worldwide', period_start: '2026-09-14', period_end: '2026-10-13' });
+    expect(payload.explicit_values).toEqual({ geo: 'Worldwide', period_start: '2026-09-14', period_end: '2026-10-13', period_semantics: 'reporting_interval' });
   });
 
   it('asks only about genuine ambiguity and keeps unmatched source apps without mapping actions', async () => {
