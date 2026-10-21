@@ -64,4 +64,36 @@ describe('QuantitativeDatasetExplorer', () => {
     expect(reportApi.revalidateQuantitativeDataset).toHaveBeenCalledWith('report-1', 'dataset-1');
     expect(onRevalidated).toHaveBeenCalledWith(dataset);
   });
+
+  it('lets the PO choose every source observation in a multi-value cell without auto-selecting the first', () => {
+    const multiple = {
+      ...dataset,
+      observations: [
+        observation({ value: 1200, period_start: '2026-10-01', period_end: '2026-10-30', methodology: 'Method A' }),
+        observation({ value: 900, period_start: '2026-10-05', period_end: '2026-11-03', methodology: 'Method B' }),
+      ],
+    } as unknown as QuantitativeDataset;
+    render(<QuantitativeDatasetExplorer dataset={multiple} onRevalidated={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '2 observations · choose' }));
+    expect(screen.getByRole('region', { name: 'Choose a specific source measurement' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /1[.,]200 downloads.*2026-10-01.*Method A/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /900 downloads.*2026-10-05.*Method B/ }));
+    expect(screen.getByText('2026-10-05 – 2026-11-03 · rolling_period')).toBeTruthy();
+    expect(screen.getByText('Method B')).toBeTruthy();
+  });
+
+  it('keeps identical raw app IDs from different providers as separate source identities', () => {
+    const crossProvider = {
+      ...dataset,
+      observations: [
+        observation({ source_entity_id: 'shared-id', source_provider: 'provider-a', source_entity_name: 'Provider A Game' }),
+        observation({ source_entity_id: 'shared-id', source_provider: 'provider-b', source_entity_name: 'Provider B Game' }),
+      ],
+    } as unknown as QuantitativeDataset;
+    render(<QuantitativeDatasetExplorer dataset={crossProvider} onRevalidated={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Provider A Game' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Provider B Game' })).toBeTruthy();
+    expect(screen.getByText('provider-a:shared-id · Source-only entity')).toBeTruthy();
+    expect(screen.getByText('provider-b:shared-id · Source-only entity')).toBeTruthy();
+  });
 });

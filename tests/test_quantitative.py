@@ -659,6 +659,52 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         finally:
             engine.dispose()
 
+    def test_225_observation_sensor_style_dataset_persists_and_revalidates_without_identity_loss(self):
+        report_id = self.create_report("225 observation revalidation")
+        metric_columns = [(f"Metric {index}", f"sensor_metric_{index}", f"Sensor metric {index}", "units") for index in range(1, 10)]
+        headers = ["Unified Name", "Unified ID", "Platform", *(column for column, *_ in metric_columns)]
+        csv_lines = [";".join(headers)]
+        for app_index in range(25):
+            metric_values = [str(app_index * 100 + metric_index) for metric_index in range(1, 10)]
+            csv_lines.append(";".join([f"Game {app_index:02d}", f"st-{app_index:02d}", "Unified", *metric_values]))
+        csv_content = "\n".join(csv_lines)
+        body = {
+            "filename": "sensor-tower-25-apps-9-metrics.csv",
+            "csv_content": csv_content,
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [
+                {"column": column, "metric_id": metric_id, "metric_definition": definition, "unit": unit, "methodology": "Sensor Tower export"}
+                for column, metric_id, definition, unit in metric_columns
+            ],
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-14", "period_end": "2026-11-13", "granularity": "rolling_period"},
+        }
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        dataset_id = saved.json()["id"]
+        self.assertEqual(len(saved.json()["observations"]), 225)
+        self.assertEqual(saved.json()["source_apps"], 25)
+        self.assertTrue(all(item["platform"] == "Unified" and item["geo"] == "Worldwide" for item in saved.json()["observations"]))
+
+        refreshed = self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets").json()["items"][0]
+        self.assertEqual(refreshed["id"], dataset_id)
+        self.assertEqual(len(refreshed["observations"]), 225)
+        revalidated = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/{dataset_id}/revalidate")
+        self.assertEqual(revalidated.status_code, 200, revalidated.text)
+        self.assertEqual(revalidated.json()["id"], dataset_id)
+        self.assertEqual(len(revalidated.json()["observations"]), 225)
+        self.assertEqual(revalidated.json()["observations"][0]["source_entity_id"], "sensor_tower:st-00")
+        self.assertEqual(revalidated.json()["observations"][-1]["platform"], "Unified")
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                persisted = session.get(QuantitativeDataset, dataset_id)
+                self.assertIsNotNone(persisted)
+                self.assertEqual(persisted.original_csv, csv_content)
+                self.assertEqual(len(persisted.observations_json), 225)
+                self.assertEqual(persisted.report_id, report_id)
+        finally:
+            engine.dispose()
+
     def test_ambiguous_entity_mapping_requires_confirmation_then_accepts_selection(self):
         report_id = self.create_report()
         raw = self.client.get(f"/api/v1/reports/{report_id}").json()

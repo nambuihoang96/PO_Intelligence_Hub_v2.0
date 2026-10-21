@@ -166,6 +166,20 @@ describe('report-scoped analytics selection contract', () => {
     const excluded = buildAnalyticsSelection('report-1', [], [dataset([worldwide, peer])], filters({ readiness: 'excluded' }));
     expect(excluded.selectedObservations).toHaveLength(2);
     expect(excluded.compatibleComparisonGroups).toHaveLength(0);
+    const scopeMismatch = buildAnalyticsSelection('report-1', [], [dataset([worldwide, peer])], filters({ readiness: 'scope_mismatch' }));
+    expect(scopeMismatch.selectedObservations.every(({ sourceValid }) => sourceValid)).toBe(true);
+    expect(scopeMismatch.selectedObservations).toHaveLength(2);
+    expect(scopeMismatch.compatibleComparisonGroups).toHaveLength(1);
+    expect(buildAnalyticsSelection('report-1', [], [dataset([worldwide, peer])], filters({ readiness: 'needs_review' })).selectedObservations).toHaveLength(0);
+  });
+
+  it('keeps a valid measurement without peers out of Needs review and exposes it as standalone', () => {
+    const standalone = row({ methodology: null, comparison_ready: false });
+    const needsPeer = buildAnalyticsSelection('report-1', [standalone], [], filters({ readiness: 'no_comparison_partner' }));
+    expect(needsPeer.selectedObservations).toHaveLength(1);
+    expect(needsPeer.selectedObservations[0].sourceValid).toBe(true);
+    expect(needsPeer.selectedObservations[0].comparisonGroupReady).toBe(false);
+    expect(buildAnalyticsSelection('report-1', [standalone], [], filters({ readiness: 'needs_review' })).selectedObservations).toHaveLength(0);
   });
 
   it('keeps explicit date windows displayable without inventing granularity', () => {
@@ -176,6 +190,43 @@ describe('report-scoped analytics selection contract', () => {
     expect(selection.selectedObservations.every(({ sourceValid }) => sourceValid)).toBe(true);
     expect(selection.compatibleComparisonGroups).toHaveLength(1);
     expect(selection.selectedObservations[0].observation.granularity).toBeNull();
+  });
+
+  it('matches exact windows when both granularity values are absent', () => {
+    const a = row({ entity_id: 'a', entity_name: 'A', granularity: null });
+    const b = row({ entity_id: 'b', entity_name: 'B', granularity: null });
+    expect(buildAnalyticsSelection('report-1', [a, b]).compatibleComparisonGroups).toHaveLength(1);
+  });
+
+  it('does not compare an absent granularity with a known cadence', () => {
+    const a = row({ entity_id: 'a', entity_name: 'A', granularity: null });
+    const b = row({ entity_id: 'b', entity_name: 'B', granularity: 'month' });
+    expect(buildAnalyticsSelection('report-1', [a, b]).compatibleComparisonGroups).toHaveLength(0);
+  });
+
+  it('does not compare matching windows with conflicting known granularities', () => {
+    const a = row({ entity_id: 'a', entity_name: 'A', granularity: 'month' });
+    const b = row({ entity_id: 'b', entity_name: 'B', granularity: 'rolling_period' });
+    expect(buildAnalyticsSelection('report-1', [a, b]).compatibleComparisonGroups).toHaveLength(0);
+  });
+
+  it('keeps different windows separate across entities and rejects overlapping periods within an entity', () => {
+    const different = buildAnalyticsSelection('report-1', [
+      row({ entity_id: 'a', entity_name: 'A', period_start: '2025-01-01', period_end: '2025-01-31' }),
+      row({ entity_id: 'b', entity_name: 'B', period_start: '2025-02-01', period_end: '2025-02-28' }),
+    ]);
+    expect(different.compatibleComparisonGroups).toHaveLength(0);
+    const nonOverlappingForOneEntity = buildAnalyticsSelection('report-1', [
+      row({ entity_id: 'a', entity_name: 'A', period_start: '2025-01-01', period_end: '2025-01-31' }),
+      row({ entity_id: 'a', entity_name: 'A', period_start: '2025-02-01', period_end: '2025-02-28', value: 90 }),
+    ]);
+    expect(nonOverlappingForOneEntity.compatibleComparisonGroups).toHaveLength(1);
+    expect(nonOverlappingForOneEntity.compatibleComparisonGroups[0].periods).toHaveLength(2);
+    const overlapping = buildAnalyticsSelection('report-1', [
+      row({ entity_id: 'a', entity_name: 'A', period_start: '2025-01-01', period_end: '2025-01-31' }),
+      row({ entity_id: 'a', entity_name: 'A', period_start: '2025-01-15', period_end: '2025-02-15', value: 90 }),
+    ]);
+    expect(overlapping.compatibleComparisonGroups).toHaveLength(0);
   });
 
   it('distinguishes complete, scope-compatible and comparison-ready readiness states', () => {

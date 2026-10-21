@@ -1,7 +1,7 @@
 import type { QuantitativeDataset, QuantitativeObservation } from './api';
 
 export type AnalyticsSourceFilter = 'all' | 'research_report' | 'csv_dataset';
-export type AnalyticsReadinessFilter = 'all' | 'complete' | 'scope_compatible' | 'comparison_ready' | 'excluded' | 'duplicate';
+export type AnalyticsReadinessFilter = 'all' | 'complete' | 'scope_compatible' | 'comparison_ready' | 'excluded' | 'duplicate' | 'scope_mismatch' | 'needs_review' | 'no_comparison_partner';
 export type AnalyticsFilters = {
   metric: string; geo: string; platform: string; period: string; entity: string;
   source: AnalyticsSourceFilter; readiness: AnalyticsReadinessFilter;
@@ -135,11 +135,11 @@ function makeRecord(args: {
 }
 
 function comparisonIdentity(row: QuantitativeObservation): string | null {
-  // Exact date bounds define the observed window. Granularity is kept as metadata
-  // and is never invented; peers are compared only inside identical date windows.
+  // Exact date bounds define the observed window. Known granularity is part of
+  // comparability: absent/absent may match, while absent/known and conflicts do not.
   const required = [row.metric_id, row.metric_definition, row.unit, row.geo, row.platform, row.methodology];
   if (required.some((value) => !clean(value)) || !row.period_start || !row.period_end) return null;
-  return JSON.stringify(required.map((value) => clean(value).toLocaleLowerCase()));
+  return JSON.stringify([...required, row.granularity].map((value) => clean(value).toLocaleLowerCase()));
 }
 
 function compatibleGroupLabel(row: QuantitativeObservation): string {
@@ -152,6 +152,9 @@ function passesReadiness(record: AnalyticsRecord, filter: AnalyticsReadinessFilt
   if (filter === 'scope_compatible') return record.reportCompatible === true;
   if (filter === 'comparison_ready') return groupedKeys.has(record.key);
   if (filter === 'duplicate') return record.duplicate;
+  if (filter === 'scope_mismatch') return record.reportCompatible === false;
+  if (filter === 'needs_review') return !record.sourceValid || record.duplicate || record.reportCompatible === null;
+  if (filter === 'no_comparison_partner') return record.sourceValid && !record.duplicate && !groupedKeys.has(record.key);
   return !record.sourceValid || record.duplicate || record.reportCompatible === false
     || (record.source === 'research_report' && record.reportCompatible !== true);
 }

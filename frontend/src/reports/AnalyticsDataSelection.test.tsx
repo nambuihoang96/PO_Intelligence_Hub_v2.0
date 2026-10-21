@@ -66,7 +66,8 @@ describe('AnalyticsDataSelection', () => {
     expect(cards).toHaveLength(2);
     expect(cards[1].textContent).toContain('App B');
     expect(cards[1].textContent).toContain('Unknown');
-    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Why excluded/));
+    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Measurement details, source & validation/));
+    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Why this cannot be compared/));
     expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
   });
 
@@ -83,5 +84,34 @@ describe('AnalyticsDataSelection', () => {
     expect(screen.getAllByText('Source-only App 3')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
     expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ source: 'csv_dataset', sourceId: 'csv-1', index: 0 }));
+  });
+
+  it('shows scope mismatches as valid in their original CSV scope, separate from needs-review records', () => {
+    const worldwide = observation({
+      entity_id: null, entity_name: null, source_entity_id: 'sensor:a', source_entity_name: 'Worldwide A', source_provider: 'sensor',
+      entity_resolution_state: 'source_only', observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'csv-1',
+      geo: 'Worldwide', platform: 'Unified', report_compatibility: 'incompatible', scope_compatible: false, analysis_ready: true,
+    });
+    const peer = { ...worldwide, source_entity_id: 'sensor:b', source_entity_name: 'Worldwide B' };
+    render(<AnalyticsDataSelection reportId="report-1" observations={[]} datasets={[csvDataset([worldwide, peer])]} onViewEvidence={() => undefined} onImportCsv={() => undefined} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Data readiness' }), { target: { value: 'scope_mismatch' } });
+    expect(screen.getAllByText('Worldwide A')).toHaveLength(2);
+    expect(screen.getAllByText('Valid in CSV scope · differs from report')).toHaveLength(2);
+    expect(screen.getByText('1 dataset-scope compatible comparison group')).toBeTruthy();
+    expect(screen.getByText(/do not represent the linked report scope/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Data readiness' }), { target: { value: 'needs_review' } });
+    expect(screen.getByText('No observations match these filters. Change or reset the filters to see the report-linked data.')).toBeTruthy();
+  });
+
+  it('renders a compact searchable preview for 225 observations and keeps evidence navigation', () => {
+    const rows = Array.from({ length: 225 }, (_, index) => observation({ entity_id: `app-${index}`, entity_name: `App ${index}` }));
+    const openEvidence = vi.fn();
+    const { container } = render(<AnalyticsDataSelection reportId="report-1" observations={rows} datasets={[]} onViewEvidence={openEvidence} onImportCsv={() => undefined} />);
+    expect(container.querySelectorAll('.analytics-observation')).toHaveLength(20);
+    expect(screen.getByText('225 match the current filters')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search selected data' }), { target: { value: 'App 220' } });
+    expect(container.querySelectorAll('.analytics-observation')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
+    expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ index: 220, observation: expect.objectContaining({ entity_name: 'App 220' }) }));
   });
 });
