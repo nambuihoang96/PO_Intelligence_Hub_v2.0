@@ -77,7 +77,22 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 
+    def confirm_fixture_metadata(self, dataset):
+        """Only synthetic fixtures: explicit provider specification supplied by the test."""
+        endpoint = f"/api/v1/reports/{dataset['report_id']}/quantitative-datasets/{dataset['id']}/metadata"
+        view = self.client.get(endpoint).json()
+        changes = []
+        for group in view['groups']:
+            for field, item in group['fields'].items():
+                if item['basis'] == 'po_unverified' and item['value'] not in (None, '', 'unknown'):
+                    changes.append(dict(group_key=group['key'], field=field, value=item['value'], basis='provider_documentation', source_url='https://example.com/synthetic-provider-specification', source_excerpt=f"Synthetic test specification explicitly states {field}: {item['value']}", attested=True))
+        if changes:
+            result = self.client.put(endpoint, json=dict(expected_revision=view['revision'], changes=changes))
+            self.assertEqual(result.status_code, 200, result.text)
+
     def request_for(self, baseline: dict, current: dict, metric: dict | None = None) -> dict:
+        self.confirm_fixture_metadata(baseline)
+        self.confirm_fixture_metadata(current)
         catalog = self.client.get("/api/v1/quantitative-comparisons/datasets?limit=100").json()["items"]
         left = next(item for item in catalog if item["id"] == baseline["id"])
         right = next(item for item in catalog if item["id"] == current["id"])
@@ -96,7 +111,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
         current_rows = [(f"App {index:03}", f"st-{index:03}", "25" if index == 0 else str(index * 100 + 50)) for index in range(70)]
         current_rows.extend((f"New App {index:03}", f"st-new-{index:03}", str(5000 + index)) for index in range(30))
         baseline = self.import_sensor_export(baseline_report, "earlier.csv", "2026-10-01", baseline_rows)
-        current = self.import_sensor_export(current_report, "later.csv", "2026-11-01", current_rows)
+        current = self.import_sensor_export(current_report, "later.csv", "2026-10-15", current_rows)
 
         catalog = self.client.get("/api/v1/quantitative-comparisons/datasets?limit=100")
         self.assertEqual(catalog.status_code, 200, catalog.text)
@@ -133,7 +148,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
         before = [("App Zero", "st-0", "0"), ("Name conflict", "st-conflict", "10"), ("Duplicate", "st-dup", "20"), ("Only before", "st-before", "30")]
         after = [("App Zero", "st-0", "10"), ("Different name", "st-conflict", "12"), ("Duplicate", "st-dup", "25"), ("Duplicate", "st-dup", "25"), ("Only after", "st-after", "40"), ("Bad number", "st-bad", "NaN")]
         baseline = self.import_sensor_export(first, "before.csv", "2026-10-01", before)
-        current = self.import_sensor_export(second, "after.csv", "2026-11-01", after)
+        current = self.import_sensor_export(second, "after.csv", "2026-10-15", after)
         result = self.client.post("/api/v1/quantitative-comparisons/preview", json=self.request_for(baseline, current)).json()
         rows = {row["entity_key"]: row for row in result["rows"]}
         self.assertEqual(rows["sensor_tower:st-conflict"]["status"], "identity_conflict")
@@ -148,7 +163,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
     def test_same_names_with_different_ids_are_not_joined_and_ambiguous_generic_csv_ids_are_not_auto_matched(self):
         first, second = self.create_report("First names"), self.create_report("Second names")
         baseline = self.import_sensor_export(first, "names-a.csv", "2026-10-01", [("Same Display Name", "st-a", "4"), ("Same Display Name", "st-b", "8")])
-        current = self.import_sensor_export(second, "names-b.csv", "2026-11-01", [("Same Display Name", "st-c", "12")])
+        current = self.import_sensor_export(second, "names-b.csv", "2026-10-15", [("Same Display Name", "st-c", "12")])
         result = self.client.post("/api/v1/quantitative-comparisons/preview", json=self.request_for(baseline, current)).json()
         keys = {row["entity_key"] for row in result["rows"]}
         self.assertEqual(keys, {"sensor_tower:st-a", "sensor_tower:st-b", "sensor_tower:st-c"})
@@ -165,7 +180,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
         self.assertEqual(duplicate_selection.status_code, 422)
         self.assertEqual(duplicate_selection.json()["error"]["code"], "DUPLICATE_DATASET_SELECTION")
 
-        second_rows = self.import_sensor_export(third, "different-method.csv", "2026-11-01", [("App", "st-a", "12")], methodology="Different methodology")
+        second_rows = self.import_sensor_export(third, "different-method.csv", "2026-10-15", [("App", "st-a", "12")], methodology="Different methodology")
         dataset = self.client.get("/api/v1/quantitative-comparisons/datasets?limit=100").json()["items"]
         current_catalog = next(item for item in dataset if item["id"] == second_rows["id"])
         payload = self.request_for(baseline, second_rows)
@@ -187,12 +202,12 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
     def test_geo_platform_mismatch_is_blocked_and_signed_values_keep_sign_without_percent_growth(self):
         old_report, new_report = self.create_report("Old scope"), self.create_report("New scope")
         old = self.import_sensor_export(old_report, "old-scope.csv", "2026-10-01", [("App", "st-a", "-10")])
-        new = self.import_custom_sensor_export(new_report, "new-scope.csv", "2026-11-01", [("App", "st-a", "Android", "-5")], geo="US")
+        new = self.import_custom_sensor_export(new_report, "new-scope.csv", "2026-10-15", [("App", "st-a", "Android", "-5")], geo="US")
         mismatch = self.client.post("/api/v1/quantitative-comparisons/preview", json=self.request_for(old, new))
         self.assertEqual(mismatch.status_code, 422)
         self.assertEqual(mismatch.json()["error"]["code"], "SCOPE_OR_PERIOD_NOT_SHARED")
 
-        same_scope = self.import_sensor_export(self.create_report("Negative current"), "negative-current.csv", "2026-11-01", [("App", "st-a", "-5")])
+        same_scope = self.import_sensor_export(self.create_report("Negative current"), "negative-current.csv", "2026-10-15", [("App", "st-a", "-5")])
         result = self.client.post("/api/v1/quantitative-comparisons/preview", json=self.request_for(old, same_scope))
         self.assertEqual(result.status_code, 200, result.text)
         row = result.json()["rows"][0]
@@ -205,7 +220,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
     def test_revenue_without_explicit_currency_is_blocked(self):
         old_report, new_report = self.create_report("Revenue old"), self.create_report("Revenue new")
         old = self.import_custom_sensor_export(old_report, "revenue-old.csv", "2026-10-01", [("App", "st-revenue", "Unified", "100")], metric_id="revenue_absolute", metric_definition="Revenue", unit="revenue")
-        new = self.import_custom_sensor_export(new_report, "revenue-new.csv", "2026-11-01", [("App", "st-revenue", "Unified", "120")], metric_id="revenue_absolute", metric_definition="Revenue", unit="revenue")
+        new = self.import_custom_sensor_export(new_report, "revenue-new.csv", "2026-10-15", [("App", "st-revenue", "Unified", "120")], metric_id="revenue_absolute", metric_definition="Revenue", unit="revenue")
         response = self.client.post("/api/v1/quantitative-comparisons/preview", json=self.request_for(old, new))
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "METRIC_CURRENCY_REQUIRED")
@@ -221,7 +236,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
     def test_date_only_period_meaning_must_be_confirmed_before_comparison(self):
         first_report, second_report = self.create_report("Ambiguous date first"), self.create_report("Ambiguous date second")
         first = self.import_custom_sensor_export(first_report, "ambiguous-a.csv", "2026-10-01", [("App", "st-date", "Unified", "10")], period_semantics="unknown")
-        second = self.import_custom_sensor_export(second_report, "ambiguous-b.csv", "2026-11-01", [("App", "st-date", "Unified", "12")], period_semantics="unknown")
+        second = self.import_custom_sensor_export(second_report, "ambiguous-b.csv", "2026-10-15", [("App", "st-date", "Unified", "12")], period_semantics="unknown")
         payload = self.request_for(first, second)
         unconfirmed = self.client.post("/api/v1/quantitative-comparisons/preview", json=payload)
         self.assertEqual(unconfirmed.status_code, 200, unconfirmed.text)
@@ -233,7 +248,7 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
         confirmed = self.client.post("/api/v1/quantitative-comparisons/preview", json=payload)
         self.assertEqual(confirmed.status_code, 200, confirmed.text)
         self.assertTrue(confirmed.json()["period_readiness"]["compatible"])
-        self.assertEqual(confirmed.json()["rows"][0]["status"], "comparable")
+        self.assertEqual(confirmed.json()["rows"][0]["status"], "needs_review")  # A bare selection is not documented metadata.
 
     def test_quarter_and_week_windows_are_not_comparable_and_periods_must_not_overlap(self):
         first, second = self.create_report("Quarterly source"), self.create_report("Weekly source")
@@ -274,6 +289,19 @@ class QuantitativeComparisonAPITest(unittest.TestCase):
         self.assertEqual(unequal.json()["rows"][0]["status"], "incompatible_periods")
 
     def test_catalog_and_preview_are_typed_openapi_contracts(self):
+        report = self.create_report("Metric-key catalog contract")
+        dataset = self.import_sensor_export(
+            report, "metric-key.csv", "2026-10-01",
+            [("App A", "st-a", "100")],
+        )
+        self.confirm_fixture_metadata(dataset)
+        catalog = self.client.get("/api/v1/quantitative-comparisons/datasets?limit=100")
+        self.assertEqual(catalog.status_code, 200, catalog.text)
+        dataset_item = next(item for item in catalog.json()["items"] if item["id"] == dataset["id"])
+        metric = dataset_item["metrics"][0]
+        self.assertTrue(metric["key"])
+        self.assertIn(metric["key"], dataset_item["periods"][0]["metric_keys"])
+
         schema = self.client.get("/openapi.json").json()
         self.assertIn("/api/v1/quantitative-comparisons/datasets", schema["paths"])
         self.assertIn("/api/v1/quantitative-comparisons/preview", schema["paths"])

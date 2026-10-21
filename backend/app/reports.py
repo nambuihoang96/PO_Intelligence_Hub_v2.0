@@ -5,13 +5,14 @@ import io
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport, QuantitativeDataset, new_id
 from backend.app.quantitative import assess_observation_readiness, assess_report_observations, csv_digest, detect_csv_delimiter, parse_csv_observations
+from backend.app.dataset_metadata import effective_observations, metadata_view, review_state, updated_review
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
     BenchmarkSelectionsUpdate,
@@ -26,6 +27,8 @@ from backend.app.schemas import (
     QuantitativeDatasetImport,
     QuantitativeDatasetPreview,
     QuantitativeDatasetRead,
+    DatasetMetadataRead,
+    DatasetMetadataUpdate,
     ReprocessResult,
     ReportStructuringUpdate,
     StructuredResearchDataUpdate,
@@ -194,7 +197,7 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         metric_mappings = []
         explicit_values = {}
         delimiter = ","
-    observations = [assess_observation_readiness(item, report_geo=report.geo, report_platform=report.os) for item in (dataset.observations_json or [])]
+    observations = effective_observations(dataset, report)
     complete_count = sum(bool(item.get("complete_observation")) for item in observations)
     display_count = sum(bool(item.get("display_ready")) for item in observations)
     analysis_count = sum(bool(item.get("analysis_ready")) for item in observations)
@@ -211,7 +214,7 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         source_rows = max(0, sum(1 for _ in csv.reader(io.StringIO(dataset.original_csv, newline=""), delimiter=detect_csv_delimiter(dataset.original_csv))) - 1)
     except (ValueError, csv.Error):
         source_rows = 0
-    validation_reasons = list(dict.fromkeys([*(dataset.validation_reasons_json or []), *(reason for item in observations for reason in item.get("validation_reasons", []))]))
+    validation_reasons = list(dict.fromkeys(reason for item in observations for reason in item.get("validation_reasons", [])))
     return QuantitativeDatasetRead.model_validate({
         "id": dataset.id,
         "report_id": dataset.report_id,
@@ -363,6 +366,57 @@ def import_quantitative_dataset(
     return _dataset_read(dataset, report=report)
 
 
+@router.get("/{report_id}/quantitative-datasets/{dataset_id}/metadata", response_model=DatasetMetadataRead)
+def read_dataset_metadata(report_id: str, dataset_id: str, session: SessionDependency):
+    dataset = session.get(QuantitativeDataset, dataset_id)
+    if dataset is None or dataset.report_id != report_id:
+        raise HTTPException(404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
+    return metadata_view(dataset)
+
+
+@router.get("/{report_id}/quantitative-datasets/{dataset_id}", response_model=QuantitativeDatasetRead)
+def get_quantitative_dataset(report_id: str, dataset_id: str, session: SessionDependency):
+    dataset = session.get(QuantitativeDataset, dataset_id)
+    report = session.get(ImportedResearchReport, report_id)
+    if dataset is None or report is None or dataset.report_id != report_id:
+        raise HTTPException(404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
+    return _dataset_read(dataset, report=report)
+
+
+@router.get("/{report_id}/quantitative-dataset-by-hash/{digest}", response_model=QuantitativeDatasetRead | None)
+def find_quantitative_dataset(report_id: str, digest: str, session: SessionDependency):
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(404, detail="Report not found")
+    dataset = session.scalar(select(QuantitativeDataset).where(QuantitativeDataset.report_id == report_id, QuantitativeDataset.content_sha256 == digest))
+    return _dataset_read(dataset, report=report, duplicate=True) if dataset else None
+
+
+@router.put("/{report_id}/quantitative-datasets/{dataset_id}/metadata", response_model=DatasetMetadataRead)
+def update_dataset_metadata(report_id: str, dataset_id: str, payload: DatasetMetadataUpdate, session: SessionDependency):
+    dataset = session.get(QuantitativeDataset, dataset_id)
+    if dataset is None or dataset.report_id != report_id:
+        raise HTTPException(404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
+    state = updated_review(dataset, payload)
+    if state == review_state(dataset):
+        return metadata_view(dataset)
+    previous = dataset.field_mapping_json
+    updated = {**previous, "metadata_review": state}
+    try:
+        outcome = session.execute(update(QuantitativeDataset).where(
+            QuantitativeDataset.id == dataset.id, QuantitativeDataset.field_mapping_json == previous,
+        ).values(field_mapping_json=updated).execution_options(synchronize_session=False))
+        if outcome.rowcount != 1:
+            session.rollback()
+            raise HTTPException(409, detail={"code": "METADATA_STALE", "message": "Dataset information changed. Reopen it before saving."})
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    session.refresh(dataset)
+    return metadata_view(dataset)
+
+
 @router.post("/{report_id}/quantitative-datasets/{dataset_id}/revalidate", response_model=QuantitativeDatasetRead)
 def revalidate_quantitative_dataset(
     report_id: str,
@@ -385,7 +439,10 @@ def revalidate_quantitative_dataset(
         metric_mappings = saved.get("metric_mappings") or []
         explicit_values = saved.get("explicit_values") or {}
     else:
-        field_mapping, metric_mappings, explicit_values = saved, [], {}
+        # Older datasets stored column mappings at the top level. Metadata
+        # recovery is an additive sibling key and must not become a CSV column.
+        field_mapping = {key: value for key, value in saved.items() if key != "metadata_review"}
+        metric_mappings, explicit_values = [], {}
     try:
         payload = QuantitativeDatasetImport.model_validate({
             "filename": dataset.filename,
@@ -407,6 +464,11 @@ def revalidate_quantitative_dataset(
             "message": "The saved CSV has ambiguous matches. Existing observations were not changed; review the mappings in a new import preview.",
             "entity_mappings_required": preview.ambiguities,
         })
+    # Once a PO has reviewed metadata, the imported observation snapshot is the
+    # immutable basis of that review. Re-run deterministic validation above,
+    # but do not replace its rows and orphan the overlay's stable group keys.
+    if review_state(dataset).get("entries"):
+        return _dataset_read(dataset, report=report)
     observations = [item.model_dump(mode="json") for item in preview.observations]
     for item in observations:
         item["provenance_id"] = dataset.id

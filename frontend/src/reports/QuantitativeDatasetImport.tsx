@@ -1,3 +1,4 @@
+import { DatasetMetadataReview } from './DatasetMetadataReview';
 import { useMemo, useRef, useState } from 'react';
 import { reportApi, type ImportedReport, type QuantitativeDataset, type QuantitativeDatasetInput, type QuantitativeDatasetPreview, type QuantitativeMetricColumnMapping } from './api';
 
@@ -122,16 +123,20 @@ function dateHints(filename: string): { geo?: string; period_start?: string; per
 }
 
 function readLocalFile(file: File): Promise<string> {
-  if (typeof file.text === 'function') return file.text();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Unsupported file encoding'));
     reader.onerror = () => reject(reader.error ?? new Error('Could not read file'));
-    reader.readAsText(file);
+    // File.text() is inconsistently implemented by browser test runtimes and
+    // can reject after a change event. FileReader is the common browser API.
+    reader.readAsText(file, 'UTF-8');
   });
 }
 
 export function QuantitativeDatasetImport({ report, onImported }: { report: ImportedReport; onImported: (dataset: QuantitativeDataset) => void }) {
+  const [existing, setExisting] = useState<QuantitativeDataset | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const fileRevision = useRef(0);
   const [filename, setFilename] = useState(''); const [csvContent, setCsvContent] = useState('');
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({}); const [explicitValues, setExplicitValues] = useState<Record<string, string>>({});
   const [entityMappings, setEntityMappings] = useState<Record<string, string>>({}); const [metricMappings, setMetricMappings] = useState<QuantitativeMetricColumnMapping[]>([]);
@@ -158,6 +163,7 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
   }
 
   async function chooseFile(file?: File) {
+    const chosenRevision = ++fileRevision.current; setExisting(null); setReviewOpen(false);
     invalidatePreview(); setMappingRequirements([]); setFailure(''); setMessage(''); setEntityMappings({}); setExplicitValues({}); setMetricMappings([]);
     if (!file) return;
     if (!file.name.toLocaleLowerCase().endsWith('.csv')) { setFailure('Chọn file .csv để tiếp tục.'); return; }
@@ -179,9 +185,23 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
         }
         if (entityName && entityName !== next.entity_id) next.entity_name = entityName;
       }
+      if (chosenRevision !== fileRevision.current) return;
       const explicitPeriodMeaning = next.period_start && next.period_end ? 'reporting_interval' : 'unknown';
       setFilename(file.name); setCsvContent(content); setFieldMapping(next); setMetricMappings(uniqueMetricMappings);
       setExplicitValues((current) => ({ ...current, period_semantics: explicitPeriodMeaning }));
+      if (globalThis.crypto?.subtle) {
+        try {
+          const bytes = new TextEncoder().encode('\ufeff' + content);
+          const hash = await crypto.subtle.digest('SHA-256', bytes);
+          const digest = Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, '0')).join('');
+          const duplicate = await reportApi.findQuantitativeDataset(report.id, digest);
+          if (chosenRevision !== fileRevision.current) return;
+          setExisting(duplicate);
+        } catch {
+          // A lookup outage must not discard the local file or block preview.
+          // The backend duplicate check still runs when the user confirms import.
+        }
+      }
     } catch { setFailure('Không đọc được file. Hãy chọn lại file CSV.'); }
   }
 
@@ -271,7 +291,7 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
   async function confirmLink() {
     if (!preview || validatedInputKey !== JSON.stringify(input()) || unresolved.length > 0 || busy !== null) return;
     setBusy('saving'); setFailure(''); setMessage('');
-    try { const dataset = await reportApi.importQuantitativeDataset(report.id, input()); onImported(dataset); setMessage(dataset.duplicate ? 'Dataset này đã được liên kết trước đó; dữ liệu đã lưu được mở lại.' : 'CSV đã được liên kết với báo cáo này.'); setPreview(null); }
+    try { const dataset = await reportApi.importQuantitativeDataset(report.id, input()); onImported(dataset); setExisting(dataset.duplicate ? dataset : null); setMessage(dataset.duplicate ? 'Dataset này đã được liên kết trước đó; dữ liệu đã lưu được mở lại.' : 'CSV đã được liên kết với báo cáo này.'); setPreview(null); }
     catch (reason) { setFailure(reason instanceof Error ? reason.message : 'Không thể lưu dataset.'); }
     finally { setBusy(null); }
   }
@@ -281,9 +301,9 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
     <div className="quant-import-steps">
       <p className="quant-import-purpose">Mục đích: lưu các chỉ số trong CSV vào báo cáo này để xem và so sánh. Bước 3 chỉ xem thử; chỉ bước 4 mới lưu. File CSV gốc được giữ nguyên.</p>
       <section><h4>1. Chọn file CSV</h4><label className="quant-file-picker">Chọn file CSV<input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>{filename && <span className="quant-file-name">{filename}</span>}
-        {headers.length > 0 && <div className="quant-preview-table"><strong>Xem nhanh · {dataRows.length.toLocaleString('vi-VN')} dòng có dữ liệu · dấu phân cách {delimiter === '\t' ? 'tab' : delimiter}</strong><div className="quant-table-scroll"><table style={headers.length > 8 ? { minWidth: `${headers.length * 96}px` } : undefined}><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`} style={{ whiteSpace: 'nowrap' }}>{header || `Column ${index + 1}`}</th>)}</tr></thead><tbody>{sampleRows.map((sample, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index} style={{ whiteSpace: index === 0 ? 'normal' : 'nowrap' }}>{sample[index] ?? ''}</td>)}</tr>)}</tbody></table></div><small>Đang hiển thị {sampleRows.length} dòng đầu trong tổng số {dataRows.length}. Đây chỉ là mẫu xem nhanh.</small></div>}
+        {headers.length > 0 && !existing && <div className="quant-preview-table"><strong>Xem nhanh · {dataRows.length.toLocaleString('vi-VN')} dòng có dữ liệu · dấu phân cách {delimiter === '\t' ? 'tab' : delimiter}</strong><div className="quant-table-scroll"><table style={headers.length > 8 ? { minWidth: `${headers.length * 96}px` } : undefined}><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`} style={{ whiteSpace: 'nowrap' }}>{header || `Column ${index + 1}`}</th>)}</tr></thead><tbody>{sampleRows.map((sample, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index} style={{ whiteSpace: index === 0 ? 'normal' : 'nowrap' }}>{sample[index] ?? ''}</td>)}</tr>)}</tbody></table></div><small>Đang hiển thị {sampleRows.length} dòng đầu trong tổng số {dataRows.length}. Đây chỉ là mẫu xem nhanh.</small></div>}
       </section>
-      {headers.length > 0 && <section><h4>2. Nhận diện dữ liệu và kiểm tra mapping</h4><p>ID/tên từ CSV được giữ làm danh tính nguồn. App khớp rõ ràng với report được liên kết; app không có trong report vẫn hợp lệ ở cấp dataset và không cần thao tác thủ công. Chỉ ID/tên mâu thuẫn hoặc nhiều kết quả mới cần review.</p>
+      {headers.length > 0 && !existing && <section><h4>2. Nhận diện dữ liệu và kiểm tra mapping</h4><p>ID/tên từ CSV được giữ làm danh tính nguồn. App khớp rõ ràng với report được liên kết; app không có trong report vẫn hợp lệ ở cấp dataset và không cần thao tác thủ công. Chỉ ID/tên mâu thuẫn hoặc nhiều kết quả mới cần review.</p>
         <div className="quant-auto-summary" role="status">{fieldMapping.entity_id && fieldMapping.entity_name ? `Source identity: ID ${fieldMapping.entity_id} · name ${fieldMapping.entity_name}` : fieldMapping.entity_id ? `Source identity column: ${fieldMapping.entity_id}` : fieldMapping.entity_name ? `Source name column: ${fieldMapping.entity_name}` : 'Choose an ID or name column to preserve each source app'}{fieldMapping.geo ? ` · GEO: ${fieldMapping.geo}` : ''}{fieldMapping.platform ? ` · Platform: ${fieldMapping.platform}` : ''}{metricMappings.length ? ` · ${metricMappings.length} metric columns recognized` : ''}</div>
         <div className="quant-map-grid">{dimensions.map(([field, label]) => <label key={field}>{label}<select value={field === 'entity_id' ? (fieldMapping.entity_id || fieldMapping.entity_name || '') : (fieldMapping[field] ?? '')} onChange={(event) => setField(field, event.target.value)}><option value="">Không lấy từ cột</option>{headers.filter((header) => field === 'entity_id' ? semanticHeader('entity_id', header) || semanticHeader('entity_name', header) : semanticHeader(field, header)).map((header, index) => <option key={`${header}-${index}`} value={header}>{header}</option>)}</select>{field === 'entity_id' && <small>Giữ source ID ổn định; chỉ liên kết report khi khớp chính xác, không mơ hồ. App còn lại là source-only.</small>}</label>)}</div>
         <label className="quant-period-semantics">Ý nghĩa của ngày / kỳ<select value={explicitValues.period_semantics ?? 'unknown'} onChange={(event) => setPeriodSemantics(event.target.value)}><option value="unknown">Chưa xác nhận</option><option value="snapshot">Ngày snapshot (một thời điểm)</option><option value="reporting_interval">Khoảng báo cáo</option><option value="rolling_interval">Khoảng trượt</option></select><small>Cột Date được giữ nguyên như giá trị ngày. Hãy xác nhận đó là ngày snapshot hay mốc thuộc một khoảng đo; không suy ra kỳ từ tên file.</small></label>
@@ -293,13 +313,15 @@ export function QuantitativeDatasetImport({ report, onImported }: { report: Impo
         <details className="quant-metric-columns"><summary>{wide ? `${metricMappings.length} cột chỉ số được chọn` : 'Chọn thêm cột chỉ số'}</summary><p>Chỉ chọn cột chứa số đo. Ngày, tên/ID app, danh mục và nhà phát hành là thông tin mô tả, không phải chỉ số. Các cột này vẫn nằm trong CSV gốc.</p>{metricColumns.map((column) => { const selected = metricMappings.find((metric) => metric.column === column); return <div className="quant-metric-row" key={column}><label><input type="checkbox" checked={Boolean(selected)} onChange={(event) => toggleMetric(column, event.target.checked)} />{column}</label>{selected && <><label>Metric identity<input value={selected.metric_id} onChange={(event) => patchMetric(column, { metric_id: event.target.value })} /></label><label>Definition<input value={selected.metric_definition} onChange={(event) => patchMetric(column, { metric_definition: event.target.value })} /></label><label>Unit<input value={selected.unit ?? ''} onChange={(event) => patchMetric(column, { unit: event.target.value })} placeholder="Ví dụ: downloads hoặc %" /></label><label>Methodology<input value={selected.methodology ?? ''} onChange={(event) => patchMetric(column, { methodology: event.target.value })} placeholder="Nếu được cung cấp" /></label></>}</div>; })}</details>
         <button type="button" className="secondary-action" disabled={busy !== null || (!wide && (!fieldMapping.metric_id || !fieldMapping.value)) || (!fieldMapping.entity_id && !fieldMapping.entity_name)} onClick={() => void validate()}>{busy === 'validating' ? 'Đang kiểm tra…' : '3. Xem thử dữ liệu'}</button>
       </section>}
-      {preview && <section className="quant-validation" aria-live="polite"><h4>Preview · {preview.total_rows.toLocaleString('vi-VN')} measurements from {preview.source_apps ?? 0} source apps</h4><div className="quant-readiness-counts"><span>Matched to report: <b>{preview.matched_entities ?? 0}</b></span><span>Source-only: <b>{preview.source_only_entities ?? 0}</b></span><span>Source-valid: <b>{preview.dataset_analysis_ready_observations ?? preview.complete_observations}</b></span><span>Report-compatible: <b>{preview.report_compatible_observations ?? preview.scope_compatible_observations}</b></span><span>Comparison candidates · require peers: <b>{preview.dataset_comparison_ready_observations ?? 0}</b></span><span>Incomplete: <b>{preview.total_rows - preview.complete_observations}</b></span><span>Duplicate measurements: <b>{preview.duplicate_rows}</b></span></div><p>{preview.compatibility_status === 'compatible' ? 'Dataset scope is compatible with the report.' : preview.compatibility_status === 'incompatible' ? 'Measurements remain available in their original dataset scope; comparison with this report is blocked.' : 'Dataset contains mixed or incomplete coverage. Each valid metric remains available in the explorer.'} Bước này chưa lưu gì. Sau khi kiểm tra bảng bên dưới, confirm to save the original CSV and measurements.</p>
+      {preview && !existing && <section className="quant-validation" aria-live="polite"><h4>Preview · {preview.total_rows.toLocaleString('vi-VN')} measurements from {preview.source_apps ?? 0} source apps</h4><div className="quant-readiness-counts"><span>Matched to report: <b>{preview.matched_entities ?? 0}</b></span><span>Source-only: <b>{preview.source_only_entities ?? 0}</b></span><span>Source-valid: <b>{preview.dataset_analysis_ready_observations ?? preview.complete_observations}</b></span><span>Report-compatible: <b>{preview.report_compatible_observations ?? preview.scope_compatible_observations}</b></span><span>Comparison candidates · require peers: <b>{preview.dataset_comparison_ready_observations ?? 0}</b></span><span>Incomplete: <b>{preview.total_rows - preview.complete_observations}</b></span><span>Duplicate measurements: <b>{preview.duplicate_rows}</b></span></div><p>{preview.compatibility_status === 'compatible' ? 'Dataset scope is compatible with the report.' : preview.compatibility_status === 'incompatible' ? 'Measurements remain available in their original dataset scope; comparison with this report is blocked.' : 'Dataset contains mixed or incomplete coverage. Each valid metric remains available in the explorer.'} Bước này chưa lưu gì. Sau khi kiểm tra bảng bên dưới, confirm to save the original CSV and measurements.</p>
         {scopeMismatchReasons.length > 0 && <p className="quant-scope-warning">Phạm vi không khớp: {scopeMismatchReasons.join(' ')} {scopeMismatchReasons.some((reason) => reason.startsWith('Platform ')) && 'Platform Unified được giữ nguyên; ứng dụng không tự đổi thành Android hoặc iOS.'}</p>}
         <details className="quant-row-details"><summary>Inspect preview measurements</summary><div className="quant-table-scroll"><table><thead><tr><th>Metric</th><th>Value</th><th>Entity</th><th>GEO / Platform</th><th>Readiness</th><th>Validation</th></tr></thead><tbody>{preview.observations.map((observation, index) => <tr key={`${index}-${observation.metric_id}`}><td>{observation.metric_definition || observation.metric_id || 'Unknown metric'}</td><td>{observation.value ?? 'Unknown'} {observation.unit ?? ''}</td><td>{`${observation.source_entity_name || observation.source_entity_id || 'Identity missing'} · ${observation.entity_resolution_state === 'matched' ? 'Matched' : observation.entity_resolution_state === 'source_only' ? 'Source-only' : 'Needs review'}`}</td><td>{observation.geo ?? 'GEO missing'} / {observation.platform ?? 'Platform missing'}</td><td>{observation.analysis_ready ? 'Ready for dataset analysis' : 'Incomplete'}</td><td>{[...(observation.source_validation_reasons ?? []), ...(observation.report_compatibility_reasons ?? [])].join(' ') || 'No validation issues detected'}</td></tr>)}</tbody></table></div></details>
         {unresolved.length === 0 && <button type="button" className="primary-action" disabled={busy !== null || !preview || validatedInputKey !== JSON.stringify(input())} onClick={() => void confirmLink()}>{busy === 'saving' ? 'Đang lưu…' : '4. Lưu các quan sát vào báo cáo'}</button>}
       </section>}
       {unresolved.length > 0 && <section className="quant-validation" aria-live="polite"><h4>{unresolved.length} entity mappings need review</h4><p>Only conflicting IDs/names or multiple exact report matches appear here. Other CSV apps are retained as source-only entities automatically.</p><div className="quant-ambiguities">{[...new Map(unresolved.map((item) => [item.csv_value, item])).values()].map((item) => <label key={item.csv_value}>{item.csv_name ? `${item.csv_name} · ID: ${item.csv_value}` : item.csv_value}<select aria-label={`Map entity ${item.csv_value}`} value={entityMappings[item.csv_value] ?? ''} onChange={(event) => { setEntityMappings((current) => ({ ...current, [item.csv_value]: event.target.value })); invalidatePreview(); }}><option value="">Chọn…</option><option value="__unmapped__">Keep as source-only</option>{report.research_data.entities.filter((entity) => !item.candidates.length || item.candidates.includes(entity.key)).map((entity) => <option key={entity.key} value={entity.key}>{entity.name}</option>)}</select></label>)}</div><button type="button" className="secondary-action" disabled={busy !== null} onClick={() => void validate()}>{busy === 'validating' ? 'Đang xác thực…' : 'Revalidate mappings'}</button></section>}
       {failure && <div className="research-alert" role="alert">{failure}</div>}{message && <div className="research-success" role="status">{message}</div>}
+      {existing && <section className="research-success" role="status"><p>CSV này đã được lưu. Không cần tải lại hoặc sửa file.</p><button type="button" className="secondary-action" onClick={() => onImported(existing)}>Mở dataset đã lưu</button><button type="button" className="secondary-action" onClick={() => setReviewOpen(true)}>Review dataset information</button></section>}
+      {existing && reviewOpen && <DatasetMetadataReview reportId={existing.report_id} datasetId={existing.id} onSaved={onImported} onClose={() => setReviewOpen(false)} />}
       <p className="quant-import-note">Không tải file lên trước khi bạn xác thực. CSV gốc được giữ cùng provenance; dữ liệu chỉ liên kết với báo cáo hiện tại sau xác nhận.</p>
     </div>
   </details>;

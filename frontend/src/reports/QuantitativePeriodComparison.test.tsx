@@ -15,8 +15,8 @@ vi.mock('./api', async (importOriginal) => {
   } };
 });
 
-const metric = { metric_id: 'downloads', metric_definition: 'Downloads', unit: 'downloads', methodology: 'Sensor Tower export v1', observations: 2, usable_observations: 2, warnings: [] };
-const metricIdentityKey = JSON.stringify(['downloads', 'downloads', 'downloads', 'sensor tower export v1']);
+const metric = { key: 'metric-key-v1', metric_id: 'downloads', metric_definition: 'Downloads', unit: 'downloads', methodology: 'Sensor Tower export v1', observations: 2, usable_observations: 2, warnings: [] };
+const metricIdentityKey = metric.key;
 const period = (key: string, date: string) => ({ key, semantics: 'snapshot' as const, period_start: null, period_end: null, snapshot_date: date, snapshot_date_candidate: null, granularity: null, observations: 2, usable_observations: 2, metric_keys: [metricIdentityKey], geos: ['Worldwide'], platforms: ['Unified'], warnings: [] });
 const dataset = (id: string, filename: string, date: string): ComparisonDataset => ({
   id, report_id: `report-${id}`, report_question: `${filename} report`, filename, content_sha256: `${id}-hash`, created_at: date,

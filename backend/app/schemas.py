@@ -631,6 +631,58 @@ class QuantitativeDatasetImport(APIModel):
         return name
 
 
+class DatasetMetadataChange(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    group_key: str = Field(min_length=1, max_length=64)
+    field: Literal["geo", "platform", "methodology", "unit", "period_start", "period_end", "snapshot_date", "period_semantics", "granularity", "source_reference"]
+    value: str | None = Field(default=None, max_length=2048)
+    basis: Literal["provider_documentation", "po_unverified", "unknown"]
+    source_url: str | None = Field(default=None, max_length=2048)
+    source_excerpt: str = Field(default="", max_length=4000)
+    attested: bool = False
+    replace_existing: bool = False
+
+    @model_validator(mode="after")
+    def supported_metadata(self) -> "DatasetMetadataChange":
+        if self.value is not None:
+            self.value = self.value.strip() or None
+        if self.basis == "unknown" and self.value is not None:
+            raise ValueError("Unknown metadata must not supply a value.")
+        if self.basis == "provider_documentation" and (not self.attested or not self.source_url or len(self.source_excerpt.strip()) < 10):
+            raise ValueError("Documented metadata requires a source URL, supporting excerpt and explicit confirmation that the documentation supports this field.")
+        for value in (self.source_url, self.value if self.field == "source_reference" else None):
+            if value:
+                parsed = urlsplit(value)
+                if parsed.scheme not in {"https", "http"} or not parsed.hostname or parsed.username or parsed.password:
+                    raise ValueError("Source must be an HTTP(S) URL without credentials.")
+        if self.field in {"period_start", "period_end", "snapshot_date"} and self.value:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", self.value):
+                raise ValueError("Use an exact YYYY-MM-DD date.")
+            date.fromisoformat(self.value)
+        if self.field == "period_semantics" and self.value not in {None, "unknown", "snapshot", "reporting_interval", "rolling_interval"}:
+            raise ValueError("Unsupported period meaning.")
+        limits = {"geo": 100, "platform": 100, "methodology": 500, "unit": 80, "granularity": 40}
+        if self.value and len(self.value) > limits.get(self.field, 2048):
+            raise ValueError("Metadata value is too long.")
+        return self
+
+
+class DatasetMetadataUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    changes: list[DatasetMetadataChange] = Field(min_length=1, max_length=100)
+
+
+class DatasetMetadataRead(APIModel):
+    dataset_id: str
+    report_id: str
+    filename: str
+    content_sha256: str
+    revision: int
+    groups: list[dict[str, Any]]
+    history: list[dict[str, Any]]
+
+
 class QuantitativeDatasetRead(APIModel):
     id: str
     report_id: str
@@ -687,6 +739,7 @@ class QuantitativeDatasetPage(APIModel):
 
 
 class QuantitativeComparisonMetric(APIModel):
+    key: str
     metric_id: str | None
     metric_definition: str | None
     unit: str | None
@@ -757,6 +810,7 @@ class QuantitativeComparisonPreviewRequest(APIModel):
 
 
 class QuantitativeComparisonSource(APIModel):
+    metadata_provenance: dict[str, Any] = Field(default_factory=dict)
     value: float | None
     value_precision: Literal["exact", "approximate"]
     unit: str | None

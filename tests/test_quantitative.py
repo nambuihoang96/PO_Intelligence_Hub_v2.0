@@ -580,7 +580,7 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
             "filename": "sensor-tower-100.csv", "csv_content": "\n".join(csv_rows),
             "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
             "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower source estimate"}],
-            "explicit_values": {"geo": "US", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
+            "explicit_values": {"geo": "US", "period_start": "2026-09-01", "period_end": "2026-09-30", "granularity": "rolling_period"},
         }
         preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
         self.assertEqual(preview.status_code, 200, preview.text)
@@ -593,7 +593,7 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(value["ambiguities"], [])
         saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(saved.status_code, 201, saved.text)
-        self.assertEqual(saved.json()["dataset_comparison_ready_observations"], 100)
+        self.assertEqual(saved.json()["dataset_comparison_ready_observations"], 0)  # Free-text metadata needs a documented basis.
         observations = saved.json()["observations"]
         self.assertEqual(len({item["source_entity_id"] for item in observations}), 100)
         self.assertEqual(sum(item["entity_resolution_state"] == "source_only" for item in observations), 90)
@@ -605,7 +605,7 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
             "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nExternal Alpha;st-a;Unified;120\nExternal Beta;st-b;Unified;90\n",
             "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
             "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
-            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-09-01", "period_end": "2026-09-30", "granularity": "rolling_period"},
         }
         response = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(response.status_code, 201, response.text)
@@ -623,7 +623,7 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
             "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nSource App;st-app;Unified;120\n",
             "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
             "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
-            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-09-01", "period_end": "2026-09-30", "granularity": "rolling_period"},
         }
         saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(saved.status_code, 201, saved.text)
@@ -647,9 +647,9 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
                     original_csv=csv_content,
                     field_mapping_json={"field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
                         "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
-                        "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"}, "delimiter": ";"},
+                        "explicit_values": {"geo": "Worldwide", "period_start": "2026-09-01", "period_end": "2026-09-30", "granularity": "rolling_period"}, "delimiter": ";"},
                     entity_mappings_json={},
-                    observations_json=[{"metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "value": 450, "unit": "downloads", "entity_id": None, "geo": "Worldwide", "platform": "Unified", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period", "provenance_type": "csv_dataset", "provenance_id": "legacy-recovery", "observation_type": "imported", "validation_reasons": ["No report entity matches 'st-legacy'."]}],
+                    observations_json=[{"metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "value": 450, "unit": "downloads", "entity_id": None, "geo": "Worldwide", "platform": "Unified", "period_start": "2026-09-01", "period_end": "2026-09-30", "granularity": "rolling_period", "provenance_type": "csv_dataset", "provenance_id": "legacy-recovery", "observation_type": "imported", "validation_reasons": ["No report entity matches 'st-legacy'."]}],
                     compatibility_status="partial", validation_reasons_json=[],
                 ))
                 session.commit()

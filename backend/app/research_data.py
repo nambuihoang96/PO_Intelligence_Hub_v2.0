@@ -120,6 +120,8 @@ class QuantitativeObservation(ResearchModel):
     source_reference: str | None = Field(default=None, max_length=2048)
     evidence_reference: str | None = Field(default=None, max_length=2048)
     source_row_number: int | None = Field(default=None, ge=2)
+    metadata_provenance: dict[str, Any] = Field(default_factory=dict)
+    metadata_validation_reasons: list[str] = Field(default_factory=list)
     verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
     provenance_type: Literal["research_report", "csv_dataset"] = "research_report"
     provenance_id: str | None = Field(default=None, max_length=36)
@@ -270,19 +272,19 @@ class QuantitativeObservation(ResearchModel):
             compatibility_prefixes = ("GEO '", "Platform '", "Observation period does not overlap", "Report GEO scope", "Report platform scope")
             source_reasons = list(self.source_validation_reasons) or [
                 reason for reason in reasons
-                if reason not in self.report_compatibility_reasons
+                if reason not in self.report_compatibility_reasons and reason not in self.metadata_validation_reasons
                 and not reason.startswith(compatibility_prefixes)
                 and not (reason == "Entity mapping is not provided." and (self.source_entity_id or self.entity_id))
             ]
             complete = not source_reasons
             object.__setattr__(self, "source_validation_reasons", source_reasons)
             object.__setattr__(self, "analysis_ready", complete)
-            object.__setattr__(self, "dataset_comparison_ready", complete and bool(self.methodology and self.methodology.strip()))
+            object.__setattr__(self, "dataset_comparison_ready", complete and not self.metadata_validation_reasons and bool(self.methodology and self.methodology.strip()))
             object.__setattr__(self, "display_ready", bool(self.metric_id and self.value is not None and (self.source_entity_id or self.entity_id or self.source_entity_name or self.entity_name)))
         else:
             complete = not reasons
         object.__setattr__(self, "complete_observation", complete)
-        object.__setattr__(self, "comparison_ready", complete and self.scope_compatible is True and bool(self.methodology and self.methodology.strip()))
+        object.__setattr__(self, "comparison_ready", complete and not self.metadata_validation_reasons and self.scope_compatible is True and bool(self.methodology and self.methodology.strip()))
         return self
 
 

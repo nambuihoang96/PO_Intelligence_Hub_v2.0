@@ -6,7 +6,7 @@ import { reportApi, type ImportedReport } from './api';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
-  return { ...original, reportApi: { previewQuantitativeDataset: vi.fn(), importQuantitativeDataset: vi.fn() } };
+  return { ...original, reportApi: { previewQuantitativeDataset: vi.fn(), importQuantitativeDataset: vi.fn(), findQuantitativeDataset: vi.fn() } };
 });
 
 const report = {
@@ -44,6 +44,23 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.click(screen.getByText('4. Lưu các quan sát vào báo cáo'));
     await waitFor(() => expect(reportApi.importQuantitativeDataset).toHaveBeenCalledTimes(1));
     expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the saved dataset and offers metadata review when the confirmed import is a duplicate', async () => {
+    vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
+    const saved = { id: 'dataset-existing', report_id: 'report-1', filename: 'existing.csv', content_sha256: 'same-hash', field_mapping: {}, entity_mappings: {}, observations: preview.observations, compatibility_status: 'compatible', validation_reasons: [], created_at: '2026-01-01', duplicate: true } as never;
+    vi.mocked(reportApi.importQuantitativeDataset).mockResolvedValue(saved);
+    const onImported = vi.fn(); const { container } = render(<QuantitativeDatasetImport report={report} onImported={onImported} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
+    const file = new File(['metric,definition,value,unit,entity,geo,platform,start,end,granularity,source\nweekly_downloads,Weekly downloads,10,downloads,App A,US,Android,2026-01-01,2026-01-07,week,https://example.com'], 'existing.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText('existing.csv');
+    fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('4. Lưu các quan sát vào báo cáo'));
+    await screen.findByText('CSV này đã được lưu. Không cần tải lại hoặc sửa file.');
+    expect(onImported).toHaveBeenCalledWith(saved);
+    expect(screen.getByRole('button', { name: 'Review dataset information' })).toBeTruthy();
   });
 
   it('detects semicolon wide CSV and sends only confirmed scope plus selected metrics', async () => {

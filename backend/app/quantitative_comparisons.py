@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.models import ImportedResearchReport, QuantitativeDataset
+from backend.app.dataset_metadata import effective_observations
 from backend.app.schemas import (
     QuantitativeComparisonMetric,
     QuantitativeComparisonPeriod,
@@ -109,6 +110,7 @@ def _observation_warnings(row: dict[str, Any], dataset: QuantitativeDataset) -> 
     if not reasons:
         compatibility = set(row.get("report_compatibility_reasons") or [])
         reasons = [reason for reason in row.get("validation_reasons") or [] if reason not in compatibility]
+    reasons.extend(row.get("metadata_validation_reasons", []))
     if not row.get("provenance_id"):
         reasons.append("Dataset provenance is not attached to this stored observation.")
     if not row.get("methodology") or not str(row.get("methodology")).strip():
@@ -145,13 +147,13 @@ def _observation_usable(row: dict[str, Any], dataset: QuantitativeDataset) -> bo
 
 
 def _dataset_catalog(dataset: QuantitativeDataset, report: ImportedResearchReport) -> QuantitativeDatasetCatalogItem:
-    observations = dataset.observations_json or []
+    observations = effective_observations(dataset, report)
     metrics: dict[str, dict[str, Any]] = {}
     periods: dict[str, dict[str, Any]] = {}
     geos: set[str] = set()
     platforms: set[str] = set()
     apps: set[str] = set()
-    dataset_warnings = list(dataset.validation_reasons_json or [])[:8]
+    dataset_warnings = list(dict.fromkeys(reason for row in observations for reason in row.get("source_validation_reasons", [])))[:8]
     for raw in observations:
         if not isinstance(raw, dict):
             continue
@@ -164,7 +166,7 @@ def _dataset_catalog(dataset: QuantitativeDataset, report: ImportedResearchRepor
         key = _metric_key(row)
         if row.get("metric_id") and row.get("metric_definition"):
             current = metrics.setdefault(key, {
-                "metric_id": row.get("metric_id"), "metric_definition": row.get("metric_definition"),
+                "key": key, "metric_id": row.get("metric_id"), "metric_definition": row.get("metric_definition"),
                 "unit": row.get("unit"), "methodology": row.get("methodology"),
                 "observations": 0, "usable_observations": 0, "warnings": set(),
             })
@@ -237,12 +239,18 @@ def _period_compatibility(left: QuantitativeComparisonPeriod, left_semantics: st
             reasons.append("Both snapshots need explicit source dates.")
         elif left_date >= right_date:
             reasons.append("Baseline snapshot must be earlier than the current snapshot.")
+        if left_date and right_date and max(left_date, right_date) > date.today():
+            reasons.append("A snapshot is in the future; completed observed data cannot be claimed.")
         return not reasons, "snapshot", reasons
     left_start, left_end = _date(left.period_start), _date(left.period_end)
     right_start, right_end = _date(right.period_start), _date(right.period_end)
     if not all((left_start, left_end, right_start, right_end)):
         return False, left_semantics, ["Both datasets need explicit period start and end dates."]
     assert left_start and left_end and right_start and right_end
+    if max(left_end, right_end) > date.today():
+        reasons.append("Reporting window ends in the future; completed observed data cannot be claimed.")
+    if (left_end - left_start).days != (right_end - right_start).days:
+        reasons.append("The measurement windows have unequal lengths; totals are not normalized or compared automatically.")
     if left_end >= right_start:
         reasons.append("Selected measurement windows overlap or the baseline does not come first.")
     left_granularity, right_granularity = _norm(left.granularity), _norm(right.granularity)
@@ -291,6 +299,7 @@ def _source_read(
         filename=dataset.filename, report_id=report.id, report_question=report.question,
         source_row_number=row.get("source_row_number"), source_reference=row.get("source_reference"),
         provenance_id=row.get("provenance_id"), validation_reasons=_observation_warnings(row, dataset),
+        metadata_provenance=row.get("metadata_provenance", {}),
     )
 
 
@@ -399,8 +408,8 @@ def preview_quantitative_comparison(
     })
 
     identity = tuple(_norm(getattr(payload, field)) for field in ("metric_id", "metric_definition", "unit", "methodology"))
-    left_matching = [row for row in baseline.observations_json or [] if isinstance(row, dict) and _metric_tuple(row) == identity]
-    right_matching = [row for row in current.observations_json or [] if isinstance(row, dict) and _metric_tuple(row) == identity]
+    left_matching = [row for row in effective_observations(baseline, baseline_report) if _metric_tuple(row) == identity]
+    right_matching = [row for row in effective_observations(current, current_report) if _metric_tuple(row) == identity]
     if not left_matching or not right_matching:
         raise HTTPException(status_code=422, detail={"code": "METRIC_NOT_SHARED", "message": "This exact metric definition, unit, and methodology is not available in both files."})
     if any(not _revenue_currency_is_identified(row) for row in [*left_matching, *right_matching]):

@@ -1476,7 +1476,7 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   --comparison-surface: #fff;
 }
 
-.period-comparison-page { display: grid; gap: 20px; color: var(--comparison-ink); }
+.period-comparison-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; color: var(--comparison-ink); }
 .comparison-intro-panel, .comparison-import-panel, .comparison-config-panel, .comparison-results {
   background: var(--comparison-surface); border: 1px solid var(--comparison-line); border-radius: 16px; padding: 22px;
 }
@@ -1530,3 +1530,14 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   .comparison-table-tools > span { padding: 0; }
   .comparison-readiness { white-space: normal; }
 }
+.dataset-metadata-review { padding: 24px; margin: 20px 0; border: 1px solid #ccdbe5; border-radius: 12px; background: #fff; min-width: 0; overflow-wrap: anywhere; }
+.dataset-metadata-review header, .metadata-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.dataset-metadata-review label { display: grid; gap: 6px; min-width: 0; margin-bottom: 12px; }
+.metadata-field-grid, .comparison-dataset-information { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; margin: 16px 0; }
+.dataset-metadata-review input, .dataset-metadata-review select, .dataset-metadata-review textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; font: inherit; }
+.dataset-metadata-review .metadata-check { display: flex; align-items: flex-start; gap: 8px; }
+.dataset-metadata-review .metadata-check input { width: auto; margin-top: 4px; }
+.dataset-metadata-review fieldset { min-width: 0; padding: 16px; border: 1px solid #dce5eb; }
+.dataset-metadata-review small { color: #526477; }
+.comparison-dataset-information article { background: #f4f8fb; border-radius: 10px; padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .dataset-metadata-review { padding: 14px; } .metadata-actions button { width: 100%; } }

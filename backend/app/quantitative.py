@@ -173,7 +173,7 @@ def assess_observation_readiness(
     source_identity = observation.source_entity_id or observation.entity_id or observation.source_entity_name or observation.entity_name
     source_reasons = list(observation.source_validation_reasons)
     if not source_reasons:
-        source_reasons = [reason for reason in observation.validation_reasons if reason not in compatibility_reasons and not reason.startswith("Entity does not resolve") and not (reason == "Entity mapping is not provided." and source_identity)]
+        source_reasons = [reason for reason in observation.validation_reasons if reason not in compatibility_reasons and reason not in observation.metadata_validation_reasons and not reason.startswith("Entity does not resolve") and not (reason == "Entity mapping is not provided." and source_identity)]
     # Older stored payloads may still carry the pre-fix missing-granularity
     # diagnostic. Explicit start/end dates define the measured window without
     # implying a weekly/monthly cadence.
@@ -192,7 +192,7 @@ def assess_observation_readiness(
     complete = all(value not in (None, "") for value in required) and period_complete and not source_reasons
     analysis_ready = complete
     report_compatibility = "incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and observation.geo and observation.platform and period_complete else "unknown")
-    dataset_comparison_ready = analysis_ready and bool(observation.methodology and observation.methodology.strip())
+    dataset_comparison_ready = analysis_ready and not observation.metadata_validation_reasons and bool(observation.methodology and observation.methodology.strip())
     comparison_ready = dataset_comparison_ready and report_compatibility == "compatible"
     return observation.model_dump(mode="json") | {
         "scope_compatible": scope_compatible,
