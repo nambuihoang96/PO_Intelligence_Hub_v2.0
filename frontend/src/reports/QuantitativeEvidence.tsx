@@ -58,10 +58,11 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
         <div className="quant-bar-points">{periods.map((period, periodIndex) => {
           const points = view.observations.filter(({ row }) => row.entity_id === entity.id && periodKey(row) === periodKey(period));
           return points.length ? points.map(({ index, row }) => <button type="button" className={`quant-bar-point period-${periodIndex}`} key={index} onClick={() => onViewEvidence(index)} title={row.reported_value_text || undefined} aria-label={`View evidence for ${entity.name}, ${periodLabel(row)}, ${displayValue(row)}, ${precisionLabel(row)}`}>
-            <span className="quant-bar-period">{periodLabel(row)}</span><span className="quant-bar-track"><span style={{ width: `${Math.max(1.5, (Math.max(0, row.value || 0) / max) * 100)}%` }} /></span><strong>{displayValue(row)}</strong><small>{precisionLabel(row)}</small>
+            <span className="quant-bar-period">{periodLabel(row)}</span><span className="quant-bar-track"><span className={row.value === 0 ? 'is-zero' : ''} style={{ width: `${row.value === 0 ? 0 : ((row.value ?? 0) / max) * 100}%` }} /></span><strong>{displayValue(row)}</strong><small>{precisionLabel(row)}</small>
           </button>) : <div className="quant-bar-missing" key={periodKey(period)}><span>{periodLabel(period)}</span><span>No observation</span></div>;
         })}</div>
       </section>)}
+      {view.explanation && <p className="quant-chart-note">{view.explanation}</p>}
       <p className="quant-chart-note">Each bar is a source-reported observation. No intermediate values or growth rates are calculated.</p>
     </div>;
   }
@@ -71,7 +72,7 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
       .sort((a, b) => (a.period_start || '').localeCompare(b.period_start || '') || (a.period_end || '').localeCompare(b.period_end || ''));
     const entities = [...new Map(view.observations.map(({ row }) => [row.entity_id, { id: row.entity_id, name: row.entity_name || row.entity_id || 'Unknown entity' }])).values()]
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return <div className="quant-matrix-scroll" role="region" aria-label="Entity and period comparison" tabIndex={0}>
+    return <>{view.explanation && <p className="quant-chart-note">{view.explanation}</p>}<div className="quant-matrix-scroll" role="region" aria-label="Entity and period comparison" tabIndex={0}>
       <table className="quant-period-matrix">
         <thead><tr><th scope="col">Entity</th>{periods.map((period) => <th scope="col" key={periodKey(period)}>{periodLabel(period)}</th>)}</tr></thead>
         <tbody>{entities.map((entity) => <tr key={entity.id}>
@@ -84,7 +85,7 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
           })}
         </tr>)}</tbody>
       </table>
-    </div>;
+    </div></>;
   }
 
   if (view.kind === 'two_point') {
@@ -93,7 +94,7 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
     if (displayMode === 'table') return <div className="quant-matrix-scroll" role="region" aria-label="Two reported observations" tabIndex={0}><table className="quant-period-matrix"><thead><tr><th scope="col">Period</th><th scope="col">Value</th><th scope="col">Evidence</th></tr></thead><tbody>{ordered.map(({ index, row }) => <tr key={index}><th scope="row">{periodLabel(row)}</th><td>{displayValue(row)}</td><td><button type="button" className="text-button" onClick={() => onViewEvidence(index)}>View evidence</button><small>{precisionLabel(row)}</small></td></tr>)}</tbody></table></div>;
     return <div className="quant-two-point" aria-label="Two reported time points; not a continuous trend">
       {ordered.map(({ index, row }, pointIndex) => <button className={`quant-point-card period-${pointIndex}`} key={index} onClick={() => onViewEvidence(index)} title={row.reported_value_text || undefined}>
-        <span>{periodLabel(row)}</span><span className="quant-two-point-track"><span style={{ width: `${Math.max(1.5, (Math.max(0, row.value || 0) / max) * 100)}%` }} /></span><strong>{displayValue(row)}</strong>
+        <span>{periodLabel(row)}</span><span className="quant-two-point-track"><span className={row.value === 0 ? 'is-zero' : ''} style={{ width: `${row.value === 0 ? 0 : ((row.value ?? 0) / max) * 100}%` }} /></span><strong>{displayValue(row)}</strong>
         <small>{row.entity_name || row.entity_id} · {precisionLabel(row)}</small><u>View evidence</u>
       </button>)}
       <p className="quant-chart-note">Two reported points only; no intermediate values or growth rates are calculated.</p>
@@ -139,7 +140,7 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
   return <div className="quant-comparison" aria-label={`${view.label} entity comparison`}>
     {view.observations.map(({ index, row }) => <button className="quant-comparison-row" key={index} onClick={() => onViewEvidence(index)}>
       <span className="quant-comparison-entity">{row.entity_name || row.entity_id}</span>
-      <span className="quant-comparison-track" aria-hidden="true" style={min < 0 ? { background: `linear-gradient(to right, #d7e1ee 0%, #d7e1ee ${zero}%, #e8eef6 ${zero}%, #e8eef6 100%)` } : undefined}><span style={{ left: `${zero}%`, width: `${Math.max(1, (Math.abs(row.value ?? 0) / range) * 100)}%`, transform: (row.value ?? 0) < 0 ? 'translateX(-100%)' : undefined }} /></span>
+      <span className="quant-comparison-track" aria-hidden="true" style={min < 0 ? { background: `linear-gradient(to right, #d7e1ee 0%, #d7e1ee ${zero}%, #e8eef6 ${zero}%, #e8eef6 100%)` } : undefined}><span className={row.value === 0 ? 'is-zero' : ''} style={{ left: `${zero}%`, width: `${row.value === 0 ? 0 : (Math.abs(row.value ?? 0) / range) * 100}%`, transform: (row.value ?? 0) < 0 ? 'translateX(-100%)' : undefined }} /></span>
       <strong>{displayValue(row)}</strong>
       <small>{scopeOf(row)} · {precisionLabel(row)} · View evidence</small>
     </button>)}
@@ -155,7 +156,7 @@ export function QuantitativeEvidence({ observations, onViewEvidence, onPrepareCh
   const limitations = quantitativeLimitations(rows);
   const metricNames = [...new Set(rows.map((row) => row.metric_definition || row.metric_id).filter(Boolean))];
   return <section className="research-panel quantitative-evidence" aria-labelledby="quantitative-evidence-title">
-    <div className="quantitative-evidence-heading"><div><span className="field-label">REPORT-SUPPLIED · UNVERIFIED</span><h3 id="quantitative-evidence-title">Quantitative evidence</h3><p>{metricNames.join(' · ') || 'Metric details not supplied'}</p></div><span className="quant-source-label">ChatGPT research</span></div>
+    <div className="quantitative-evidence-heading"><div><span className="field-label">SOURCE-REPORTED MEASUREMENTS · UNVERIFIED</span><h3 id="quantitative-evidence-title">Market Data &amp; Charts</h3><p>{metricNames.join(' · ') || 'Metric details not supplied'}</p></div><span className="quant-source-label">ChatGPT research</span></div>
     {views.length > 0 ? <div className="quantitative-views">{views.map((view, index) => { const key = `${view.kind}:${view.label}:${index}`; const displayMode = displayModes[key] || 'chart'; return <article className="quantitative-view" key={key}>
       <div className="quantitative-view-heading"><div><h4>{view.kind === 'comparison' || view.kind === 'grouped_bar' ? 'Entity comparison' : view.kind === 'period_matrix' ? 'Entity and period comparison' : view.kind === 'two_point' ? 'Two reported time points' : view.kind === 'time_series' ? 'Observed time series' : view.kind === 'ranking' ? 'Reported ranking positions' : 'Reported observation'}</h4><p>{view.label}</p></div><div className="quantitative-view-actions"><span>{view.observations.length} observations</span>{(view.kind === 'grouped_bar' || view.kind === 'two_point') && <button type="button" className="text-button" aria-pressed={displayMode === 'table'} onClick={() => setDisplayModes((current) => ({ ...current, [key]: displayMode === 'chart' ? 'table' : 'chart' }))}>{displayMode === 'chart' ? 'View table' : 'View chart'}</button>}</div></div>
       <p className="quant-scope-line">{scopeOf(view.observations[0].row)} · Source-reported · unverified</p>

@@ -1449,6 +1449,10 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
 .quant-point-card.period-1 .quant-two-point-track > span { background: #7658be; }
 .quantitative-no-data > p { margin: 0; color: #596b83; font-size: 13px; }
 .quantitative-no-data > .secondary-action { justify-self: start; }
+.quant-bar-track > span.is-zero, .quant-two-point-track > span.is-zero, .quant-comparison-track > span.is-zero { min-width: 0; }
+.analytics-selection-details { margin-top: 12px; border-top: 1px solid #e3eaf2; padding-top: 10px; }
+.analytics-selection-details > summary { width: fit-content; cursor: pointer; color: #52647a; font-size: 13px; font-weight: 600; }
+.analytics-selection-details[open] > summary { margin-bottom: 12px; }
 @media (max-width: 700px) {
   .quant-bar-entity { grid-template-columns: 1fr; gap: 6px; }
   .quant-bar-point { grid-template-columns: minmax(95px, 1fr) minmax(60px, 1.2fr) minmax(80px, auto); gap: 4px 7px; padding-inline: 4px; }

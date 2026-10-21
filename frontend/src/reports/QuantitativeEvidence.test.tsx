@@ -24,6 +24,7 @@ describe('QuantitativeEvidence', () => {
       observation(), observation({ entity_id: 'game-b', entity_name: 'Game B', value: 850 }), observation({ entity_id: 'game-c', entity_name: 'Game C', value: 740 }),
     ]} onViewEvidence={openEvidence} />);
     expect(screen.getByRole('heading', { name: 'Entity comparison' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Market Data & Charts' })).toBeTruthy();
     expect(screen.getByText('Game A')).toBeTruthy();
     expect(screen.getByText('Game B')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Game A.*View evidence/i }));
@@ -116,6 +117,88 @@ describe('QuantitativeEvidence', () => {
     expect(screen.getByText(/approximately 24,000 weekly downloads/)).toBeTruthy();
   });
 
+  it('renders three entities across two explicit date windows when cadence is not supplied', () => {
+    const rows = ['a', 'b', 'c'].flatMap((entity, index) => [
+      observation({ entity_id: entity, entity_name: `Game ${index + 1}`, granularity: null, period_start: '2025-01-01', period_end: '2025-01-31', value: 100 + index }),
+      observation({ entity_id: entity, entity_name: `Game ${index + 1}`, granularity: null, period_start: '2025-02-01', period_end: '2025-02-28', value: 90 + index }),
+    ]);
+    render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
+    expect(screen.getByRole('heading', { name: 'Entity comparison' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /View evidence for/i })).toHaveLength(6);
+    expect(screen.getAllByText('2025-01-01 – 2025-01-31').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('2025-02-01 – 2025-02-28').length).toBeGreaterThan(1);
+  });
+
+  it('keeps observations with conflicting known/missing cadence separate and explains why', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ entity_id: 'game-a', period_start: '2025-01-01', period_end: '2025-01-31', granularity: 'month' }),
+      observation({ entity_id: 'game-a', period_start: '2025-02-01', period_end: '2025-02-28', granularity: null, value: 900 }),
+      observation({ entity_id: 'game-a', period_start: '2025-03-01', period_end: '2025-03-31', granularity: 'week', value: 800 }),
+    ]} onViewEvidence={() => undefined} />);
+    expect(screen.queryByRole('heading', { name: 'Two reported time points' })).toBeNull();
+    expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(3);
+    fireEvent.click(screen.getByText(/Data limitations/));
+    expect(screen.getByText(/Known granularity is inconsistent or missing/)).toBeTruthy();
+  });
+
+  it('shows overlapping windows as dated observations instead of a connected time series', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ period_start: '2025-01-01', period_end: '2025-01-31', granularity: null }),
+      observation({ period_start: '2025-01-15', period_end: '2025-02-15', granularity: null, value: 800 }),
+      observation({ period_start: '2025-03-01', period_end: '2025-03-31', granularity: null, value: 700 }),
+    ]} onViewEvidence={() => undefined} />);
+    expect(screen.queryByRole('heading', { name: 'Observed time series' })).toBeNull();
+    expect(screen.getByText(/Measurement windows overlap\. These values are shown as separate dated observations/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /View evidence/i })).toHaveLength(3);
+  });
+
+  it('uses a dated table for overlapping windows across multiple entities', () => {
+    const rows = ['game-a', 'game-b'].flatMap((entity, index) => [
+      observation({ entity_id: entity, entity_name: `Game ${index + 1}`, granularity: null, period_start: '2025-01-01', period_end: '2025-01-31', value: 100 + index }),
+      observation({ entity_id: entity, entity_name: `Game ${index + 1}`, granularity: null, period_start: '2025-01-15', period_end: '2025-02-15', value: 90 + index }),
+    ]);
+    render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
+    expect(screen.getByRole('heading', { name: 'Entity and period comparison' })).toBeTruthy();
+    expect(screen.getByText(/Measurement windows overlap\. Exact dates are shown in a table/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /View evidence for/i })).toHaveLength(4);
+  });
+
+  it('uses a dated table when entities do not share the same two date windows', () => {
+    const periods = [
+      [['2025-01-01', '2025-01-31'], ['2025-02-01', '2025-02-28']],
+      [['2025-03-01', '2025-03-31'], ['2025-04-01', '2025-04-30']],
+      [['2025-05-01', '2025-05-31'], ['2025-06-01', '2025-06-30']],
+    ];
+    const rows = periods.flatMap((entityPeriods, index) => entityPeriods.map(([period_start, period_end], periodIndex) =>
+      observation({ entity_id: `game-${index}`, entity_name: `Game ${index + 1}`, period_start, period_end, value: 100 - periodIndex * 10 - index }),
+    ));
+    render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
+    expect(screen.getByRole('heading', { name: 'Entity and period comparison' })).toBeTruthy();
+    expect(screen.getByText(/do not share one compatible pair of period windows/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /View evidence for/i })).toHaveLength(6);
+  });
+
+  it('does not draw a positive-width bar for a true zero', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ entity_id: 'game-a', entity_name: 'Game A', value: 0 }),
+      observation({ entity_id: 'game-b', entity_name: 'Game B', value: 100 }),
+    ]} onViewEvidence={() => undefined} />);
+    const zeroButton = screen.getByRole('button', { name: /Game A.*0 downloads/i });
+    const zeroBar = zeroButton.querySelector('.quant-comparison-track > span');
+    expect(zeroBar?.getAttribute('style')).toContain('width: 0%');
+    expect(zeroBar?.classList.contains('is-zero')).toBe(true);
+  });
+
+  it('keeps negative measurements signed in a table rather than rendering positive bars', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ entity_id: 'game-a', period_start: '2025-01-01', period_end: '2025-01-31', value: -10 }),
+      observation({ entity_id: 'game-a', period_start: '2025-02-01', period_end: '2025-02-28', value: 5 }),
+    ]} onViewEvidence={() => undefined} />);
+    expect(screen.getByText(/Signed values are shown in a table/)).toBeTruthy();
+    expect(screen.getByText('-10 downloads')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Two reported time points' })).toBeNull();
+  });
+
   it('keeps irregular periods categorical and shows missing observations without filling values', () => {
     const rows = [
       observation({ entity_id: 'a', entity_name: 'Game A', period_start: '2025-01-01', period_end: '2025-01-31' }),
@@ -171,6 +254,15 @@ describe('QuantitativeEvidence', () => {
     expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Missing period start.').length).toBeGreaterThan(0);
     expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('does not chart invalid date bounds even when other observation fields are present', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ period_start: 'not-a-date', period_end: '2025-01-31', validation_reasons: ['Invalid period start; use YYYY-MM-DD.'] }),
+    ]} onViewEvidence={() => undefined} />);
+    expect(screen.queryByRole('heading', { name: 'Reported observation' })).toBeNull();
+    expect(screen.getByText('No compatible chart can be shown yet.')).toBeTruthy();
+    expect(screen.getAllByText('Invalid period start; use YYYY-MM-DD.').length).toBeGreaterThan(0);
   });
 
   it('offers the existing ChatGPT structuring workflow for a qualitative-only report', () => {
