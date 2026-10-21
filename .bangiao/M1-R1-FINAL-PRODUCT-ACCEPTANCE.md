@@ -67,13 +67,50 @@ No migration or production database change was made.
 
 Added/covered cases include 100 apps with 90 source-only identities, identical values across different source IDs, true repeated source measurements, scope mismatch, standalone valid data, excluded/needs-review filters, granularity combinations, evidence navigation, 225-item preview paging, provider ID collisions, multi-observation cell selection, and a 225-observation Sensor Tower-style import/refresh/revalidation round trip with raw CSV and report linkage preserved.
 
-The 225-row dataset is a generated representative fixture. It is **not** the owner’s exact CSV.
+The earlier 225-row dataset was a generated representative fixture and was **not** the owner’s exact CSV.
 
 ## Browser UAT and exact owner CSV
 
 **Browser UAT: NOT VERIFIED.** Local browser access was rejected by the browser policy in the prior attempt. This task explicitly forbids trying alternate browser surfaces or bypasses, so I did not retry through another method and captured no screenshots.
 
-**Exact owner CSV files: NOT VERIFIED in this task.** A workspace file scan found no matching exports. I used only isolated representative fixtures and did not read or copy the files from Downloads.
+### Exact owner CSV supplied on 2026-10-21
+
+Read-only source: `C:\Users\Admin\Downloads\Unified Top Apps Downloads YoY Growth test.csv` (5,794 bytes). The original file was not modified.
+
+**Route-level isolated SQLite check: PASS.** The exact file was run through preview, import, persistence, duplicate detection, list/refresh, and revalidation logic using a temporary database that was discarded. The harness explicitly left the source entities unmapped because no actual report was supplied for this isolated check; it did not create product matches or research claims.
+
+Observed source shape:
+
+- Semicolon-delimited; 25 rows and 25 unique `Unified ID` values.
+- All rows say `Platform = Unified`; that value was preserved and never converted to iOS or Android.
+- Nine wide metric columns produced 225 observations.
+- The CSV text passed to the importer was preserved; duplicate import returned the existing dataset and kept the linked dataset count at one; revalidation retained the same content hash and all 225 observations.
+- All observations remained `unverified`.
+
+The file is readable, but it is not ready for analytics as supplied:
+
+- It has no GEO field. Its `Date` column contains only `14/10/2026`; this was not fabricated into start/end period bounds.
+- Sixteen populated values in the three `YoY Growth %` columns are not strict numeric values (examples include `15.048.858`). They were retained as invalid observations rather than repaired by guessing a locale. Other blank percent cells remained missing.
+- Revenue columns do not declare a unit/currency. No unit was inferred.
+- Therefore, with the source exactly as supplied and no extra scope confirmation, **0/225 observations were complete, 0 were analytics-ready, and 0 were comparison-ready**. This is a valid partial import state, not a clean analytics dataset.
+
+Metric value validation from the actual file:
+
+| Metric column | Exact numeric values | Non-numeric values | Blank values |
+| --- | ---: | ---: | ---: |
+| Downloads (Absolute) | 25 | 0 | 0 |
+| Downloads (YoY Growth) | 25 | 0 | 0 |
+| Downloads (YoY Growth %) | 1 | 8 | 16 |
+| Revenue (Absolute) | 25 | 0 | 0 |
+| Revenue (YoY Growth) | 25 | 0 | 0 |
+| Revenue (YoY Growth %) | 6 | 2 | 17 |
+| DAU (Absolute) | 25 | 0 | 0 |
+| DAU (YoY Growth) | 25 | 0 | 0 |
+| DAU (YoY Growth %) | 3 | 6 | 16 |
+
+Imported-content SHA-256: `dfed2e06ef40c23ef95a0558ac337d2487f42d81541510cc80ef0029c7b99b3f`.
+
+**Browser UAT remains NOT VERIFIED.** This check exercised the report route logic and isolated SQLite directly; it did not operate the UI. The previous browser policy restriction remains in effect, so no screenshots or UI-pass claim were added.
 
 ### Owner-run UAT checklist
 
@@ -93,7 +130,7 @@ Expected result: out-of-scope data is clearly marked as valid in its original sc
 ## Remaining risks and acceptance
 
 - **Technical acceptance: PASS.** Regression, identity, readiness, granularity, large-list, chooser, persistence-fixture, TypeScript, build, and diff checks passed.
-- **Product acceptance: PENDING UAT.** The end-to-end browser journey, responsive behavior, and exact owner CSV behavior still require the owner-run checklist above.
+- **Product acceptance: PENDING UAT.** Exact-file backend/import checks now pass, but the end-to-end browser journey, responsive behavior, and actual linking to the intended research report still require UI UAT.
 - No M2/M3 features, CSV analytics, migrations, or master merge were started.
 
 ## Commit
