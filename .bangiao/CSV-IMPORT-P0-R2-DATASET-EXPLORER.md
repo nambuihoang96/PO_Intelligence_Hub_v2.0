@@ -61,5 +61,4 @@ The pre-existing user changes in `scripts/setup.ps1`, `.devcrew/`, and `.test-tm
 ## Commits
 
 - Implementation commit SHA: `2ece4c8` (`feat: add source-aware CSV dataset explorer`).
-- Handoff commit SHA: pending commit.
-- Push status: pending push to `feat/ux-recovery-01-research-results`.
+- Handoff and status update: committed and pushed to `feat/ux-recovery-01-research-results` (the delivery commit SHA is in Git history).
