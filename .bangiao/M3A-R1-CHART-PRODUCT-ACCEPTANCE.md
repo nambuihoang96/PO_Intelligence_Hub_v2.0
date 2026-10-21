@@ -73,6 +73,5 @@ Owner UAT after the local backend is available:
 ## Delivery
 
 - Implementation commit: `a58c2e4`.
-- Handoff commit: pending.
-- Push: pending to `origin/feat/ux-recovery-01-research-results`.
+- The handoff report is committed on the same task branch after the implementation commit.
 - Product decision: **Technical checks pass; hold final product acceptance for browser UAT.**
