@@ -37,7 +37,7 @@ describe('QuantitativeDatasetImport', () => {
     expect(reportApi.previewQuantitativeDataset).not.toHaveBeenCalled();
     expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
-    await screen.findByText(/Kết quả xem thử/);
+    await screen.findByText(/Preview ·/);
     expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1);
     expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
     expect(screen.getByText(/Bước này chưa lưu gì/)).toBeTruthy();
@@ -54,7 +54,7 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
     expect(screen.getByText(/dấu phân cách ;/)).toBeTruthy();
-    expect(screen.getByText(/1 cột chỉ số được nhận diện/)).toBeTruthy();
+    expect(screen.getByText(/1 metric columns recognized/)).toBeTruthy();
     fireEvent.change(screen.getAllByRole('combobox')[2], { target: { value: 'Platform' } });
     fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
     fireEvent.change(screen.getByLabelText('Period start · giá trị xác nhận'), { target: { value: '2026-10-14' } });
@@ -76,7 +76,7 @@ describe('QuantitativeDatasetImport', () => {
     await screen.findByText(file.name);
 
     expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('Unified Name');
-    expect(screen.getByText('Tên ứng dụng: Unified Name · 1 cột chỉ số được nhận diện')).toBeTruthy();
+    expect(screen.getByText('Source name column: Unified Name · 1 metric columns recognized')).toBeTruthy();
     expect(screen.queryByText('Entity name: Unified Name · Name: Unified Name')).toBeNull();
     fireEvent.click(screen.getByText('1 cột chỉ số được chọn'));
     expect(screen.queryByLabelText('Date')).toBeNull();
@@ -95,8 +95,8 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
 
-    expect(screen.getByText(/2 cột chỉ số được nhận diện/)).toBeTruthy();
-    expect(screen.getByText(/Ứng dụng: ID Unified ID · tên Unified Name/)).toBeTruthy();
+    expect(screen.getByText(/2 metric columns recognized/)).toBeTruthy();
+    expect(screen.getByText(/Source identity: ID Unified ID · name Unified Name/)).toBeTruthy();
     const geo = screen.getByRole('combobox', { name: 'GEO' });
     expect([...geo.querySelectorAll('option')].map((option) => option.textContent)).not.toContain('All Title');
     expect(screen.getByRole('button', { name: 'Xác nhận GEO: Worldwide' })).toBeTruthy();
@@ -121,11 +121,14 @@ describe('QuantitativeDatasetImport', () => {
     expect(payload.explicit_values).toEqual({ geo: 'Worldwide', period_start: '2026-09-14', period_end: '2026-10-13' });
   });
 
-  it('keeps three unresolved entity mappings visible, preserves choices, and requires a fresh preview', async () => {
+  it('asks only about genuine ambiguity and keeps unmatched source apps without mapping actions', async () => {
     const unresolvedPreview = {
       ...preview,
       ambiguities: [{ csv_value: 'Twin', row: 2, candidates: ['app-a'] }],
-      unmatched_entities: [{ csv_value: 'Unknown One', csv_name: 'Unknown One', row: 3, candidates: [] }, { csv_value: 'Unknown Two', row: 4, candidates: [] }],
+      unmatched_entities: [],
+      source_apps: 3,
+      matched_entities: 0,
+      source_only_entities: 2,
     };
     vi.mocked(reportApi.previewQuantitativeDataset)
       .mockResolvedValueOnce(unresolvedPreview as never)
@@ -140,24 +143,20 @@ describe('QuantitativeDatasetImport', () => {
     fireEvent.click(screen.getByText('Chọn thêm cột chỉ số'));
     fireEvent.click(screen.getByLabelText('Value'));
     fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
-    await screen.findByText(/Chưa ghép được 3 app/);
-    expect(screen.getByText('Unknown One · ID: Unknown One')).toBeTruthy();
+    await screen.findByText(/1 entity mappings need review/);
+    expect(screen.getByText(/Other CSV apps are retained as source-only entities automatically/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Map entity Twin'), { target: { value: 'app-a' } });
     expect(screen.getByLabelText('Map entity Twin')).toBeTruthy();
-    expect(screen.getByLabelText('Map entity Unknown One')).toBeTruthy();
-    expect(screen.getByLabelText('Map entity Unknown Two')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Map entity Unknown One'), { target: { value: 'app-a' } });
-    fireEvent.change(screen.getByLabelText('Map entity Unknown Two'), { target: { value: '__unmapped__' } });
     expect((screen.getByLabelText('Map entity Twin') as HTMLSelectElement).value).toBe('app-a');
-    expect((screen.getByLabelText('Map entity Unknown One') as HTMLSelectElement).value).toBe('app-a');
-    expect((screen.getByLabelText('Map entity Unknown Two') as HTMLSelectElement).value).toBe('__unmapped__');
+    expect(screen.queryByLabelText('Map entity Unknown One')).toBeNull();
+    expect(screen.queryByLabelText('Map entity Unknown Two')).toBeNull();
     expect(screen.queryByText('4. Lưu các quan sát vào báo cáo')).toBeNull();
-    fireEvent.click(screen.getByText('Xác thực lại mappings'));
+    fireEvent.click(screen.getByText('Revalidate mappings'));
     await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('4. Lưu các quan sát vào báo cáo')).toBeTruthy();
     fireEvent.click(screen.getByText('4. Lưu các quan sát vào báo cáo'));
     await waitFor(() => expect(reportApi.importQuantitativeDataset).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(reportApi.importQuantitativeDataset).mock.calls[0][1].entity_mappings).toEqual({ Twin: 'app-a', 'Unknown One': 'app-a', 'Unknown Two': '__unmapped__' });
+    expect(vi.mocked(reportApi.importQuantitativeDataset).mock.calls[0][1].entity_mappings).toEqual({ Twin: 'app-a' });
   });
 
   it('ignores a validation response after its input has changed', async () => {

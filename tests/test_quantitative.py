@@ -42,7 +42,7 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertTrue(all(item["complete_observation"] for item in rows))
         self.assertEqual(rows[0]["period_start"], "2026-10-14")
 
-    def test_sensor_tower_unmapped_entity_is_retained_as_incomplete(self):
+    def test_sensor_tower_source_only_entity_is_complete_and_keeps_source_identity(self):
         rows, _, unresolved, _ = parse_csv_observations(
             "Unified ID;Downloads (Absolute)\nid-unknown;12\n", report_id="report", report_geo="Worldwide", report_platform="Unified", report_period=None,
             entities=[], field_mapping={"entity_id": "Unified ID"}, entity_mappings={"id-unknown": "__unmapped__"},
@@ -52,8 +52,10 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(unresolved, [])
         self.assertIsNone(rows[0]["entity_id"])
-        self.assertFalse(rows[0]["complete_observation"])
-        self.assertIn("intentionally left unmapped", " ".join(rows[0]["validation_reasons"]))
+        self.assertTrue(rows[0]["complete_observation"])
+        self.assertTrue(rows[0]["analysis_ready"])
+        self.assertEqual(rows[0]["entity_resolution_state"], "source_only")
+        self.assertEqual(rows[0]["source_entity_id"], "sensor_tower:id-unknown")
 
     def test_sensor_tower_entity_id_and_display_name_auto_match_without_mapping(self):
         rows, _, unresolved, _ = parse_csv_observations(
@@ -100,9 +102,11 @@ class QuantitativeObservationTest(unittest.TestCase):
             field_mapping={"entity_id": "Unified ID", "entity_name": "Unified Name"}, entity_mappings={},
             metric_mappings=[{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
         )
-        self.assertEqual([item["csv_value"] for item in unresolved], ["export-a", "export-b"])
-        self.assertEqual([item["csv_name"] for item in unresolved], ["App A", "App B"])
+        self.assertEqual(unresolved, [])
         self.assertEqual(len(rows), 2)
+        self.assertEqual([item["entity_resolution_state"] for item in rows], ["source_only", "source_only"])
+        self.assertEqual([item["source_entity_name"] for item in rows], ["App A", "App B"])
+        self.assertEqual([item["source_entity_id"] for item in rows], ["sensor_tower:export-a", "sensor_tower:export-b"])
         self.assertFalse(any("duplicate observation" in reason.casefold() for reason in reasons))
 
     def test_csv_rejects_semantically_wrong_geo_mapping(self):
@@ -444,6 +448,102 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(len(saved.json()["metric_mappings"]), 2)
         self.assertEqual(len(saved.json()["observations"]), 2)
 
+    def test_hundred_csv_apps_keep_ten_report_matches_and_ninety_source_only(self):
+        report_id = self.create_report("100 app source identity")
+        report = self.client.get(f"/api/v1/reports/{report_id}").json()
+        data = report["research_data"]
+        data["entities"] = [{"key": f"app-{index}", "entity_type": "app", "name": f"Game {index}"} for index in range(10)]
+        self.assertEqual(self.client.put(f"/api/v1/reports/{report_id}/structured-data", json={"research_data": data}).status_code, 200)
+        csv_rows = ["Unified Name;Unified ID;Platform;Downloads (Absolute)"]
+        csv_rows.extend(f"Game {i};st-{i};Android;{1000-i}" for i in range(100))
+        body = {
+            "filename": "sensor-tower-100.csv", "csv_content": "\n".join(csv_rows),
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            "explicit_values": {"geo": "US", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
+        }
+        preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        value = preview.json()
+        self.assertEqual(value["source_apps"], 100)
+        self.assertEqual(value["matched_entities"], 10)
+        self.assertEqual(value["source_only_entities"], 90)
+        self.assertEqual(value["dataset_analysis_ready_observations"], 100)
+        self.assertEqual(value["ambiguities"], [])
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        observations = saved.json()["observations"]
+        self.assertEqual(len({item["source_entity_id"] for item in observations}), 100)
+        self.assertEqual(sum(item["entity_resolution_state"] == "source_only" for item in observations), 90)
+
+    def test_unmatched_dataset_imports_without_any_report_matches(self):
+        report_id = self.create_report("No matching report apps")
+        body = {
+            "filename": "no-report-matches.csv",
+            "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nExternal Alpha;st-a;Unified;120\nExternal Beta;st-b;Unified;90\n",
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
+        }
+        response = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(response.status_code, 201, response.text)
+        dataset = response.json()
+        self.assertEqual(dataset["source_apps"], 2)
+        self.assertEqual(dataset["analysis_ready_observations"], 2)
+        self.assertEqual(dataset["report_compatible_observations"], 0)
+        self.assertTrue(all(item["entity_id"] is None and item["entity_resolution_state"] == "source_only" for item in dataset["observations"]))
+        self.assertTrue(all(item["complete_observation"] for item in dataset["observations"]))
+
+    def test_scope_mismatch_does_not_make_source_measurement_invalid(self):
+        report_id = self.create_report("US Android report scope")
+        body = {
+            "filename": "worldwide-unified.csv",
+            "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nSource App;st-app;Unified;120\n",
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
+        }
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        observation = saved.json()["observations"][0]
+        self.assertTrue(observation["complete_observation"], observation)
+        self.assertTrue(observation["analysis_ready"])
+        self.assertFalse(observation["comparison_ready"])
+        self.assertEqual(observation["report_compatibility"], "incompatible")
+        self.assertIn("Worldwide", observation["geo"])
+        self.assertEqual(observation["platform"], "Unified")
+
+    def test_revalidate_legacy_dataset_from_original_csv_preserves_dataset_identity(self):
+        report_id = self.create_report("Legacy dataset recovery")
+        csv_content = "Unified Name;Unified ID;Platform;Downloads (Absolute)\nSource Only;st-legacy;Unified;450\n"
+        digest = __import__("hashlib").sha256(csv_content.encode("utf-8-sig")).hexdigest()
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                session.add(QuantitativeDataset(
+                    id="legacy-recovery", report_id=report_id, filename="legacy.csv", content_sha256=digest,
+                    original_csv=csv_content,
+                    field_mapping_json={"field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+                        "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+                        "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"}, "delimiter": ";"},
+                    entity_mappings_json={},
+                    observations_json=[{"metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "value": 450, "unit": "downloads", "entity_id": None, "geo": "Worldwide", "platform": "Unified", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period", "provenance_type": "csv_dataset", "provenance_id": "legacy-recovery", "observation_type": "imported", "validation_reasons": ["No report entity matches 'st-legacy'."]}],
+                    compatibility_status="partial", validation_reasons_json=[],
+                ))
+                session.commit()
+        finally:
+            engine.dispose()
+        response = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/legacy-recovery/revalidate")
+        self.assertEqual(response.status_code, 200, response.text)
+        value = response.json()
+        self.assertEqual(value["id"], "legacy-recovery")
+        self.assertEqual(value["observations"][0]["source_entity_id"], "sensor_tower:st-legacy")
+        self.assertEqual(value["observations"][0]["entity_resolution_state"], "source_only")
+        self.assertTrue(value["observations"][0]["complete_observation"], value["observations"][0])
+        self.assertEqual(value["content_sha256"], digest)
+        listed = self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets").json()["items"]
+        self.assertEqual(len(listed), 1)
+
     def test_sensor_style_csv_mapping_validation_import_refresh_and_raw_persistence(self):
         report_id = self.create_report("Sensor Tower intake")
         report = self.client.get(f"/api/v1/reports/{report_id}").json()
@@ -470,15 +570,18 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(first_preview.status_code, 200, first_preview.text)
         self.assertEqual(first_preview.json()["total_rows"], 6)
         self.assertEqual(len(first_preview.json()["ambiguities"]), 1)
-        self.assertEqual({item["csv_value"] for item in first_preview.json()["unmatched_entities"]}, {"Unknown One", "Unknown Two"})
-        body["entity_mappings"] = {"Twin": "product-a", "Unknown One": "product-b", "Unknown Two": "__unmapped__"}
+        self.assertEqual(first_preview.json()["unmatched_entities"], [])
+        self.assertEqual(first_preview.json()["source_only_entities"], 2)
+        body["entity_mappings"] = {"Twin": "product-a"}
         resolved_preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
         self.assertEqual(resolved_preview.status_code, 200, resolved_preview.text)
         self.assertEqual(resolved_preview.json()["ambiguities"], [])
         self.assertEqual(resolved_preview.json()["unmatched_entities"], [])
+        self.assertEqual(resolved_preview.json()["source_only_entities"], 2)
         observations = resolved_preview.json()["observations"]
         self.assertTrue(any("non-numeric value 'bad-number'" in " ".join(item["validation_reasons"]) for item in observations))
         self.assertTrue(all(item["scope_compatible"] is False for item in observations), "Unified must not be inferred as Android for this Android report")
+        self.assertTrue(all(item["complete_observation"] for item in observations if item["value"] is not None and item["unit"] is not None), "Report mismatch must not invalidate otherwise complete source data")
         saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(saved.status_code, 201, saved.text)
         self.assertEqual(len(saved.json()["observations"]), 6)

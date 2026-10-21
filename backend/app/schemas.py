@@ -651,6 +651,13 @@ class QuantitativeDatasetRead(APIModel):
     scope_compatible_observations: int = 0
     comparison_ready_observations: int = 0
     comparison_readiness: Literal["no_complete_observations", "needs_compatible_pair"] = "no_complete_observations"
+    source_rows: int = 0
+    source_apps: int = 0
+    recognized_metrics: int = 0
+    display_ready_observations: int = 0
+    analysis_ready_observations: int = 0
+    report_compatible_observations: int = 0
+    incomplete_observations: int = 0
 
 
 class QuantitativeDatasetPreview(APIModel):
@@ -664,6 +671,11 @@ class QuantitativeDatasetPreview(APIModel):
     scope_compatible_observations: int
     comparison_ready_observations: int
     duplicate_rows: int = 0
+    source_apps: int = 0
+    source_only_entities: int = 0
+    matched_entities: int = 0
+    dataset_analysis_ready_observations: int = 0
+    report_compatible_observations: int = 0
 
 
 class QuantitativeDatasetPage(APIModel):

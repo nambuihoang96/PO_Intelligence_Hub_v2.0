@@ -103,6 +103,10 @@ class QuantitativeObservation(ResearchModel):
     unit: str | None = Field(default=None, max_length=80)
     entity_id: str | None = Field(default=None, max_length=160)
     entity_name: str | None = Field(default=None, max_length=500)
+    source_entity_id: str | None = Field(default=None, max_length=240)
+    source_entity_name: str | None = Field(default=None, max_length=500)
+    source_provider: str | None = Field(default=None, max_length=120)
+    entity_resolution_state: Literal["matched", "source_only", "ambiguous", "conflict"] | None = None
     geo: str | None = Field(default=None, max_length=100)
     platform: str | None = Field(default=None, max_length=100)
     period_start: str | None = Field(default=None, max_length=10)
@@ -116,9 +120,15 @@ class QuantitativeObservation(ResearchModel):
     provenance_id: str | None = Field(default=None, max_length=36)
     observation_type: Literal["reported", "imported", "calculated"] = "reported"
     validation_reasons: list[str] = Field(default_factory=list, max_length=40)
+    source_validation_reasons: list[str] = Field(default_factory=list, max_length=40)
+    report_compatibility_reasons: list[str] = Field(default_factory=list, max_length=40)
+    report_compatibility: Literal["compatible", "incompatible", "unknown"] = "unknown"
     scope_compatible: bool | None = None
     import_status: Literal["preview", "imported", "reported"] = "reported"
     complete_observation: bool = False
+    display_ready: bool = False
+    analysis_ready: bool = False
+    dataset_comparison_ready: bool = False
     comparison_ready: bool = False
 
     @field_validator("source_reference")
@@ -206,10 +216,24 @@ class QuantitativeObservation(ResearchModel):
                         reasons.append("Period start is after period end.")
             except ValueError:
                 pass
-        if self.entity_id is None and "Entity mapping is not provided." not in reasons:
+        if self.entity_id is None and self.source_entity_id is None and "Entity mapping is not provided." not in reasons:
             reasons.append("Entity mapping is not provided.")
         object.__setattr__(self, "validation_reasons", reasons)
-        complete = not reasons
+        if self.observation_type == "imported":
+            compatibility_prefixes = ("GEO '", "Platform '", "Observation period does not overlap", "Report GEO scope", "Report platform scope")
+            source_reasons = list(self.source_validation_reasons) or [
+                reason for reason in reasons
+                if reason not in self.report_compatibility_reasons
+                and not reason.startswith(compatibility_prefixes)
+                and not (reason == "Entity mapping is not provided." and (self.source_entity_id or self.entity_id))
+            ]
+            complete = not source_reasons
+            object.__setattr__(self, "source_validation_reasons", source_reasons)
+            object.__setattr__(self, "analysis_ready", complete)
+            object.__setattr__(self, "dataset_comparison_ready", complete and bool(self.methodology and self.methodology.strip()))
+            object.__setattr__(self, "display_ready", bool(self.metric_id and self.value is not None and (self.source_entity_id or self.entity_id or self.source_entity_name or self.entity_name)))
+        else:
+            complete = not reasons
         object.__setattr__(self, "complete_observation", complete)
         object.__setattr__(self, "comparison_ready", complete and self.scope_compatible is True and bool(self.methodology and self.methodology.strip()))
         return self

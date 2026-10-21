@@ -1,6 +1,7 @@
 import hashlib
 import json
 import csv
+import io
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -195,10 +196,19 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         delimiter = ","
     observations = [assess_observation_readiness(item, report_geo=report.geo, report_platform=report.os) for item in (dataset.observations_json or [])]
     complete_count = sum(bool(item.get("complete_observation")) for item in observations)
+    display_count = sum(bool(item.get("display_ready")) for item in observations)
+    analysis_count = sum(bool(item.get("analysis_ready")) for item in observations)
     scope_count = sum(item.get("scope_compatible") is True for item in observations)
+    report_compatible_count = sum(item.get("report_compatibility") == "compatible" for item in observations)
     comparison_count = sum(bool(item.get("comparison_ready")) for item in observations)
-    incompatible_count = sum(item.get("scope_compatible") is False for item in observations)
-    compatibility = "compatible" if observations and all(item.get("complete_observation") and item.get("scope_compatible") is True for item in observations) else ("incompatible" if observations and incompatible_count == len(observations) else "partial")
+    incompatible_count = sum(item.get("report_compatibility") == "incompatible" for item in observations)
+    compatibility = "compatible" if observations and all(item.get("report_compatibility") == "compatible" for item in observations) else ("incompatible" if observations and incompatible_count == len(observations) else "partial")
+    source_entities = {item.get("source_entity_id") or item.get("entity_id") for item in observations if item.get("source_entity_id") or item.get("entity_id")}
+    metric_identities = {item.get("metric_id") for item in observations if item.get("metric_id")}
+    try:
+        source_rows = max(0, sum(1 for _ in csv.reader(io.StringIO(dataset.original_csv, newline=""), delimiter=detect_csv_delimiter(dataset.original_csv))) - 1)
+    except (ValueError, csv.Error):
+        source_rows = 0
     validation_reasons = list(dict.fromkeys([*(dataset.validation_reasons_json or []), *(reason for item in observations for reason in item.get("validation_reasons", []))]))
     return QuantitativeDatasetRead.model_validate({
         "id": dataset.id,
@@ -219,6 +229,13 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         "scope_compatible_observations": scope_count,
         "comparison_ready_observations": comparison_count,
         "comparison_readiness": "needs_compatible_pair" if comparison_count else "no_complete_observations",
+        "source_rows": source_rows,
+        "source_apps": len(source_entities),
+        "recognized_metrics": len(metric_identities),
+        "display_ready_observations": display_count,
+        "analysis_ready_observations": analysis_count,
+        "report_compatible_observations": report_compatible_count,
+        "incomplete_observations": max(0, len(observations) - complete_count),
     })
 
 
@@ -254,6 +271,11 @@ def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatase
         scope_compatible_observations=scoped,
         comparison_ready_observations=comparison,
         duplicate_rows=sum("Duplicate observation of CSV row" in reason for item in observations for reason in item.get("validation_reasons", [])),
+        source_apps=len({item.get("source_entity_id") or item.get("entity_id") for item in observations if item.get("source_entity_id") or item.get("entity_id")}),
+        source_only_entities=len({item.get("source_entity_id") for item in observations if item.get("entity_resolution_state") == "source_only" and item.get("source_entity_id")}),
+        matched_entities=len({item.get("source_entity_id") for item in observations if item.get("entity_resolution_state") == "matched" and item.get("source_entity_id")}),
+        dataset_analysis_ready_observations=sum(bool(item.get("analysis_ready")) for item in observations),
+        report_compatible_observations=sum(item.get("report_compatibility") == "compatible" for item in observations),
     )
 
 
@@ -333,6 +355,67 @@ def import_quantitative_dataset(
             raise
         response.status_code = status.HTTP_200_OK
         return _dataset_read(existing, report=report, duplicate=True)
+    session.refresh(dataset)
+    return _dataset_read(dataset, report=report)
+
+
+@router.post("/{report_id}/quantitative-datasets/{dataset_id}/revalidate", response_model=QuantitativeDatasetRead)
+def revalidate_quantitative_dataset(
+    report_id: str,
+    dataset_id: str,
+    session: SessionDependency,
+) -> QuantitativeDatasetRead:
+    """Rebuild one saved dataset deterministically from its preserved CSV and mappings."""
+    report = session.get(ImportedResearchReport, report_id)
+    dataset = session.get(QuantitativeDataset, dataset_id)
+    if report is None or dataset is None or dataset.report_id != report_id:
+        raise HTTPException(status_code=404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
+    saved = dataset.field_mapping_json or {}
+    if not dataset.original_csv or not saved:
+        raise HTTPException(status_code=409, detail={
+            "code": "DATASET_CANNOT_BE_REVALIDATED",
+            "message": "The saved dataset does not contain enough original CSV and column mapping information to rebuild it safely. Existing observations were not changed.",
+        })
+    if "field_mapping" in saved:
+        field_mapping = saved.get("field_mapping") or {}
+        metric_mappings = saved.get("metric_mappings") or []
+        explicit_values = saved.get("explicit_values") or {}
+    else:
+        field_mapping, metric_mappings, explicit_values = saved, [], {}
+    try:
+        payload = QuantitativeDatasetImport.model_validate({
+            "filename": dataset.filename,
+            "csv_content": dataset.original_csv,
+            "field_mapping": field_mapping,
+            "entity_mappings": dataset.entity_mappings_json or {},
+            "metric_mappings": metric_mappings,
+            "explicit_values": explicit_values,
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail={
+            "code": "DATASET_MAPPING_NOT_RECOVERABLE",
+            "message": f"Saved mapping metadata is incomplete or invalid ({exc}). Existing observations were not changed.",
+        }) from exc
+    preview = _preview_dataset(report, payload)
+    if preview.ambiguities:
+        raise HTTPException(status_code=409, detail={
+            "code": "DATASET_REVALIDATION_NEEDS_MAPPING",
+            "message": "The saved CSV has ambiguous matches. Existing observations were not changed; review the mappings in a new import preview.",
+            "entity_mappings_required": preview.ambiguities,
+        })
+    observations = [item.model_dump(mode="json") for item in preview.observations]
+    for item in observations:
+        item["provenance_id"] = dataset.id
+        item["import_status"] = "imported"
+    dataset.observations_json = observations
+    dataset.entity_mappings_json = payload.entity_mappings
+    dataset.compatibility_status = preview.compatibility_status
+    dataset.validation_reasons_json = preview.validation_reasons
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     session.refresh(dataset)
     return _dataset_read(dataset, report=report)
 

@@ -29,6 +29,10 @@ export type QuantitativeObservation = {
   unit: string | null;
   entity_id: string | null;
   entity_name?: string | null;
+  source_entity_id?: string | null;
+  source_entity_name?: string | null;
+  source_provider?: string | null;
+  entity_resolution_state?: 'matched' | 'source_only' | 'ambiguous' | 'conflict' | null;
   geo: string | null;
   platform: string | null;
   period_start: string | null;
@@ -42,9 +46,15 @@ export type QuantitativeObservation = {
   provenance_id: string | null;
   observation_type: 'reported' | 'imported' | 'calculated';
   validation_reasons: string[];
+  source_validation_reasons?: string[];
+  report_compatibility_reasons?: string[];
+  report_compatibility?: 'compatible' | 'incompatible' | 'unknown';
   scope_compatible?: boolean | null;
   import_status?: 'preview' | 'imported' | 'reported';
   complete_observation?: boolean;
+  display_ready?: boolean;
+  analysis_ready?: boolean;
+  dataset_comparison_ready?: boolean;
   comparison_ready?: boolean;
 };
 export type QuantitativeDataset = {
@@ -54,6 +64,8 @@ export type QuantitativeDataset = {
   validation_reasons: string[]; created_at: string; duplicate: boolean;
   imported_successfully?: boolean; complete_observations?: number; scope_compatible_observations?: number;
   comparison_ready_observations?: number; comparison_readiness?: 'no_complete_observations' | 'needs_compatible_pair';
+  source_rows?: number; source_apps?: number; recognized_metrics?: number; display_ready_observations?: number;
+  analysis_ready_observations?: number; report_compatible_observations?: number; incomplete_observations?: number;
 };
 export type QuantitativeDatasetPage = { items: QuantitativeDataset[]; next_cursor: string | null; limit: number };
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
@@ -68,6 +80,8 @@ export type QuantitativeDatasetPreview = {
   observations: QuantitativeObservation[]; validation_reasons: string[]; ambiguities: { csv_value: string; csv_name?: string | null; row: number; candidates: string[] }[]; unmatched_entities?: { csv_value: string; csv_name?: string | null; row: number; candidates: string[] }[];
   compatibility_status: 'compatible' | 'partial' | 'incompatible'; total_rows: number; complete_observations: number;
   scope_compatible_observations: number; comparison_ready_observations: number; duplicate_rows: number;
+  source_apps?: number; source_only_entities?: number; matched_entities?: number;
+  dataset_analysis_ready_observations?: number; report_compatible_observations?: number;
 };
 
 function readableValidationErrors(errors: unknown): string[] {
@@ -143,4 +157,5 @@ export const reportApi = {
   listQuantitativeDatasets: (id: string, cursor?: string) => request<QuantitativeDatasetPage>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
   previewQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDatasetPreview>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets/preview`, { method: 'POST', body: JSON.stringify(input) }),
   importQuantitativeDataset: (id: string, input: QuantitativeDatasetInput) => request<QuantitativeDataset>(`/api/v1/reports/${encodeURIComponent(id)}/quantitative-datasets`, { method: 'POST', body: JSON.stringify(input) }),
+  revalidateQuantitativeDataset: (reportId: string, datasetId: string) => request<QuantitativeDataset>(`/api/v1/reports/${encodeURIComponent(reportId)}/quantitative-datasets/${encodeURIComponent(datasetId)}/revalidate`, { method: 'POST' }),
 };

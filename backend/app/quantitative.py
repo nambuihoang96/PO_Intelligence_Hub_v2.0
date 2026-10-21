@@ -166,11 +166,29 @@ def assess_observation_readiness(
                 scope_compatible = None
         elif not _scope_compatible(supplied, report_scope, dimension):
             scope_compatible = False
-    complete = not observation.validation_reasons
-    comparison_ready = complete and scope_compatible is True and bool(observation.methodology and observation.methodology.strip())
+    compatibility_reasons = list(observation.report_compatibility_reasons)
+    if not compatibility_reasons:
+        compatibility_reasons = [reason for reason in observation.validation_reasons if reason.startswith(("GEO '", "Platform '", "Observation period does not overlap", "Report GEO scope", "Report platform scope"))]
+    source_identity = observation.source_entity_id or observation.entity_id or observation.source_entity_name or observation.entity_name
+    source_reasons = list(observation.source_validation_reasons)
+    if not source_reasons:
+        source_reasons = [reason for reason in observation.validation_reasons if reason not in compatibility_reasons and not reason.startswith("Entity does not resolve") and not (reason == "Entity mapping is not provided." and source_identity)]
+    display_ready = bool(observation.metric_id and observation.value is not None and source_identity)
+    required = (observation.metric_id, observation.metric_definition, observation.value, observation.unit, source_identity,
+                observation.geo, observation.platform, observation.period_start, observation.period_end, observation.granularity)
+    complete = all(value not in (None, "") for value in required) and not source_reasons
+    analysis_ready = complete
+    report_compatibility = "incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and observation.geo and observation.platform and observation.period_start and observation.period_end else "unknown")
+    comparison_ready = analysis_ready and bool(observation.methodology and observation.methodology.strip()) and report_compatibility == "compatible"
     return observation.model_dump(mode="json") | {
         "scope_compatible": scope_compatible,
         "complete_observation": complete,
+        "source_validation_reasons": source_reasons,
+        "report_compatibility_reasons": compatibility_reasons,
+        "report_compatibility": report_compatibility,
+        "display_ready": display_ready,
+        "analysis_ready": analysis_ready,
+        "dataset_comparison_ready": analysis_ready,
         "comparison_ready": comparison_ready,
         "import_status": "imported" if observation.observation_type == "imported" else "reported",
     }
@@ -342,6 +360,7 @@ def parse_csv_observations(
         raw_entity_name = raw.get("entity_name") or None
         raw_entity = raw_entity_id or raw_entity_name
         entity_id = None
+        entity_resolution_state = "source_only"
         entity_reasons: list[str] = []
         if raw_entity:
             id_candidates = names.get(_entity_match_key(raw_entity_id), []) if raw_entity_id else []
@@ -350,28 +369,39 @@ def parse_csv_observations(
             if raw_entity in entity_mappings:
                 mapped_key = entity_mappings[raw_entity]
                 if mapped_key == "__unmapped__":
-                    entity_reasons.append("Entity intentionally left unmapped by the user.")
+                    entity_resolution_state = "source_only"
                 elif mapped_key not in entity_by_key:
                     raise ValueError(f"Entity mapping for '{raw_entity}' refers to unknown report entity '{mapped_key}'.")
                 else:
                     entity_id = mapped_key
+                    entity_resolution_state = "matched"
             else:
                 if id_candidates and name_candidates and not set(id_candidates).intersection(name_candidates):
                     conflict_candidates = list(dict.fromkeys([*id_candidates, *name_candidates]))
                     ambiguities.append({"csv_value": raw_entity_id, "csv_name": raw_entity_name, "row": row_number, "candidates": conflict_candidates})
+                    entity_resolution_state = "conflict"
                     entity_reasons.append("Entity mapping needs user confirmation.")
                 elif len(resolved_candidates) == 1:
                     entity_id = resolved_candidates[0]
+                    entity_resolution_state = "matched"
                 elif len(resolved_candidates) > 1:
                     ambiguities.append({"csv_value": raw_entity_id or raw_entity_name or raw_entity, "csv_name": raw_entity_name, "row": row_number, "candidates": resolved_candidates})
+                    entity_resolution_state = "ambiguous"
                     entity_reasons.append("Entity mapping needs user confirmation.")
                 elif raw_entity in entity_by_key:
                     entity_id = raw_entity
+                    entity_resolution_state = "matched"
                 else:
-                    unmatched_entities.append({"csv_value": raw_entity_id or raw_entity, "csv_name": raw_entity_name, "row": row_number, "candidates": []})
-                    entity_reasons.append(f"No report entity matches '{raw_entity}'.")
+                    entity_resolution_state = "source_only"
         else:
             entity_reasons.append("Entity mapping is not provided.")
+
+        provider = "sensor_tower" if any("unified" in header.casefold() for header in reader.fieldnames) else "csv"
+        id_header = field_mapping.get("entity_id", "")
+        source_id_value = raw_entity_id if id_header and re.search(r"\bid\b", id_header, re.IGNORECASE) and not re.search(r"\bname\b", id_header, re.IGNORECASE) else None
+        source_name_value = raw_entity_name or (raw_entity if not source_id_value else None)
+        source_id_value = source_id_value or ("name-" + hashlib.sha256(_entity_match_key(source_name_value or raw_entity or "").encode("utf-8")).hexdigest()[:24] if source_name_value or raw_entity else None)
+        namespaced_source_id = f"{provider}:{source_id_value}" if source_id_value else None
 
         period_start = raw.get("period_start") or None
         period_end = raw.get("period_end") or None
@@ -380,13 +410,14 @@ def parse_csv_observations(
             period_start = start_date.isoformat()
         if end_date and period_end:
             period_end = end_date.isoformat()
-        dimension_reasons: list[str] = []
+        source_dimension_reasons: list[str] = []
+        compatibility_reasons: list[str] = []
         if period_start and start_date is None:
-            dimension_reasons.append(f"CSV row {row_number} has an invalid period_start; use YYYY-MM-DD or an unambiguous day-first date.")
+            source_dimension_reasons.append(f"CSV row {row_number} has an invalid period_start; use YYYY-MM-DD or an unambiguous day-first date.")
         if period_end and end_date is None:
-            dimension_reasons.append(f"CSV row {row_number} has an invalid period_end; use YYYY-MM-DD or an unambiguous day-first date.")
+            source_dimension_reasons.append(f"CSV row {row_number} has an invalid period_end; use YYYY-MM-DD or an unambiguous day-first date.")
         if start_date and end_date and start_date > end_date:
-            dimension_reasons.append(f"CSV row {row_number} period_start is after period_end.")
+            source_dimension_reasons.append(f"CSV row {row_number} period_start is after period_end.")
 
         geo = raw.get("geo") or None
         platform = raw.get("platform") or None
@@ -394,18 +425,18 @@ def parse_csv_observations(
         if source_reference:
             parsed_source = urlsplit(source_reference)
             if parsed_source.scheme.casefold() not in {"http", "https"} or not parsed_source.hostname or parsed_source.username or parsed_source.password:
-                dimension_reasons.append(f"CSV row {row_number} source must be an HTTP(S) URL without credentials.")
+                source_dimension_reasons.append(f"CSV row {row_number} source must be an HTTP(S) URL without credentials.")
                 source_reference = None
         if geo and report_geo.strip().casefold() in {"unknown", "not applicable", "n/a"}:
-            dimension_reasons.append(f"Report GEO scope '{report_geo}' is unspecified.")
+            compatibility_reasons.append(f"Report GEO scope '{report_geo}' is unspecified.")
         elif geo and not _scope_compatible(geo, report_geo, "geo"):
-            dimension_reasons.append(f"GEO '{geo}' differs from report scope '{report_geo}'.")
+            compatibility_reasons.append(f"GEO '{geo}' differs from report scope '{report_geo}'.")
         if platform and report_platform.strip().casefold() in {"unknown", "not applicable", "n/a"}:
-            dimension_reasons.append(f"Report platform scope '{report_platform}' is unspecified.")
+            compatibility_reasons.append(f"Report platform scope '{report_platform}' is unspecified.")
         elif platform and not _scope_compatible(platform, report_platform, "platform"):
-            dimension_reasons.append(f"Platform '{platform}' differs from report scope '{report_platform}'.")
+            compatibility_reasons.append(f"Platform '{platform}' differs from report scope '{report_platform}'.")
         if years and start_date and end_date and (end_date.year < years[0] or start_date.year > years[1]):
-            dimension_reasons.append("Observation period does not overlap the report period.")
+            compatibility_reasons.append("Observation period does not overlap the report period.")
 
         scope_compatible: bool | None = True
         for supplied, report_scope, dimension in ((geo, report_geo, "GEO"), (platform, report_platform, "platform")):
@@ -429,7 +460,7 @@ def parse_csv_observations(
                 "value": raw.get("value"),
             }]
         for measure in measures:
-            row_reasons = [*entity_reasons, *dimension_reasons]
+            row_reasons = [*entity_reasons, *source_dimension_reasons]
             value: float | None = None
             numeric_text = str(measure.get("value") or "").strip()
             if numeric_text:
@@ -451,6 +482,10 @@ def parse_csv_observations(
                 unit=normalize_unit(str(measure.get("unit") or raw.get("unit") or "")),
                 entity_id=entity_id,
                 entity_name=str(entity_by_key[entity_id].get("name")) if entity_id in entity_by_key and entity_by_key[entity_id].get("name") else None,
+                source_entity_id=namespaced_source_id,
+                source_entity_name=source_name_value or (str(entity_by_key[entity_id].get("name")) if entity_id in entity_by_key else None),
+                source_provider=provider,
+                entity_resolution_state=entity_resolution_state,
                 geo=geo,
                 platform=platform,
                 period_start=period_start,
@@ -463,6 +498,9 @@ def parse_csv_observations(
                 provenance_id=report_id,
                 observation_type="imported",
                 validation_reasons=row_reasons,
+                source_validation_reasons=row_reasons,
+                report_compatibility_reasons=compatibility_reasons,
+                report_compatibility="incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and geo and platform and period_start and period_end else "unknown"),
                 scope_compatible=scope_compatible,
                 import_status="imported",
             )
@@ -472,22 +510,45 @@ def parse_csv_observations(
             percentage_metric = "%" in metric_header or bool(re.search(r"\bpercent(?:age)?\b|\bpct\b", metric_header, re.IGNORECASE)) or metric_id.endswith("_percent")
             expected_unit = "%" if percentage_metric else ("downloads" if re.search(r"\bdownloads\b", metric_header, re.IGNORECASE) and re.search(r"\byoy\b|\babsolute\b", metric_header, re.IGNORECASE) else None)
             if expected_unit and unit != expected_unit:
+                unit_reason = f"CSV row {row_number} metric '{metric_header}' requires unit '{expected_unit}'. Check the metric unit before importing."
                 observation = observation.model_copy(update={
-                    "validation_reasons": [*observation.validation_reasons, f"CSV row {row_number} metric '{metric_header}' requires unit '{expected_unit}'. Check the metric unit before importing."],
-                    "complete_observation": False,
-                    "comparison_ready": False,
+                    "validation_reasons": [*observation.validation_reasons, unit_reason],
+                    "source_validation_reasons": [*observation.source_validation_reasons, unit_reason],
                 })
+            source_reasons = list(observation.source_validation_reasons)
+            missing = {
+                "metric_id": observation.metric_id,
+                "metric definition": observation.metric_definition,
+                "unit": observation.unit,
+                "source entity identity": observation.source_entity_id,
+                "GEO": observation.geo,
+                "platform": observation.platform,
+                "period start": observation.period_start,
+                "period end": observation.period_end,
+                "granularity": observation.granularity,
+            }
+            for label, supplied in missing.items():
+                if supplied in (None, ""):
+                    source_reasons.append(f"CSV row {row_number} is missing {label}.")
+            display_ready = bool(observation.metric_id and observation.value is not None and observation.source_entity_id)
+            complete = not source_reasons and observation.value is not None
+            observation = observation.model_copy(update={
+                "validation_reasons": list(dict.fromkeys([*observation.validation_reasons, *source_reasons, *compatibility_reasons])),
+                "source_validation_reasons": list(dict.fromkeys(source_reasons)),
+                "complete_observation": complete,
+                "display_ready": display_ready,
+                "analysis_ready": complete,
+                "dataset_comparison_ready": complete and bool(observation.methodology and observation.methodology.strip()),
+                "comparison_ready": complete and bool(observation.methodology and observation.methodology.strip()) and scope_compatible is True,
+            })
             identity = tuple(str(getattr(observation, field) or "").strip().casefold() for field in (
-                "metric_id", "metric_definition", "unit", "entity_id", "geo", "platform",
+                "metric_id", "metric_definition", "unit", "source_entity_id", "geo", "platform",
                 "period_start", "period_end", "granularity", "methodology", "value",
             ))
-            if not entity_id:
-                raw_entity_identity = _entity_match_key(raw_entity_id or raw_entity_name or "")
-                identity = (*identity[:3], f"unresolved:{raw_entity_identity or row_number}", *identity[4:])
             if identity in seen_observations:
                 duplicate_rows += 1
                 duplicate_reason = f"Duplicate observation of CSV row {seen_observations[identity]}."
-                observation = observation.model_copy(update={"validation_reasons": [*observation.validation_reasons, duplicate_reason], "complete_observation": False, "comparison_ready": False})
+                observation = observation.model_copy(update={"validation_reasons": [*observation.validation_reasons, duplicate_reason], "source_validation_reasons": [*observation.source_validation_reasons, duplicate_reason], "complete_observation": False, "analysis_ready": False, "dataset_comparison_ready": False, "comparison_ready": False})
             else:
                 seen_observations[identity] = row_number
             rows.append(observation.model_dump(mode="json"))
@@ -498,7 +559,7 @@ def parse_csv_observations(
     unique_reasons = list(dict.fromkeys(reasons))
     compatible_count = sum(item.get("scope_compatible") is True for item in rows)
     incompatible_count = sum(item.get("scope_compatible") is False for item in rows)
-    status = "compatible" if all(item.get("complete_observation") and item.get("scope_compatible") is True for item in rows) and not ambiguities else ("incompatible" if incompatible_count == len(rows) else "partial")
+    status = "compatible" if all(item.get("complete_observation") and item.get("report_compatibility") == "compatible" for item in rows) and not ambiguities else ("incompatible" if rows and incompatible_count == len(rows) else "partial")
     if duplicate_rows:
         unique_reasons.append(f"{duplicate_rows} duplicate observation row(s) need review.")
     mapping_requests = list({
