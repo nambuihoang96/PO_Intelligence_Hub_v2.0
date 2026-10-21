@@ -101,4 +101,4 @@ PO UAT checklist on a disposable local SQLite database:
 
 ## Commit
 
-Commit SHA will be recorded after the task commit is created.
+Implementation commit: `162e303b35c9d7838ac0617d26b3f2b38aa891ea`.
