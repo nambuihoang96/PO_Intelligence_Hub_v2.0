@@ -36,7 +36,7 @@ The pre-existing user changes in `scripts/setup.ps1`, `.devcrew/`, and `.test-tm
 
 ## Verification
 
-- Backend quantitative API and readiness suite: **40 passed**. It exercised Alembic migrations against isolated temporary SQLite databases.
+- Backend quantitative API and readiness suite: **42 passed**. This includes explicit date bounds without invented cadence and the case where both granularity and date bounds are absent. Alembic migrations ran against isolated temporary SQLite databases.
 - Backend report API regression suite: **31 passed**, also using isolated temporary SQLite databases.
 - Frontend suite: **10 files, 91 tests passed**.
 - TypeScript check and production Vite build: **passed** (`npm run build`).
@@ -49,16 +49,20 @@ The pre-existing user changes in `scripts/setup.ps1`, `.devcrew/`, and `.test-tm
 - Confirmed the explorer retained all 100 source identities, presented the invalid measurement as `Unknown`, kept `Unified` intact, filtered by source ID, opened a measurement's evidence/provenance, revalidated the stored CSV while retaining the dataset ID/report link, and retained the dataset after browser refresh.
 - At 390px, the document width stayed within the viewport (`scrollWidth` 375px, viewport 390px); the dataset table used contained horizontal scrolling. Main navigation, breadcrumb, and report tabs also scroll horizontally at mobile width.
 - A real browser screenshot of the mobile view was captured and displayed during this task. The in-app browser capture interface exposed it as an image result but did not provide a path/export operation to write the PNG into the repository. Therefore screenshot files under `.bangiao/screenshots/csv-import-p0-r2/` are **NOT VERIFIED / NOT COMMITTED**.
-- The browser UAT seeded the linked dataset through the local API. File selection and upload through the browser's CSV chooser were **NOT VERIFIED**. Frontend import interactions are covered by component tests.
-- The browser fixture was synthetic and isolated; the owner's two supplied Sensor Tower exports were inspected for headers and sample rows, but were not uploaded in this UAT.
+- The initial synthetic browser UAT seeded the linked dataset through the local API; that pass did not exercise the file chooser. Frontend import interactions are covered by component tests.
+- During follow-up review, the owner's October Sensor Tower file was selected in the browser and its preview confirmed semicolon parsing, 25 app rows, nine metric columns, `Unified` platform retention, and explicit Worldwide/date-range confirmation. That preview came from the pre-fix backend and marked the observations incomplete solely because no standalone granularity label was provided. The readiness fix now accepts explicit start/end bounds without guessing a granularity; the isolated API regression verifies this behavior. The owner file was not confirmed/imported after this fix, so end-to-end persistence for that file is **NOT VERIFIED**.
+- The browser tab at `127.0.0.1:15173` later showed the owner's separate local app with its backend unavailable. I did not restart or alter that process. Fresh post-fix browser UAT is therefore **NOT VERIFIED**.
+- A real browser screenshot of the synthetic mobile view was captured and displayed during the earlier UAT, but the in-app browser capture interface provided no image export path. No screenshot file was committed. Repository screenshot artifacts are **NOT VERIFIED / NOT COMMITTED**.
 
 ## Limitations
 
 - Multi-period observations that share an app/metric cell are surfaced as ambiguous rather than combined. The explorer does not aggregate incompatible periods or scopes.
-- The current UAT did not exercise the upload chooser with the two owner-provided exports and repository screenshot artifacts could not be saved through the available browser capture interface.
+- The owner's actual CSV preview was exercised, but its post-fix confirmation, persistence, refresh, and reopen flow remain unverified. Repository screenshot artifacts could not be saved through the available browser capture interface.
 - `Unified` platform is intentionally treated as its own scope; comparisons that require a native mobile OS remain incompatible until explicitly mapped with valid evidence.
 
 ## Commits
 
 - Implementation commit SHA: `2ece4c8` (`feat: add source-aware CSV dataset explorer`).
-- Handoff and status update: committed and pushed to `feat/ux-recovery-01-research-results` (the delivery commit SHA is in Git history).
+- Readiness correction commit SHA: `feb8b019ca0c2474ae699defb78f0004112d4db5` (`fix: accept explicit quantitative period bounds`).
+- Explicit period bounds satisfy observation completeness without inventing cadence. Comparison readiness still requires explicit methodology and compatible scope.
+- This handoff was updated with the follow-up test and owner-file preview results after `feb8b01`.
