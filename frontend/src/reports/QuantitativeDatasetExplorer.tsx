@@ -16,9 +16,10 @@ function scopeKey(item: QuantitativeObservation): string {
   return `${item.geo || 'GEO unknown'}|${item.platform || 'Platform unknown'}|${item.period_start || '?'}|${item.period_end || '?'}`;
 }
 
-export function QuantitativeDatasetExplorer({ dataset, onRevalidated }: {
+export function QuantitativeDatasetExplorer({ dataset, onRevalidated, reportScope }: {
   dataset: QuantitativeDataset;
   onRevalidated: (dataset: QuantitativeDataset) => void;
+  reportScope?: { geo?: string | null; platform?: string | null };
 }) {
   const [query, setQuery] = useState('');
   const [geo, setGeo] = useState('all');
@@ -65,6 +66,8 @@ export function QuantitativeDatasetExplorer({ dataset, onRevalidated }: {
   const distinctSources = new Set(allObservations.map((item) => item.source_entity_id || item.entity_id).filter(Boolean)).size;
   const sourceRows = dataset.source_rows ?? allObservations.length;
   const reportIncompatible = dataset.compatibility_status === 'incompatible';
+  const datasetGeos = [...new Set(allObservations.map((item) => item.geo).filter(Boolean))].join(', ') || 'unknown GEO';
+  const datasetPlatforms = [...new Set(allObservations.map((item) => item.platform).filter(Boolean))].join(', ') || 'unknown platform';
 
   async function revalidate() {
     setBusy(true); setFailure(''); setFeedback('');
@@ -97,10 +100,11 @@ export function QuantitativeDatasetExplorer({ dataset, onRevalidated }: {
       <div><strong>{dataset.recognized_metrics ?? metricNames.length}</strong><span>Metrics</span></div>
       <div><strong>{dataset.analysis_ready_observations ?? dataset.complete_observations ?? 0}</strong><span>Source-valid observations</span></div>
       <div><strong>{dataset.report_compatible_observations ?? dataset.scope_compatible_observations ?? 0}</strong><span>Report-compatible</span></div>
+      <div><strong>{dataset.dataset_comparison_ready_observations ?? 0}</strong><span>Comparison candidates · need compatible peers</span></div>
       <div><strong>{dataset.incomplete_observations ?? Math.max(0, allObservations.length - (dataset.complete_observations ?? 0))}</strong><span>Incomplete</span></div>
     </div>
     <div className={`dataset-compatibility ${reportIncompatible ? 'is-incompatible' : ''}`} role="status">
-      {reportIncompatible ? 'Dataset is valid for its own scope, but incompatible with this report. No GEO or platform conversion is applied.' : dataset.compatibility_status === 'compatible' ? 'Dataset scope is compatible with this report.' : 'Report compatibility is partial; inspect the scope details before comparing.'}
+      {reportIncompatible ? `CSV data remains available for ${datasetGeos} / ${datasetPlatforms} analysis. It cannot be used directly as ${reportScope?.geo || 'the report GEO'} / ${reportScope?.platform || 'the report platform'} measurements. No scope conversion is applied.` : dataset.compatibility_status === 'compatible' ? 'Dataset scope is compatible with this report.' : 'Some observations have incomplete or report-incompatible scope; each measurement remains available with its original details.'}
       <span>{[...new Set(allObservations.flatMap((item) => item.report_compatibility_reasons ?? []))].slice(0, 3).join(' ')}</span>
     </div>
     <div className="dataset-explorer-controls">

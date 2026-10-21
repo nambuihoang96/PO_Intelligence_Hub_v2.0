@@ -200,7 +200,9 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
     analysis_count = sum(bool(item.get("analysis_ready")) for item in observations)
     scope_count = sum(item.get("scope_compatible") is True for item in observations)
     report_compatible_count = sum(item.get("report_compatibility") == "compatible" for item in observations)
-    comparison_count = sum(bool(item.get("comparison_ready")) for item in observations)
+    # This is an observation-level dataset comparison candidate count. Actual
+    # compatible groups are formed from peer observations in Analytics.
+    comparison_count = sum(bool(item.get("dataset_comparison_ready")) for item in observations)
     incompatible_count = sum(item.get("report_compatibility") == "incompatible" for item in observations)
     compatibility = "compatible" if observations and all(item.get("report_compatibility") == "compatible" for item in observations) else ("incompatible" if observations and incompatible_count == len(observations) else "partial")
     source_entities = {item.get("source_entity_id") or item.get("entity_id") for item in observations if item.get("source_entity_id") or item.get("entity_id")}
@@ -234,6 +236,7 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         "recognized_metrics": len(metric_identities),
         "display_ready_observations": display_count,
         "analysis_ready_observations": analysis_count,
+        "dataset_comparison_ready_observations": comparison_count,
         "report_compatible_observations": report_compatible_count,
         "incomplete_observations": max(0, len(observations) - complete_count),
     })
@@ -259,7 +262,7 @@ def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatase
         item["import_status"] = "preview"
     complete = sum(bool(item.get("complete_observation")) for item in observations)
     scoped = sum(item.get("scope_compatible") is True for item in observations)
-    comparison = sum(bool(item.get("comparison_ready")) for item in observations)
+    comparison = sum(bool(item.get("dataset_comparison_ready")) for item in observations)
     return QuantitativeDatasetPreview(
         observations=observations,
         validation_reasons=reasons,
@@ -275,6 +278,7 @@ def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatase
         source_only_entities=len({item.get("source_entity_id") for item in observations if item.get("entity_resolution_state") == "source_only" and item.get("source_entity_id")}),
         matched_entities=len({item.get("source_entity_id") for item in observations if item.get("entity_resolution_state") == "matched" and item.get("source_entity_id")}),
         dataset_analysis_ready_observations=sum(bool(item.get("analysis_ready")) for item in observations),
+        dataset_comparison_ready_observations=sum(bool(item.get("dataset_comparison_ready")) for item in observations),
         report_compatible_observations=sum(item.get("report_compatibility") == "compatible" for item in observations),
     )
 

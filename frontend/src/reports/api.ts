@@ -65,7 +65,8 @@ export type QuantitativeDataset = {
   imported_successfully?: boolean; complete_observations?: number; scope_compatible_observations?: number;
   comparison_ready_observations?: number; comparison_readiness?: 'no_complete_observations' | 'needs_compatible_pair';
   source_rows?: number; source_apps?: number; recognized_metrics?: number; display_ready_observations?: number;
-  analysis_ready_observations?: number; report_compatible_observations?: number; incomplete_observations?: number;
+  analysis_ready_observations?: number; dataset_comparison_ready_observations?: number;
+  report_compatible_observations?: number; incomplete_observations?: number;
 };
 export type QuantitativeDatasetPage = { items: QuantitativeDataset[]; next_cursor: string | null; limit: number };
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
@@ -81,7 +82,8 @@ export type QuantitativeDatasetPreview = {
   compatibility_status: 'compatible' | 'partial' | 'incompatible'; total_rows: number; complete_observations: number;
   scope_compatible_observations: number; comparison_ready_observations: number; duplicate_rows: number;
   source_apps?: number; source_only_entities?: number; matched_entities?: number;
-  dataset_analysis_ready_observations?: number; report_compatible_observations?: number;
+  dataset_analysis_ready_observations?: number; dataset_comparison_ready_observations?: number;
+  report_compatible_observations?: number;
 };
 
 function readableValidationErrors(errors: unknown): string[] {

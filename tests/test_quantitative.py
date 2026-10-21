@@ -14,11 +14,34 @@ from sqlalchemy.orm import Session
 from backend.app.db import create_database_engine, get_database_path
 from backend.app.main import create_app
 from backend.app.models import ImportedResearchReport, QuantitativeDataset
-from backend.app.quantitative import calculate_change, compatible_for_comparison, normalize_metric_id, normalize_unit, parse_csv_observations
+from backend.app.quantitative import assess_observation_readiness, calculate_change, compatible_for_comparison, normalize_metric_id, normalize_unit, parse_csv_observations
 from backend.app.research_data import QuantitativeObservation, UniversalResearchData
 
 
 class QuantitativeObservationTest(unittest.TestCase):
+    def test_readiness_separates_csv_analysis_from_report_scope_and_keeps_explicit_dates(self):
+        observation = assess_observation_readiness({
+            "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)",
+            "value": 1200, "unit": "downloads", "entity_id": None,
+            "source_entity_id": "sensor_tower:source-app-1", "source_entity_name": "Source App",
+            "source_provider": "sensor_tower", "entity_resolution_state": "source_only",
+            "geo": "Worldwide", "platform": "Unified", "period_start": "2026-10-14",
+            "period_end": "2026-11-13", "granularity": None,
+            "methodology": "Sensor Tower estimate", "source_reference": None,
+            "verification_status": "unverified", "provenance_type": "csv_dataset",
+            "provenance_id": "dataset-1", "observation_type": "imported",
+            "validation_reasons": ["Missing period granularity."],
+            "source_validation_reasons": ["Missing period granularity."],
+            "report_compatibility_reasons": ["GEO 'Worldwide' differs from report scope 'US'.", "Platform 'Unified' differs from report scope 'Android'."],
+        }, report_geo="US", report_platform="Android")
+        self.assertTrue(observation["display_ready"])
+        self.assertTrue(observation["analysis_ready"])
+        self.assertTrue(observation["dataset_comparison_ready"])
+        self.assertFalse(observation["comparison_ready"])
+        self.assertFalse(observation["scope_compatible"])
+        self.assertIsNone(observation["granularity"])
+        self.assertEqual(observation["source_validation_reasons"], [])
+
     def test_sensor_tower_semicolon_wide_export_and_blank_padding(self):
         content = (
             "Unified Name;Unified ID;Platform;Downloads (Absolute);Downloads (YoY Growth)\n"
@@ -492,7 +515,7 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         body = {
             "filename": "sensor-tower-100.csv", "csv_content": "\n".join(csv_rows),
             "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
-            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
+            "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower source estimate"}],
             "explicit_values": {"geo": "US", "period_start": "2026-10-01", "period_end": "2026-10-30", "granularity": "rolling_period"},
         }
         preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
@@ -502,9 +525,11 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(value["matched_entities"], 10)
         self.assertEqual(value["source_only_entities"], 90)
         self.assertEqual(value["dataset_analysis_ready_observations"], 100)
+        self.assertEqual(value["dataset_comparison_ready_observations"], 100)
         self.assertEqual(value["ambiguities"], [])
         saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(saved.status_code, 201, saved.text)
+        self.assertEqual(saved.json()["dataset_comparison_ready_observations"], 100)
         observations = saved.json()["observations"]
         self.assertEqual(len({item["source_entity_id"] for item in observations}), 100)
         self.assertEqual(sum(item["entity_resolution_state"] == "source_only" for item in observations), 90)

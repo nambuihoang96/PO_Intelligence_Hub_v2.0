@@ -1138,7 +1138,7 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .analytics-filter select:focus-visible, .analytics-selection button:focus-visible, .analytics-selection a:focus-visible { outline: 3px solid #9fc5fc; outline-offset: 2px; }
 .analytics-reset { justify-self: start; min-height: 38px; }
 .analytics-reset:disabled { opacity: .5; cursor: default; }
-.analytics-readiness { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.analytics-readiness { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 8px; }
 .analytics-readiness > div { display: grid; gap: 4px; min-width: 0; padding: 10px 11px; border-radius: 9px; background: #f4f7fb; }
 .analytics-readiness strong { color: #193654; font-size: 19px; font-variant-numeric: tabular-nums; }
 .analytics-readiness span { color: #65758a; font-size: 11px; line-height: 1.3; }

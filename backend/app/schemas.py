@@ -656,6 +656,7 @@ class QuantitativeDatasetRead(APIModel):
     recognized_metrics: int = 0
     display_ready_observations: int = 0
     analysis_ready_observations: int = 0
+    dataset_comparison_ready_observations: int = 0
     report_compatible_observations: int = 0
     incomplete_observations: int = 0
 
@@ -675,6 +676,7 @@ class QuantitativeDatasetPreview(APIModel):
     source_only_entities: int = 0
     matched_entities: int = 0
     dataset_analysis_ready_observations: int = 0
+    dataset_comparison_ready_observations: int = 0
     report_compatible_observations: int = 0
 
 

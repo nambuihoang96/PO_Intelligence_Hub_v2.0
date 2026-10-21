@@ -69,4 +69,19 @@ describe('AnalyticsDataSelection', () => {
     fireEvent.click(within(cards[1] as HTMLElement).getByText(/Why excluded/));
     expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
   });
+
+  it('lets a PO select a source-only CSV app and inspect its source evidence', () => {
+    const openEvidence = vi.fn();
+    const sourceOnly = observation({
+      entity_id: null, entity_name: null, source_entity_id: 'sensor_tower:source-3',
+      source_entity_name: 'Source-only App 3', source_provider: 'sensor_tower',
+      entity_resolution_state: 'source_only', observation_type: 'imported',
+      provenance_type: 'csv_dataset', provenance_id: 'csv-1',
+    });
+    render(<AnalyticsDataSelection reportId="report-1" observations={[]} datasets={[csvDataset([sourceOnly])]} onViewEvidence={openEvidence} onImportCsv={() => undefined} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Entity' }), { target: { value: 'source:sensor_tower:source-3' } });
+    expect(screen.getAllByText('Source-only App 3')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
+    expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ source: 'csv_dataset', sourceId: 'csv-1', index: 0 }));
+  });
 });

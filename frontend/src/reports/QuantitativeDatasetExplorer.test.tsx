@@ -33,14 +33,17 @@ const dataset = {
   compatibility_status: 'incompatible', validation_reasons: [], created_at: '2026-01-01', duplicate: false,
   source_rows: 2, source_apps: 2, recognized_metrics: 2, display_ready_observations: 3,
   analysis_ready_observations: 3, report_compatible_observations: 0, incomplete_observations: 0,
+  dataset_comparison_ready_observations: 2,
 } as unknown as QuantitativeDataset;
 
 describe('QuantitativeDatasetExplorer', () => {
   afterEach(() => cleanup());
 
   it('explores source-only apps, searches IDs, sorts metrics, and exposes observation provenance', () => {
-    render(<QuantitativeDatasetExplorer dataset={dataset} onRevalidated={vi.fn()} />);
-    expect(screen.getByText('Dataset is valid for its own scope, but incompatible with this report. No GEO or platform conversion is applied.')).toBeTruthy();
+    render(<QuantitativeDatasetExplorer dataset={dataset} reportScope={{ geo: 'US', platform: 'Android' }} onRevalidated={vi.fn()} />);
+    expect(screen.getByText(/CSV data remains available for Worldwide \/ Unified analysis\. It cannot be used directly as US \/ Android measurements\./)).toBeTruthy();
+    const comparisonCandidates = screen.getByText('Comparison candidates · need compatible peers');
+    expect(comparisonCandidates.previousElementSibling?.textContent).toBe('2');
     expect(screen.getByText('Game One')).toBeTruthy();
     expect(screen.getByText('Game Two')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Search app or source ID'), { target: { value: 'st-2' } });
@@ -55,7 +58,7 @@ describe('QuantitativeDatasetExplorer', () => {
   it('revalidates the saved dataset explicitly without changing its dataset identity', async () => {
     vi.mocked(reportApi.revalidateQuantitativeDataset).mockResolvedValue(dataset);
     const onRevalidated = vi.fn();
-    render(<QuantitativeDatasetExplorer dataset={dataset} onRevalidated={onRevalidated} />);
+    render(<QuantitativeDatasetExplorer dataset={dataset} reportScope={{ geo: 'US', platform: 'Android' }} onRevalidated={onRevalidated} />);
     fireEvent.click(screen.getByRole('button', { name: 'Revalidate dataset' }));
     expect(await screen.findByText(/Dataset đã được kiểm tra lại từ CSV gốc/)).toBeTruthy();
     expect(reportApi.revalidateQuantitativeDataset).toHaveBeenCalledWith('report-1', 'dataset-1');

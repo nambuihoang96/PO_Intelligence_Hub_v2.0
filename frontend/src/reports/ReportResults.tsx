@@ -500,7 +500,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const visibleMapFindings = mapFocusedFinding
     ? data.findings.filter((finding) => finding.key === mapFocusedFinding)
     : mapExpanded ? data.findings : data.findings.slice(0, 3);
-  const quantitativeState = selectQuantitativeState(data.quantitative_observations ?? [], quantitativeDatasets);
+  const quantitativeState = selectQuantitativeState(data.quantitative_observations ?? [], quantitativeDatasets, { geo: report.geo, platform: report.os });
 
   function viewQuantitativeEvidence(record: AnalyticsRecord) {
     if (record.source === 'research_report') {
@@ -522,7 +522,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     </header>
     <section className="quantitative-foundation" aria-label="Data Sources"><div className="quant-data-heading"><strong>Data Sources</strong><span className={`quant-state quant-state-${quantitativeState.state}`}>{quantitativeStateLabels[quantitativeState.state]}</span></div>
       {(data.quantitative_observations ?? []).some((row) => row.observation_type === 'reported') && <p className="quant-data-summary">{data.quantitative_observations!.filter((row) => row.observation_type === 'reported').length} report-supplied observation(s) · unverified. <button className="text-button" onClick={() => setTab('overview')}>View quantitative evidence</button></p>}
-      {quantitativeDatasets.map((dataset) => <QuantitativeDatasetExplorer key={dataset.id} dataset={dataset} onRevalidated={(updated) => setQuantitativeDatasets((current) => current.map((item) => item.id === updated.id ? updated : item))} />)}
+      {quantitativeDatasets.map((dataset) => <QuantitativeDatasetExplorer key={dataset.id} dataset={dataset} reportScope={{ geo: report.geo, platform: report.os }} onRevalidated={(updated) => setQuantitativeDatasets((current) => current.map((item) => item.id === updated.id ? updated : item))} />)}
       {quantitativeState.reasons.length > 0 && <details><summary>Readiness reasons</summary><ul>{quantitativeState.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></details>}
       <QuantitativeDatasetImport report={report} onImported={(dataset) => setQuantitativeDatasets((current) => [dataset, ...current.filter((item) => item.id !== dataset.id)])} />
     </section>

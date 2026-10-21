@@ -173,13 +173,19 @@ def assess_observation_readiness(
     source_reasons = list(observation.source_validation_reasons)
     if not source_reasons:
         source_reasons = [reason for reason in observation.validation_reasons if reason not in compatibility_reasons and not reason.startswith("Entity does not resolve") and not (reason == "Entity mapping is not provided." and source_identity)]
+    # Older stored payloads may still carry the pre-fix missing-granularity
+    # diagnostic. Explicit start/end dates define the measured window without
+    # implying a weekly/monthly cadence.
+    if observation.period_start and observation.period_end:
+        source_reasons = [reason for reason in source_reasons if reason != "Missing period granularity."]
     display_ready = bool(observation.metric_id and observation.value is not None and source_identity)
     required = (observation.metric_id, observation.metric_definition, observation.value, observation.unit, source_identity,
                 observation.geo, observation.platform, observation.period_start, observation.period_end)
     complete = all(value not in (None, "") for value in required) and not source_reasons
     analysis_ready = complete
     report_compatibility = "incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and observation.geo and observation.platform and observation.period_start and observation.period_end else "unknown")
-    comparison_ready = analysis_ready and bool(observation.methodology and observation.methodology.strip()) and report_compatibility == "compatible"
+    dataset_comparison_ready = analysis_ready and bool(observation.methodology and observation.methodology.strip())
+    comparison_ready = dataset_comparison_ready and report_compatibility == "compatible"
     return observation.model_dump(mode="json") | {
         "scope_compatible": scope_compatible,
         "complete_observation": complete,
@@ -188,7 +194,7 @@ def assess_observation_readiness(
         "report_compatibility": report_compatibility,
         "display_ready": display_ready,
         "analysis_ready": analysis_ready,
-        "dataset_comparison_ready": analysis_ready,
+        "dataset_comparison_ready": dataset_comparison_ready,
         "comparison_ready": comparison_ready,
         "import_status": "imported" if observation.observation_type == "imported" else "reported",
     }

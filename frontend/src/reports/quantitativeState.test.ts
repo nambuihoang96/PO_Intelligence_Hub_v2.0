@@ -21,7 +21,17 @@ describe('selectQuantitativeState', () => {
   it('identifies report-linked CSV datasets', () => expect(selectQuantitativeState([], [dataset]).state).toBe('csv_linked'));
   it('identifies compatible mixed coverage', () => expect(selectQuantitativeState([observation('reported')], [dataset]).state).toBe('mixed_compatible'));
   it('surfaces partial or incompatible coverage without hiding reasons', () => {
-    const partial = { ...dataset, compatibility_status: 'partial' as const, validation_reasons: ['Missing unit.'] };
+    const partial = { ...dataset, compatibility_status: 'partial' as const, validation_reasons: ['Missing unit.'], observations: [{ ...observation('imported'), source_validation_reasons: ['Missing unit.'], analysis_ready: false }] };
     expect(selectQuantitativeState([], [partial])).toMatchObject({ state: 'partial_or_incompatible', reasons: ['Missing unit.'] });
+  });
+  it('keeps valid CSV scope usable while clearly separating it from report scope', () => {
+    const worldwide = {
+      ...observation('imported'), geo: 'Worldwide', platform: 'Unified', analysis_ready: true,
+      source_validation_reasons: [], report_compatibility_reasons: ['GEO differs from report.', 'Platform differs from report.'],
+      report_compatibility: 'incompatible' as const, scope_compatible: false,
+    };
+    const result = selectQuantitativeState([], [{ ...dataset, observations: [worldwide], compatibility_status: 'incompatible' }], { geo: 'US', platform: 'Android' });
+    expect(result.state).toBe('report_scope_mismatch');
+    expect(result.reasons.some((reason) => reason.includes('Worldwide / Unified analysis') && reason.includes('US / Android measurements'))).toBe(true);
   });
 });

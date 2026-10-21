@@ -53,7 +53,7 @@ describe('report-scoped analytics selection contract', () => {
   it('keeps the readable report entity name when linked CSV rows contain only IDs', () => {
     const imported = row({ observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1', entity_name: null });
     const selection = buildAnalyticsSelection('report-1', [row()], [dataset([imported])]);
-    expect(selection.availableDimensions.entities).toContainEqual({ key: 'app-a', label: 'App A' });
+    expect(selection.availableDimensions.entities).toContainEqual({ key: 'report:app-a', label: 'App A' });
   });
 
   it('retains every entity and period in compatible groups without filling missing observations', () => {
@@ -107,17 +107,75 @@ describe('report-scoped analytics selection contract', () => {
   it('keeps missing values and incomplete observations visible with exclusion reasons', () => {
     const selection = buildAnalyticsSelection('report-1', [row({ value: null, complete_observation: false, comparison_ready: false, validation_reasons: ['Missing exact numeric value.'] })]);
     expect(selection.selectedObservations).toHaveLength(1);
-    expect(selection.readinessSummary.complete).toBe(0);
+    expect(selection.readinessSummary.incomplete).toBe(1);
     expect(selection.excludedObservations[0].reasons).toContain('Missing exact numeric value.');
     expect(selection.chartEligibility.eligible).toBe(false);
   });
 
-  it('flags duplicate observations across linked sources instead of counting them as ready', () => {
-    const csvDuplicate = row({ observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1' });
-    const selection = buildAnalyticsSelection('report-1', [row()], [dataset([csvDuplicate])]);
+  it('does not treat a report entity and a distinct CSV provider identity as a duplicate', () => {
+    const csvObservation = row({ observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1', source_entity_id: 'sensor_tower:st-88', source_entity_name: 'App A', source_provider: 'sensor_tower', entity_resolution_state: 'matched' });
+    const selection = buildAnalyticsSelection('report-1', [row()], [dataset([csvObservation])]);
+    expect(selection.readinessSummary.duplicates).toBe(0);
+    expect(selection.selectedObservations).toHaveLength(2);
+    expect(selection.selectedObservations[1].sourceEntityIdentity).toBe('source:sensor_tower:st-88');
+  });
+
+  it('keeps a 100-app CSV selectable by stable source identity, including 90 source-only apps', () => {
+    const apps = Array.from({ length: 100 }, (_, index) => row({
+      entity_id: index < 10 ? `report-app-${index}` : null,
+      entity_name: index < 10 ? `Report App ${index}` : null,
+      source_entity_id: `sensor_tower:${index < 10 ? `matched-${index}` : `source-${index}`}`,
+      source_entity_name: `App ${String(index).padStart(3, '0')}`,
+      source_provider: 'sensor_tower',
+      entity_resolution_state: index < 10 ? 'matched' : 'source_only',
+      observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1',
+      value: 500, geo: 'Worldwide', platform: 'Unified',
+    }));
+    const selection = buildAnalyticsSelection('report-1', [], [dataset(apps)]);
+    expect(selection.availableDimensions.entities).toHaveLength(100);
+    const sourceOnly = selection.availableDimensions.entities.find(({ label }) => label === 'App 099');
+    expect(sourceOnly?.key).toBe('source:sensor_tower:source-99');
+    const filtered = buildAnalyticsSelection('report-1', [], [dataset(apps)], filters({ entity: sourceOnly!.key }));
+    expect(filtered.selectedObservations).toHaveLength(1);
+    expect(filtered.selectedObservations[0].observation.source_entity_name).toBe('App 099');
+  });
+
+  it('does not false-deduplicate equal measurements belonging to different source IDs', () => {
+    const appA = row({ entity_id: null, source_entity_id: 'provider:a', source_entity_name: 'Twin A', source_provider: 'provider', entity_resolution_state: 'source_only', observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1' });
+    const appB = row({ entity_id: null, source_entity_id: 'provider:b', source_entity_name: 'Twin B', source_provider: 'provider', entity_resolution_state: 'source_only', observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1' });
+    const selection = buildAnalyticsSelection('report-1', [], [dataset([appA, appB])]);
+    expect(selection.readinessSummary.duplicates).toBe(0);
+    expect(selection.availableDimensions.entities).toHaveLength(2);
+  });
+
+  it('flags repeated measurements for the same provider identity and retains both records', () => {
+    const duplicate = row({ entity_id: null, source_entity_id: 'provider:a', source_entity_name: 'App A', source_provider: 'provider', entity_resolution_state: 'source_only', observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1' });
+    const selection = buildAnalyticsSelection('report-1', [], [dataset([duplicate, { ...duplicate }])]);
+    expect(selection.selectedObservations).toHaveLength(2);
     expect(selection.readinessSummary.duplicates).toBe(2);
     expect(selection.compatibleComparisonGroups).toHaveLength(0);
-    expect(selection.excludedObservations.every(({ reasons }) => reasons.some((reason) => /duplicate/i.test(reason)))).toBe(true);
+  });
+
+  it('keeps a scope-mismatched CSV valid for its own analysis while excluding report comparison', () => {
+    const worldwide = row({ entity_id: null, source_entity_id: 'sensor:app-1', source_entity_name: 'App 1', source_provider: 'sensor', entity_resolution_state: 'source_only', observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1', geo: 'Worldwide', platform: 'Unified', report_compatibility: 'incompatible', scope_compatible: false, analysis_ready: true, dataset_comparison_ready: true, comparison_ready: false });
+    const peer = { ...worldwide, source_entity_id: 'sensor:app-2', source_entity_name: 'App 2' };
+    const selection = buildAnalyticsSelection('report-1', [], [dataset([worldwide, peer])]);
+    expect(selection.selectedObservations.every(({ sourceValid }) => sourceValid)).toBe(true);
+    expect(selection.readinessSummary.reportCompatible).toBe(0);
+    expect(selection.compatibleComparisonGroups).toHaveLength(1);
+    const excluded = buildAnalyticsSelection('report-1', [], [dataset([worldwide, peer])], filters({ readiness: 'excluded' }));
+    expect(excluded.selectedObservations).toHaveLength(2);
+    expect(excluded.compatibleComparisonGroups).toHaveLength(0);
+  });
+
+  it('keeps explicit date windows displayable without inventing granularity', () => {
+    const first = row({ entity_id: null, source_entity_id: 'p:a', source_entity_name: 'A', source_provider: 'p', entity_resolution_state: 'source_only', observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1', granularity: null, analysis_ready: true, dataset_comparison_ready: true });
+    const second = { ...first, source_entity_id: 'p:b', source_entity_name: 'B' };
+    const selection = buildAnalyticsSelection('report-1', [], [dataset([first, second])]);
+    expect(selection.selectedObservations).toHaveLength(2);
+    expect(selection.selectedObservations.every(({ sourceValid }) => sourceValid)).toBe(true);
+    expect(selection.compatibleComparisonGroups).toHaveLength(1);
+    expect(selection.selectedObservations[0].observation.granularity).toBeNull();
   });
 
   it('distinguishes complete, scope-compatible and comparison-ready readiness states', () => {
@@ -127,8 +185,8 @@ describe('report-scoped analytics selection contract', () => {
       row({ entity_id: 'no-methodology', methodology: null, comparison_ready: false }),
     ]);
     expect(selection.readinessSummary.total).toBe(3);
-    expect(selection.readinessSummary.scopeCompatible).toBe(1);
-    expect(selection.readinessSummary.comparisonReady).toBe(0);
+    expect(selection.readinessSummary.reportCompatible).toBe(1);
+    expect(selection.readinessSummary.comparisonCandidates).toBe(0);
     expect(selection.excludedObservations).toHaveLength(3);
   });
 
@@ -154,7 +212,7 @@ describe('report-scoped analytics selection contract', () => {
 
   it('does not label a compatible comparison pair as excluded when that readiness filter is selected', () => {
     const selection = buildAnalyticsSelection('report-1', [row(), row({ entity_id: 'app-b', entity_name: 'App B' })], [], filters({ readiness: 'excluded' }));
-    expect(selection.compatibleComparisonGroups).toHaveLength(1);
+    expect(selection.compatibleComparisonGroups).toHaveLength(0);
     expect(selection.selectedObservations).toHaveLength(0);
   });
 
