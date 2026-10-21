@@ -1,12 +1,12 @@
 import type { QuantitativeObservation } from './api';
 
 export type QuantitativeView = {
-  kind: 'comparison' | 'time_series' | 'two_point' | 'period_matrix' | 'ranking' | 'observation';
+  kind: 'comparison' | 'grouped_bar' | 'time_series' | 'two_point' | 'period_matrix' | 'ranking' | 'observation';
   label: string;
   observations: { index: number; row: QuantitativeObservation }[];
 };
 
-const hasExactScope = (row: QuantitativeObservation) => Boolean(
+const hasRenderableScope = (row: QuantitativeObservation) => Boolean(
   row.metric_id && row.metric_definition && row.value !== null && Number.isFinite(row.value)
   && row.unit && row.entity_id && row.geo && row.platform && row.period_start && row.period_end
   && row.granularity && row.source_reference && row.evidence_reference
@@ -38,7 +38,7 @@ function chronological(a: { row: QuantitativeObservation }, b: { row: Quantitati
 }
 
 export function selectQuantitativeViews(rows: QuantitativeObservation[]): QuantitativeView[] {
-  const eligible = rows.flatMap((row, index) => hasExactScope(row) ? [{ index, row }] : []);
+  const eligible = rows.flatMap((row, index) => hasRenderableScope(row) ? [{ index, row }] : []);
   const groups = new Map<string, typeof eligible>();
   for (const point of eligible) {
     const key = baseKey(point.row);
@@ -74,6 +74,16 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
 
     // Multi-entity observations across periods are shown as a date-labeled matrix.
     // Missing cells remain empty and each supplied observation retains its own evidence action.
+    if (hasMultipleEntities && distinctPeriods.size === 2 && group.every(({ row }) => (row.value ?? 0) >= 0)) {
+      views.push({
+        kind: 'grouped_bar',
+        label: group[0].row.metric_definition || group[0].row.metric_id || 'Reported metric',
+        observations: [...group].sort((a, b) => chronological(a, b)
+          || (a.row.entity_name || a.row.entity_id || '').localeCompare(b.row.entity_name || b.row.entity_id || '')),
+      });
+      continue;
+    }
+
     if (hasMultipleEntities && distinctPeriods.size >= 2) {
       views.push({
         kind: 'period_matrix',
@@ -108,7 +118,7 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
 }
 
 export function quantitativeLimitations(rows: QuantitativeObservation[]): string[] {
-  const reasons = new Set(rows.filter((row) => !hasExactScope(row)).flatMap((row) => row.validation_reasons));
+  const reasons = new Set(rows.filter((row) => !hasRenderableScope(row)).flatMap((row) => row.validation_reasons));
   if (rows.some((row) => !row.scope_compatible && !row.validation_reasons.some((reason) => /scope|GEO|platform/i.test(reason)))) {
     reasons.add('Observation scope is not confirmed as compatible with this report.');
   }

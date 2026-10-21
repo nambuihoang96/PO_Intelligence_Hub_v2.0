@@ -100,6 +100,8 @@ class QuantitativeObservation(ResearchModel):
     metric_id: str | None = Field(default=None, max_length=160)
     metric_definition: str | None = Field(default=None, max_length=2000)
     value: float | None = Field(default=None, strict=True)
+    value_precision: Literal["exact", "approximate"] = "exact"
+    reported_value_text: str | None = Field(default=None, max_length=300)
     unit: str | None = Field(default=None, max_length=80)
     entity_id: str | None = Field(default=None, max_length=160)
     entity_name: str | None = Field(default=None, max_length=500)
@@ -185,7 +187,7 @@ class QuantitativeObservation(ResearchModel):
         for field_name, label in (
             ("metric_id", "metric identifier"),
             ("metric_definition", "metric definition"),
-            ("value", "exact numeric value"),
+            ("value", "numeric value"),
             ("unit", "unit"),
             ("geo", "GEO"),
             ("platform", "platform"),

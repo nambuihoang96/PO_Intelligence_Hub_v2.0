@@ -28,7 +28,7 @@ describe('QuantitativeEvidence', () => {
     expect(screen.getByText('Game B')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Game A.*View evidence/i }));
     expect(openEvidence).toHaveBeenCalledWith(0);
-    expect(screen.getByRole('button', { name: /Game A.*View evidence/i }).textContent).toContain('Reported, unverified');
+    expect(screen.getByRole('button', { name: /Game A.*View evidence/i }).textContent).toContain('Exact as reported · unverified');
   });
 
   it('labels two compatible periods as a two-point comparison, never a continuous trend', () => {
@@ -56,6 +56,23 @@ describe('QuantitativeEvidence', () => {
     expect((x[1] - x[0]) / (x[2] - x[1])).toBeCloseTo(31 / 59, 1);
   });
 
+  it('renders four dated values for one entity as an observed time series with evidence for every point', () => {
+    const openEvidence = vi.fn();
+    const rows = [
+      observation({ period_start: '2025-01-01', period_end: '2025-01-07', granularity: 'week', value: 1200 }),
+      observation({ period_start: '2025-02-01', period_end: '2025-02-07', granularity: 'week', value: 1000 }),
+      observation({ period_start: '2025-04-01', period_end: '2025-04-07', granularity: 'week', value: 900 }),
+      observation({ period_start: '2025-05-01', period_end: '2025-05-07', granularity: 'week', value: 850 }),
+    ];
+    render(<QuantitativeEvidence observations={rows} onViewEvidence={openEvidence} />);
+    expect(screen.getByRole('heading', { name: 'Observed time series' })).toBeTruthy();
+    const points = screen.getAllByRole('button', { name: /View evidence/i });
+    expect(points).toHaveLength(4);
+    points.forEach((point) => fireEvent.click(point));
+    expect(openEvidence.mock.calls.map(([index]) => index).sort()).toEqual([0, 1, 2, 3]);
+    expect(screen.getByText(/not represent intermediate measurements/i)).toBeTruthy();
+  });
+
   it('renders three entities across two periods as a clickable matrix, not separate entity series', () => {
     const openEvidence = vi.fn();
     const rows = ['game-a', 'game-b', 'game-c'].flatMap((entity, entityIndex) => [
@@ -63,11 +80,40 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: entity, entity_name: `Game ${entityIndex + 1}`, period_start: '2025-04-01', period_end: '2025-06-30', value: 80 + entityIndex }),
     ]);
     render(<QuantitativeEvidence observations={rows} onViewEvidence={openEvidence} />);
-    expect(screen.getByRole('heading', { name: 'Entity and period comparison' })).toBeTruthy();
-    expect(screen.getAllByRole('row')).toHaveLength(4);
+    expect(screen.getByRole('heading', { name: 'Entity comparison' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /view evidence for/i })).toHaveLength(6);
     for (const button of screen.getAllByRole('button', { name: /view evidence for/i })) fireEvent.click(button);
     expect(openEvidence.mock.calls.map(([index]) => index).sort()).toEqual([0, 1, 2, 3, 4, 5]);
     expect(screen.queryByRole('heading', { name: 'Observed time series' })).toBeNull();
+  });
+
+  it('shows two-period multi-game data as grouped period bars and keeps missing points visible', () => {
+    const openEvidence = vi.fn();
+    const rows = [
+      observation({ entity_id: 'a', entity_name: 'Game A', period_start: '2025-01-01', period_end: '2025-01-07', granularity: 'week' }),
+      observation({ entity_id: 'a', entity_name: 'Game A', period_start: '2025-02-01', period_end: '2025-02-07', granularity: 'week', value: 850 }),
+      observation({ entity_id: 'b', entity_name: 'Game B', period_start: '2025-01-01', period_end: '2025-01-07', granularity: 'week', value: 900 }),
+    ];
+    render(<QuantitativeEvidence observations={rows} onViewEvidence={openEvidence} />);
+    expect(screen.getByText('Game A')).toBeTruthy();
+    expect(screen.getByText('Game B')).toBeTruthy();
+    expect(screen.getByText('No observation')).toBeTruthy();
+    expect(screen.getByText(/no intermediate values or growth rates/i)).toBeTruthy();
+    const valueButtons = screen.getAllByRole('button', { name: /view evidence for/i });
+    expect(valueButtons).toHaveLength(3);
+    fireEvent.click(valueButtons[1]);
+    expect(openEvidence).toHaveBeenCalledWith(1);
+    fireEvent.click(screen.getByRole('button', { name: 'View table' }));
+    expect(screen.getByRole('region', { name: 'Exact reported values by entity and period' })).toBeTruthy();
+  });
+
+  it('labels approximate report values and preserves original wording in details', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ value: 24000, value_precision: 'approximate', reported_value_text: 'approximately 24,000 weekly downloads' }),
+    ]} onViewEvidence={() => undefined} />);
+    expect(screen.getByText(/^≈24[,.]000 downloads$/)).toBeTruthy();
+    expect(screen.getAllByText(/Approximate · source-reported · unverified/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/approximately 24,000 weekly downloads/)).toBeTruthy();
   });
 
   it('keeps irregular periods categorical and shows missing observations without filling values', () => {
@@ -120,21 +166,31 @@ describe('QuantitativeEvidence', () => {
 
   it('shows an insufficient-data explanation and exact validation reason without drawing a chart', () => {
     render(<QuantitativeEvidence observations={[observation({ value: null, period_start: null, complete_observation: false, comparison_ready: false, scope_compatible: null, validation_reasons: ['Missing exact numeric value.', 'Missing period start.'] })]} onViewEvidence={() => undefined} />);
-    expect(screen.getByText('No compatible visualization can be shown yet.')).toBeTruthy();
+    expect(screen.getByText('No compatible chart can be shown yet.')).toBeTruthy();
     fireEvent.click(screen.getByText(/Data limitations/));
     expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Missing period start.').length).toBeGreaterThan(0);
     expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('does not add quantitative content to a qualitative-only report', () => {
-    const { container } = render(<QuantitativeEvidence observations={[]} onViewEvidence={() => undefined} />);
-    expect(container.querySelector('.quantitative-evidence')).toBeNull();
+  it('offers the existing ChatGPT structuring workflow for a qualitative-only report', () => {
+    const prepare = vi.fn();
+    render(<QuantitativeEvidence observations={[]} onViewEvidence={() => undefined} onPrepareChartData={prepare} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare chart data from this report' }));
+    expect(prepare).toHaveBeenCalledOnce();
   });
 
   it('does not combine observations with different metric definitions or incompatible scope', () => {
     render(<QuantitativeEvidence observations={[
       observation(), observation({ entity_id: 'game-b', entity_name: 'Game B', metric_definition: 'Estimated weekly downloads', platform: 'iOS', period_start: '2025-04-01', period_end: '2025-06-30' }),
+    ]} onViewEvidence={() => undefined} />);
+    expect(screen.queryByRole('heading', { name: 'Entity comparison' })).toBeNull();
+    expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(2);
+  });
+
+  it('does not compare otherwise similar observations when supplied methodologies differ', () => {
+    render(<QuantitativeEvidence observations={[
+      observation(), observation({ entity_id: 'game-b', entity_name: 'Game B', methodology: 'Panel survey estimate' }),
     ]} onViewEvidence={() => undefined} />);
     expect(screen.queryByRole('heading', { name: 'Entity comparison' })).toBeNull();
     expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(2);

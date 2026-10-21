@@ -190,8 +190,25 @@ class QuantitativeObservationTest(unittest.TestCase):
             provenance_type="research_report", provenance_id="report",
         )
         self.assertEqual(value.metric_id, "weekly_downloads")
+        self.assertEqual(value.value_precision, "exact")
         self.assertEqual(value.verification_status, "unverified")
         self.assertEqual(value.validation_reasons, [])
+
+    def test_explicit_approximate_report_value_is_preserved_and_unverified(self):
+        value = QuantitativeObservation(
+            metric_id="weekly_downloads", metric_definition="Weekly downloads", value=24000,
+            value_precision="approximate", reported_value_text="approximately 24,000 weekly downloads",
+            unit="downloads", entity_id="game-a", geo="US", platform="Android",
+            period_start="2025-04-01", period_end="2025-04-07", granularity="week",
+            methodology="Source estimate", source_reference="https://example.com/data",
+            evidence_reference="https://example.com/data", provenance_type="research_report",
+            scope_compatible=True, report_compatibility="compatible",
+        )
+        self.assertEqual(value.value, 24000)
+        self.assertEqual(value.value_precision, "approximate")
+        self.assertEqual(value.reported_value_text, "approximately 24,000 weekly downloads")
+        self.assertEqual(value.verification_status, "unverified")
+        self.assertTrue(value.comparison_ready)
 
     def test_missing_unit_and_period_remain_incomplete(self):
         value = QuantitativeObservation(metric_id="users", metric_definition="Users", value=8, entity_id="a", geo="US", platform="web")
@@ -319,6 +336,13 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertEqual(result["percentage_change"], 25)
         self.assertEqual(result["verification_status"], "unverified")
 
+    def test_approximate_reported_values_cannot_produce_derived_change(self):
+        previous = self.observation()
+        current = self.observation(start="2026-01-01", end="2026-12-31", value=125)
+        previous["value_precision"] = "approximate"
+        with self.assertRaisesRegex(ValueError, "Derived changes require exact source values"):
+            calculate_change(current, previous, "yoy")
+
     def test_valid_period_over_period_requires_adjacent_equal_granularity_period(self):
         previous = self.observation(start="2026-01-01", end="2026-01-31", value=80)
         previous["granularity"] = "month"
@@ -400,10 +424,41 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertTrue(all(row["scope_compatible"] is True for row in observations))
         self.assertTrue(all(row["provenance_id"] == report_id for row in observations))
         self.assertTrue(all(row["verification_status"] == "unverified" for row in observations))
+        self.assertTrue(all(row["value_precision"] == "exact" for row in observations))
         self.assertEqual(data["content"], raw)
         refreshed = self.client.get(f"/api/v1/reports/{report_id}").json()
         self.assertEqual(refreshed["research_data"]["quantitative_observations"], observations)
         self.assertEqual(self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets").json()["items"], [])
+
+    def test_explicit_approximate_research_value_survives_report_persistence_without_becoming_verified(self):
+        raw = "Source reports approximately 24,000 weekly downloads: https://example.com/approx"
+        payload = {"schema_version": "po_research_v1", "research_data": {
+            "entities": [{"key": "game-a", "entity_type": "game", "name": "Game A"}],
+            "evidence_references": [{"url": "https://example.com/approx", "verified": False}],
+            "quantitative_observations": [{
+                "metric_id": "weekly_downloads", "metric_definition": "Weekly downloads", "value": 24000,
+                "value_precision": "approximate", "reported_value_text": "approximately 24,000 weekly downloads",
+                "unit": "downloads", "entity_id": "game-a", "entity_name": "Game A", "geo": "US", "platform": "Android",
+                "period_start": "2025-04-01", "period_end": "2025-04-07", "granularity": "week",
+                "methodology": "Source estimate", "source_reference": "https://example.com/approx",
+                "evidence_reference": "https://example.com/approx", "verification_status": "unverified",
+                "provenance_type": "research_report", "observation_type": "reported",
+            }],
+        }}
+        response = self.client.post("/api/v1/reports", json={
+            "question": "Weekly downloads for Game A?", "geo": "US", "os": "Android", "research_period": "April 2025",
+            "content": raw, "structured_json": json.dumps(payload),
+        })
+        self.assertEqual(response.status_code, 201, response.text)
+        report_id = response.json()["id"]
+        reopened = self.client.get(f"/api/v1/reports/{report_id}").json()
+        row = reopened["research_data"]["quantitative_observations"][0]
+        self.assertEqual(row["value"], 24000)
+        self.assertEqual(row["value_precision"], "approximate")
+        self.assertEqual(row["reported_value_text"], "approximately 24,000 weekly downloads")
+        self.assertEqual(row["verification_status"], "unverified")
+        self.assertTrue(row["comparison_ready"])
+        self.assertEqual(reopened["content"], raw)
 
     def test_report_metrics_missing_scope_or_entity_are_visible_but_not_chart_ready(self):
         report_id = self.create_report("ASMR scope validation")

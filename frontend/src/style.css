@@ -1423,3 +1423,44 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
 .finding-map-card .insight-dashboard-copy > span:last-child .research-highlight { font-weight: 550; }
 .insight-detail-panel .research-text, .overview-takeaways .research-text { line-height: inherit; }
 .research-highlight:focus-visible { outline: 2px solid #2865c7; outline-offset: 2px; }
+
+/* M3-A: source-grounded quantitative chart primitives. */
+.quantitative-view-actions { display: flex; align-items: center; gap: 12px; color: #6a7a90; font-size: 12px; }
+.quant-bar-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 2px 0 12px; color: #53677f; font-size: 12px; }
+.quant-bar-legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.quant-bar-swatch { width: 11px; height: 11px; border-radius: 3px; background: #3375c5; }
+.quant-bar-swatch.period-1, .quant-bar-point.period-1 .quant-bar-track > span { background: #7658be; }
+.quant-bar-entity { display: grid; grid-template-columns: minmax(150px, .9fr) minmax(0, 2fr); gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid #e8edf4; }
+.quant-bar-entity > h5 { margin: 0; color: #233a57; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.quant-bar-points { display: grid; gap: 7px; min-width: 0; }
+.quant-bar-point { display: grid; grid-template-columns: minmax(105px, .9fr) minmax(90px, 1.5fr) minmax(85px, auto); gap: 5px 10px; align-items: center; min-width: 0; padding: 6px 8px; border: 1px solid transparent; border-radius: 7px; color: #31465f; background: transparent; text-align: left; cursor: pointer; }
+.quant-bar-point:hover, .quant-bar-point:focus-visible { border-color: #d4e1f2; background: #f5f8fc; }
+.quant-bar-period { color: #64758b; font-size: 11px; }
+.quant-bar-track, .quant-two-point-track { display: block; height: 12px; overflow: hidden; border-radius: 99px; background: #edf1f6; }
+.quant-bar-track > span, .quant-two-point-track > span { display: block; height: 100%; min-width: 3px; border-radius: inherit; background: #3375c5; }
+.quant-bar-point > strong { color: #183b63; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quant-bar-point > small { grid-column: 2 / -1; color: #718097; font-size: 10px; }
+.quant-bar-missing { display: flex; justify-content: space-between; gap: 10px; padding: 8px; border: 1px dashed #d5dce6; border-radius: 7px; color: #65758a; font-size: 11px; }
+.quant-chart-note { margin: 8px 0 0; color: #6a7a90; font-size: 11px; }
+.quant-two-point { grid-template-columns: 1fr; }
+.quant-point-card { border-color: #e2e9f2; }
+.quant-two-point-track { width: 100%; }
+.quant-point-card.period-0 .quant-two-point-track > span { background: #3375c5; }
+.quant-point-card.period-1 .quant-two-point-track > span { background: #7658be; }
+.quantitative-no-data > p { margin: 0; color: #596b83; font-size: 13px; }
+.quantitative-no-data > .secondary-action { justify-self: start; }
+@media (max-width: 700px) {
+  .quant-bar-entity { grid-template-columns: 1fr; gap: 6px; }
+  .quant-bar-point { grid-template-columns: minmax(95px, 1fr) minmax(60px, 1.2fr) minmax(80px, auto); gap: 4px 7px; padding-inline: 4px; }
+  .quant-bar-period { font-size: 10px; }
+}
+@media (max-width: 420px) {
+  .quantitative-evidence { padding: 14px 12px; }
+  .quantitative-view { padding: 11px 9px; }
+  .quantitative-view-heading { align-items: flex-start; }
+  .quantitative-view-actions { flex-direction: column; align-items: flex-end; gap: 3px; }
+  .quant-bar-point { grid-template-columns: 1fr auto; }
+  .quant-bar-track { grid-column: 1 / -1; grid-row: 2; }
+  .quant-bar-point > small { grid-column: 1 / -1; }
+  .quant-bar-missing { flex-direction: column; gap: 2px; }
+}

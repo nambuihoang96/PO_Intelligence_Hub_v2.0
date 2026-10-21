@@ -251,6 +251,7 @@ def assess_report_observations(
 
         signature = (
             observation.metric_id, observation.metric_definition, observation.value,
+            observation.value_precision, observation.reported_value_text,
             observation.unit, observation.entity_id, observation.geo, observation.platform,
             observation.period_start, observation.period_end, observation.granularity,
         )
@@ -601,6 +602,8 @@ def compatible_for_comparison(left: dict[str, Any], right: dict[str, Any]) -> tu
 
 def calculate_change(current: dict[str, Any], previous: dict[str, Any], period_kind: str) -> dict[str, Any]:
     """Calculate a change only for scope-compatible, adjacent periods."""
+    if current.get("value_precision", "exact") == "approximate" or previous.get("value_precision", "exact") == "approximate":
+        raise ValueError("Derived changes require exact source values; approximate observations may only be displayed as reported.")
     compatible, reasons = compatible_for_comparison(current, previous)
     if not compatible:
         raise ValueError("Incompatible observations: " + "; ".join(reasons))

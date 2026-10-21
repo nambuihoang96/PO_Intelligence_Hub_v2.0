@@ -26,6 +26,8 @@ export type QuantitativeObservation = {
   metric_id: string | null;
   metric_definition: string | null;
   value: number | null;
+  value_precision?: 'exact' | 'approximate';
+  reported_value_text?: string | null;
   unit: string | null;
   entity_id: string | null;
   entity_name?: string | null;
