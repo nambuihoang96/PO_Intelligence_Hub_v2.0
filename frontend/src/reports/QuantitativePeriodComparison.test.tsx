@@ -68,12 +68,66 @@ describe('QuantitativePeriodComparison', () => {
       baseline_dataset_id: 'old', current_dataset_id: 'new', geo: 'Worldwide', platform: 'Unified',
     });
     expect(screen.getByText('Example App')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Inspect evidence for Example App/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Inspect evidence for Example App/ }));
+    expect(screen.getByText('Example App · original observations')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Open original source' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
     expect(screen.getByText('Source-only app')).toBeTruthy();
     expect(screen.getByText('Name-only app')).toBeTruthy();
     expect(screen.getByText('+25 downloads')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Open source' })).toHaveLength(4);
     expect(screen.getAllByRole('link', { name: 'Open report' })).toHaveLength(4);
-    expect(screen.getByRole('option', { name: 'Percentage change' })).toBeTruthy();
+    expect(screen.getAllByRole('option', { name: 'Percentage change' })).toHaveLength(2);
+  });
+
+  it('uses backend percentage values and retains an unavailable value in the full table', async () => {
+    vi.mocked(reportApi.previewQuantitativeComparison).mockResolvedValue({
+      ...preview,
+      rows: [
+        { ...preview.rows[0], percentage_change: 25 },
+        { ...preview.rows[1], percentage_change: null, percentage_change_unavailable_reason: 'Baseline is missing.' },
+      ],
+    });
+    render(<QuantitativePeriodComparison />);
+    fireEvent.change(await screen.findByLabelText('Baseline dataset'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
+    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
+    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Chart type' }), { target: { value: 'percentage_change' } });
+    expect(screen.getByRole('button', { name: /Inspect evidence for Example App/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
+    expect(screen.getByText('+25%')).toBeTruthy();
+    expect(screen.getByText('Baseline is missing.')).toBeTruthy();
+  });
+
+  it('scales a 100-app comparison with Top N while keeping every row in the complete table', async () => {
+    const rows = Array.from({ length: 100 }, (_, index) => {
+      const name = `App ${String(index + 1).padStart(3, '0')}`;
+      const base = source('old', 'October export', index + 10);
+      const later = source('new', 'November export', index + 20);
+      return { ...preview.rows[0], entity_key: `sensor_tower:${index}`, entity_name: name, baseline: base, current: later, evidence: [base, later], absolute_change: 10, percentage_change: 100 / (index + 10) };
+    });
+    vi.mocked(reportApi.previewQuantitativeComparison).mockResolvedValue({ ...preview, summary: { ...preview.summary, comparable_apps: 100, distinct_apps: 100 }, rows });
+    render(<QuantitativePeriodComparison />);
+    fireEvent.change(await screen.findByLabelText('Baseline dataset'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
+    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
+    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
+    expect(screen.getByText('App 010')).toBeTruthy();
+    expect(screen.queryByText('App 011')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Top apps'), { target: { value: 'all' } });
+    expect(screen.getByText('App 100')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
+    expect(screen.getByText('Showing 50 of 100 app rows. Values and unavailable calculations are returned by the comparison service.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('App 100')).toBeTruthy();
   });
 
   it('loads all pages of the dataset catalog so older exports remain selectable', async () => {

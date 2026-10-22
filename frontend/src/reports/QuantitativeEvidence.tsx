@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { QuantitativeObservation } from './api';
 import { quantitativeLimitations, selectQuantitativeViews, type QuantitativeView } from './quantitativeAnalytics';
+import { formatQuantitativePeriod, formatQuantitativeValue } from './quantitativePresentation';
 
 type Props = {
   observations: QuantitativeObservation[];
@@ -8,13 +9,8 @@ type Props = {
   onPrepareChartData?: () => void;
 };
 
-function formatValue(value: number | null, unit: string | null): string {
-  const number = value === null ? 'Unknown' : new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(value);
-  return [number, unit].filter(Boolean).join(' ');
-}
-
 function displayValue(row: QuantitativeObservation): string {
-  const value = formatValue(row.value, row.unit);
+  const value = formatQuantitativeValue(row.value, row.unit);
   return row.value !== null && row.value_precision === 'approximate' ? `≈${value}` : value;
 }
 
@@ -27,7 +23,7 @@ function periodKey(row: QuantitativeObservation): string {
 }
 
 function periodLabel(row: QuantitativeObservation): string {
-  return row.period_start === row.period_end ? row.period_start || 'Period not supplied' : `${row.period_start} – ${row.period_end}`;
+  return formatQuantitativePeriod(row.period_start, row.period_end);
 }
 
 function scopeOf(row: QuantitativeObservation): string {

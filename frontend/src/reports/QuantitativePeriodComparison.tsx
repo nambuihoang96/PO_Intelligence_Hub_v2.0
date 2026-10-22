@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { reportApi, type ComparisonDataset, type ComparisonMetric, type ComparisonPeriod, type ImportedReport, type ReportSummary, type QuantitativeComparisonInput, type QuantitativeComparisonPreview, type QuantitativeDataset } from './api';
 import { QuantitativeDatasetImport } from './QuantitativeDatasetImport';
 import { DatasetMetadataReview } from './DatasetMetadataReview';
 import { ResultsIcon } from '../ui/ResultsIcon';
+import { QuantitativeComparisonCharts } from './QuantitativeComparisonCharts';
 
 const metricKey = (metric: ComparisonMetric) => metric.key;
 const labelPeriod = (period: ComparisonPeriod) => period.semantics === 'snapshot'
@@ -30,10 +31,6 @@ export function QuantitativePeriodComparison() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [notice, setNotice] = useState('');
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<'name' | 'change' | 'percentage'>('name');
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 50;
 
   async function loadCatalog() {
     try {
@@ -118,22 +115,10 @@ export function QuantitativePeriodComparison() {
       ...(currentMeaning ? { current_semantics_confirmation: currentMeaning as QuantitativeComparisonInput['current_semantics_confirmation'] } : {}),
     };
     setBusy(true); setFailure(''); setNotice(''); setResult(null);
-    try { setResult(await reportApi.previewQuantitativeComparison(input)); setPage(0); }
+    try { setResult(await reportApi.previewQuantitativeComparison(input)); }
     catch (error) { setFailure(error instanceof Error ? error.message : 'Không tạo được bản xem trước so sánh.'); }
     finally { setBusy(false); }
   }
-
-  const visibleRows = useMemo(() => {
-    const normalized = search.trim().toLocaleLowerCase();
-    const rows = (result?.rows ?? []).filter((row) => !normalized || `${row.entity_name} ${row.entity_key} ${row.status}`.toLocaleLowerCase().includes(normalized));
-    return rows.sort((a, b) => sort === 'name'
-      ? a.entity_name.localeCompare(b.entity_name)
-      : sort === 'percentage'
-        ? (b.percentage_change ?? Number.NEGATIVE_INFINITY) - (a.percentage_change ?? Number.NEGATIVE_INFINITY)
-        : (b.absolute_change ?? Number.NEGATIVE_INFINITY) - (a.absolute_change ?? Number.NEGATIVE_INFINITY));
-  }, [result, search, sort]);
-  const pageCount = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
-  const pagedRows = visibleRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   function onImported(dataset: QuantitativeDataset) {
     setNotice(dataset.duplicate ? 'CSV trùng đã được nhận diện; đang làm mới danh sách dataset.' : 'CSV đã lưu. Bạn có thể chọn nó ở phần so sánh.');
@@ -176,11 +161,7 @@ export function QuantitativePeriodComparison() {
     {result && <section className="comparison-results" aria-labelledby="comparison-results-title">
       <header className="comparison-results-heading"><div><span className="state-label">SOURCE-TRACEABLE RESULT</span><h2 id="comparison-results-title">{result.baseline_period.semantics} comparison · {result.metric.metric_definition}</h2><p>{result.geo} · {result.platform} · {labelPeriod(result.baseline_period)} → {labelPeriod(result.current_period)}</p></div><span className={`comparison-readiness ${result.period_readiness.compatible ? 'ready' : 'blocked'}`}>{result.period_readiness.compatible ? 'Periods compatible' : 'Changes withheld'}</span></header>
       {!result.period_readiness.compatible && <p className="comparison-warning">{result.period_readiness.reasons.join(' ')}</p>}
-      <div className="comparison-summary" aria-label="Comparison coverage"><span><b>{result.summary.matched_apps}</b> IDs in both files</span><span><b>{result.summary.comparable_apps}</b> values comparable</span><span><b>{result.summary.baseline_only_apps}</b> baseline only</span><span><b>{result.summary.current_only_apps}</b> current only</span><span><b>{result.summary.missing_data_apps}</b> missing/unstable identity</span><span><b>{result.summary.invalid_observations}</b> needing review</span></div>
-      <div className="comparison-table-tools"><label>Find app<input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} placeholder="Search source app name or ID" /></label><label>Sort<select value={sort} onChange={(event) => setSort(event.target.value as 'name' | 'change' | 'percentage')}><option value="name">App name</option><option value="change">Absolute change</option><option value="percentage">Percentage change</option></select></label><span>{visibleRows.length.toLocaleString()} apps retained</span></div>
-       <div className="comparison-table-scroll"><table className="comparison-table"><thead><tr><th>Source app</th><th>Baseline</th><th>Current</th><th>Absolute change</th><th>Percent change</th><th>Coverage</th><th>Evidence</th></tr></thead><tbody>{pagedRows.map((row) => <tr key={row.entity_key}><th scope="row">{row.entity_name}<small>{row.matched_by === 'provider_source_id' ? row.entity_key : 'No stable provider ID · not auto-matched'}</small></th><td>{row.baseline ? <><strong>{row.baseline.value ?? 'Unknown'} {row.baseline.unit}</strong><small>{row.baseline.filename} · row {row.baseline.source_row_number ?? 'unknown'}</small></> : 'Missing'}</td><td>{row.current ? <><strong>{row.current.value ?? 'Unknown'} {row.current.unit}</strong><small>{row.current.filename} · row {row.current.source_row_number ?? 'unknown'}</small></> : 'Missing'}</td><td>{row.absolute_change === null ? 'Unavailable' : <><strong>{row.absolute_change > 0 ? '+' : ''}{row.absolute_change} {row.change_unit}</strong><small>{row.formula}</small></>}</td><td>{row.percentage_change === null ? <span title={row.percentage_change_unavailable_reason ?? row.reasons.join(' ')}>Unavailable{row.percentage_change_unavailable_reason && <small>{row.percentage_change_unavailable_reason}</small>}</span> : `${row.percentage_change > 0 ? '+' : ''}${row.percentage_change.toFixed(2)}%`}</td><td><span className="comparison-row-status">{row.status.replaceAll('_', ' ')}</span>{row.reasons.length > 0 && <details><summary>Why</summary>{row.reasons.map((reason) => <p key={reason}>{reason}</p>)}</details>}</td><td>{row.evidence.map((source, index) => <div className="comparison-evidence" key={`${source.dataset_id}-${source.source_row_number}-${index}`}><span>{source.filename} · row {source.source_row_number ?? 'unknown'} · {source.verification_status}</span>{source.source_reference && <a href={source.source_reference} target="_blank" rel="noreferrer">Open source</a>}<a href={`/reports/${source.report_id}`}>Open report</a>{source.metadata_provenance && <details><summary>Metadata provenance</summary><ul>{Object.entries(source.metadata_provenance).map(([field, info]) => <li key={field}>{field}: {info.value ?? 'Unknown'} · {info.basis.replaceAll('_', ' ')}{info.source_url && <> · <a href={info.source_url} target="_blank" rel="noreferrer">documentation</a></>}</li>)}</ul></details>}</div>)}</td></tr>)}</tbody></table></div>
-      {visibleRows.length > PAGE_SIZE && <nav className="comparison-pagination" aria-label="Comparison table pages"><button className="secondary-action" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>Previous</button><span>Page {page + 1} of {pageCount}</span><button className="secondary-action" disabled={page + 1 >= pageCount} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>Next</button></nav>}
-      {result.metric_warnings.length > 0 && <details className="comparison-metric-warnings"><summary>Metric and source validation details</summary>{result.metric_warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
+      <QuantitativeComparisonCharts result={result} />
     </section>}
     {!datasets.length && <section className="empty-card"><span className="comparison-icon"><ResultsIcon name="comparison" /></span><div><h2>No CSV exports linked yet</h2><p>Choose a report above and import the original exports to begin a comparison.</p></div></section>}
   </div>;
