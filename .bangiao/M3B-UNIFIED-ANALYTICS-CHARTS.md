@@ -46,7 +46,9 @@ The pre-existing `scripts/setup.ps1` modification and untracked `.devcrew/`, `.m
 - `npm.cmd test -- --run --maxWorkers=1` — **13 test files passed, 130 tests passed**.
 - `npm.cmd run build` — **passed** (`tsc --noEmit` and Vite production build).
 - `git diff --check` — **passed** (line-ending conversion warnings only).
-- Backend regression `pytest tests/test_quantitative_comparisons.py -vv -s` was attempted against the existing isolated test setup. The first test stalled after the Alembic test database reached migration `20261020_0007`; it was interrupted. No backend source was changed. Backend regression is **NOT VERIFIED**.
+- `pytest tests/test_quantitative_comparisons.py -q` — **11 passed**.
+- `pytest tests -q` — **128 passed** (full backend regression suite).
+- Both backend commands used a disposable test data root and were run outside the restricted sandbox. The initial sandbox run stalled before the test client could start because Windows loopback `socketpair` access was blocked; rerunning with the approved test execution permission resolved it. This was an environment restriction, not an API or migration failure.
 
 ## Browser UAT
 
@@ -76,8 +78,8 @@ Not verified:
 - The chart presents baseline/current values as paired proportional bars and signed changes as centered bars; it intentionally does not turn two period exports into a time series.
 - Non-comparable rows remain table-only. Unsupported/negative source values are not rendered as positive baseline/current bars.
 - Screenshot artifacts and full mobile/tablet browser checks remain outstanding, as does the browser Journey B.
-- **Technical acceptance:** frontend tests and production build pass; backend comparison regression test did not complete.
-- **Product acceptance:** CSV compare → chart → inspect evidence → full table → refresh/reopen was verified with isolated fixture. The complete acceptance remains pending until Journey B, responsive browser checks, screenshot artifacts and backend regression are verified.
+- **Technical acceptance:** frontend tests, production build and the full backend regression suite pass.
+- **Product acceptance:** CSV compare → chart → inspect evidence → full table → refresh/reopen was verified with an isolated fixture. The complete acceptance remains pending until Journey B, responsive browser checks and screenshot artifacts are verified.
 
 ## Commit
 
