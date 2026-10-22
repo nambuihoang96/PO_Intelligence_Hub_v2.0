@@ -1543,6 +1543,7 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
 @media (max-width: 600px) { .dataset-metadata-review { padding: 14px; } .metadata-actions button { width: 100%; } }
 .csv-analytics-workspace { display: grid; gap: 14px; min-width: 0; }
 .csv-chart-summary { margin: 0; color: #334b68; font-size: 14px; line-height: 1.5; }
+.csv-chart-selection-summary { margin: 0; padding: 10px 12px; border-left: 3px solid #4081d6; border-radius: 6px; background: #f3f7fc; color: #334b68; font-size: 13px; line-height: 1.5; }
 .csv-chart-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 12px; border-radius: 12px; background: #f4f7fb; }
 .csv-chart-toolbar label { display: grid; gap: 5px; min-width: 145px; color: #4d6179; font-size: 12px; }
 .csv-chart-toolbar input, .csv-chart-toolbar select { min-height: 38px; padding: 7px 10px; border: 1px solid #cbd7e5; border-radius: 8px; background: #fff; color: #172b45; font: inherit; }

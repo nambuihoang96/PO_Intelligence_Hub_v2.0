@@ -1,6 +1,7 @@
 import type { QuantitativeComparisonPreview, QuantitativeComparisonRow } from './api';
 
 export type ComparisonChartType = 'baseline_current' | 'absolute_change' | 'percentage_change';
+export type ComparisonChartSort = 'name' | 'current_desc' | 'baseline_desc' | 'increase_desc' | 'decrease_asc' | 'percentage_desc' | 'percentage_asc';
 export type ComparisonChartPoint = {
   key: string;
   label: string;
@@ -29,4 +30,47 @@ export function chartEligible(point: ComparisonChartPoint, type: ComparisonChart
   if (type === 'baseline_current') return point.baseline !== null && point.current !== null && point.baseline >= 0 && point.current >= 0;
   if (type === 'absolute_change') return point.absoluteChange !== null;
   return point.percentageChange !== null;
+}
+
+export function defaultComparisonSort(type: ComparisonChartType): ComparisonChartSort {
+  if (type === 'baseline_current') return 'current_desc';
+  if (type === 'absolute_change') return 'increase_desc';
+  return 'percentage_desc';
+}
+
+export function comparisonSortLabel(sort: ComparisonChartSort, unit: string | null): string {
+  switch (sort) {
+    case 'name': return 'alphabetical by app name';
+    case 'current_desc': return `highest current value${unit ? ` (${unit})` : ''}`;
+    case 'baseline_desc': return `highest baseline value${unit ? ` (${unit})` : ''}`;
+    case 'increase_desc': return `largest increase${unit ? ` (${unit})` : ''}`;
+    case 'decrease_asc': return `largest decrease${unit ? ` (${unit})` : ''}`;
+    case 'percentage_desc': return 'highest valid percentage change';
+    case 'percentage_asc': return 'lowest valid percentage change';
+  }
+}
+
+function compareNames(a: ComparisonChartPoint, b: ComparisonChartPoint): number {
+  const left = a.label.toLocaleLowerCase('en');
+  const right = b.label.toLocaleLowerCase('en');
+  if (left !== right) return left < right ? -1 : 1;
+  if (a.key === b.key) return 0;
+  return a.key < b.key ? -1 : 1;
+}
+
+/** Sorts values supplied by M2 and resolves ties by app name then stable source key. */
+export function sortComparisonPoints(points: ComparisonChartPoint[], sort: ComparisonChartSort): ComparisonChartPoint[] {
+  return [...points].sort((a, b) => {
+    let difference = 0;
+    switch (sort) {
+      case 'current_desc': difference = (b.current ?? Number.NEGATIVE_INFINITY) - (a.current ?? Number.NEGATIVE_INFINITY); break;
+      case 'baseline_desc': difference = (b.baseline ?? Number.NEGATIVE_INFINITY) - (a.baseline ?? Number.NEGATIVE_INFINITY); break;
+      case 'increase_desc': difference = (b.absoluteChange ?? Number.NEGATIVE_INFINITY) - (a.absoluteChange ?? Number.NEGATIVE_INFINITY); break;
+      case 'decrease_asc': difference = (a.absoluteChange ?? Number.POSITIVE_INFINITY) - (b.absoluteChange ?? Number.POSITIVE_INFINITY); break;
+      case 'percentage_desc': difference = (b.percentageChange ?? Number.NEGATIVE_INFINITY) - (a.percentageChange ?? Number.NEGATIVE_INFINITY); break;
+      case 'percentage_asc': difference = (a.percentageChange ?? Number.POSITIVE_INFINITY) - (b.percentageChange ?? Number.POSITIVE_INFINITY); break;
+      case 'name': return compareNames(a, b);
+    }
+    return difference || compareNames(a, b);
+  });
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { QuantitativeComparisonPreview, QuantitativeComparisonRow } from './api';
-import { adaptComparisonForChart, chartEligible, type ComparisonChartType, type ComparisonChartPoint } from './comparisonChartAdapter';
+import { adaptComparisonForChart, chartEligible, comparisonSortLabel, defaultComparisonSort, sortComparisonPoints, type ComparisonChartSort, type ComparisonChartType, type ComparisonChartPoint } from './comparisonChartAdapter';
 import { formatQuantitativePeriod, formatQuantitativeValue, formatSignedQuantitativeValue } from './quantitativePresentation';
 
 type Props = { result: QuantitativeComparisonPreview };
@@ -62,31 +62,43 @@ export function QuantitativeComparisonCharts({ result }: Props) {
   const [chartType, setChartType] = useState<ComparisonChartType>('baseline_current');
   const [display, setDisplay] = useState<'chart' | 'table'>('chart');
   const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<'name' | 'change' | 'percentage'>('name');
+  const [sort, setSort] = useState<ComparisonChartSort>(() => defaultComparisonSort('baseline_current'));
   const [topN, setTopN] = useState<'10' | '25' | '50' | 'all'>('10');
   const [selectedRow, setSelectedRow] = useState<QuantitativeComparisonRow | null>(null);
   const points = useMemo(() => adaptComparisonForChart(result), [result]);
   const normalized = search.trim().toLocaleLowerCase();
-  const rows = useMemo(() => result.rows.filter((row) => !normalized || `${row.entity_name} ${row.entity_key} ${row.status}`.toLocaleLowerCase().includes(normalized)).sort((a, b) => sort === 'name' ? a.entity_name.localeCompare(b.entity_name) : sort === 'percentage' ? (b.percentage_change ?? Number.NEGATIVE_INFINITY) - (a.percentage_change ?? Number.NEGATIVE_INFINITY) : (b.absolute_change ?? Number.NEGATIVE_INFINITY) - (a.absolute_change ?? Number.NEGATIVE_INFINITY)), [result, normalized, sort]);
-  const eligible = points.filter((point) => chartEligible(point, chartType)).filter((point) => !normalized || `${point.label} ${point.key}`.toLocaleLowerCase().includes(normalized));
-  const chartPoints = [...eligible].sort((a, b) => sort === 'name' ? a.label.localeCompare(b.label) : sort === 'percentage' ? (b.percentageChange ?? Number.NEGATIVE_INFINITY) - (a.percentageChange ?? Number.NEGATIVE_INFINITY) : (b.absoluteChange ?? Number.NEGATIVE_INFINITY) - (a.absoluteChange ?? Number.NEGATIVE_INFINITY)).slice(0, topN === 'all' ? undefined : Number(topN));
+  const rows = useMemo(() => sortComparisonPoints(points.filter((point) => !normalized || `${point.label} ${point.key} ${point.row.status}`.toLocaleLowerCase().includes(normalized)), sort).map((point) => point.row), [points, normalized, sort]);
+  const eligible = points.filter((point) => chartEligible(point, chartType));
+  const matchingEligible = eligible.filter((point) => !normalized || `${point.label} ${point.key}`.toLocaleLowerCase().includes(normalized));
+  const chartPoints = sortComparisonPoints(matchingEligible, sort).slice(0, topN === 'all' ? undefined : Number(topN));
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const [page, setPage] = useState(0);
   const visibleRows = rows.slice(Math.min(page, pageCount - 1) * pageSize, (Math.min(page, pageCount - 1) + 1) * pageSize);
-  const increases = eligible.filter((point) => (chartType === 'percentage_change' ? point.percentageChange : point.absoluteChange)! > 0).length;
-  const decreases = eligible.filter((point) => (chartType === 'percentage_change' ? point.percentageChange : point.absoluteChange)! < 0).length;
-  const missingChart = points.length - eligible.length;
+  const changeValue = (point: ComparisonChartPoint) => chartType === 'percentage_change' ? point.percentageChange : point.absoluteChange;
+  const increases = matchingEligible.filter((point) => (changeValue(point) ?? 0) > 0).length;
+  const decreases = matchingEligible.filter((point) => (changeValue(point) ?? 0) < 0).length;
+  const missingChart = result.rows.length - eligible.length;
+  const sortLabel = comparisonSortLabel(sort, result.metric.unit);
+  const selectionContext = sort === 'name'
+    ? 'This is an alphabetical selection, not a performance ranking.'
+    : 'Ranking reflects the selected exports, not the whole market.';
+  const sortOptions: Array<{ value: ComparisonChartSort; label: string }> = chartType === 'baseline_current'
+    ? [{ value: 'current_desc', label: 'Highest current value' }, { value: 'baseline_desc', label: 'Highest baseline value' }, { value: 'name', label: 'App name A–Z' }]
+    : chartType === 'absolute_change'
+      ? [{ value: 'increase_desc', label: 'Largest increase' }, { value: 'decrease_asc', label: 'Largest decrease' }]
+      : [{ value: 'percentage_desc', label: 'Highest percentage change' }, { value: 'percentage_asc', label: 'Lowest percentage change' }];
 
   return <div className="csv-analytics-workspace">
     <p className="csv-chart-summary">{result.summary.comparable_apps} app measurements are comparable. {increases} increased and {decreases} decreased in the selected view. Coverage: {result.summary.baseline_only_apps} baseline-only, {result.summary.current_only_apps} current-only, {result.summary.missing_data_apps} with missing or unstable identity, and {result.summary.invalid_observations} needing review. Missing values are never treated as zero.</p>
     <div className="csv-chart-toolbar">
-      <label>Visualization<select aria-label="Chart type" value={chartType} onChange={(event) => { setChartType(event.target.value as ComparisonChartType); setSelectedRow(null); }}><option value="baseline_current">Baseline vs current</option><option value="absolute_change">Absolute change</option><option value="percentage_change">Percentage change</option></select></label>
+      <label>Visualization<select aria-label="Chart type" value={chartType} onChange={(event) => { const nextType = event.target.value as ComparisonChartType; setChartType(nextType); setSort(defaultComparisonSort(nextType)); setSelectedRow(null); }}><option value="baseline_current">Baseline vs current</option><option value="absolute_change">Absolute change</option><option value="percentage_change">Percentage change</option></select></label>
       <label>Find app<input aria-label="Find app" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} placeholder="Search apps" /></label>
-      <label>Sort<select aria-label="Sort chart and table" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="name">App name</option><option value="change">Absolute change</option><option value="percentage">Percentage change</option></select></label>
-      {display === 'chart' && <label>Show<select aria-label="Top apps" value={topN} onChange={(event) => setTopN(event.target.value as typeof topN)}><option value="10">Top 10</option><option value="25">Top 25</option><option value="50">Top 50</option><option value="all">All eligible apps</option></select></label>}
+      <label>Sort<select aria-label="Sort chart and table" value={sort} onChange={(event) => setSort(event.target.value as ComparisonChartSort)}>{sortOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+      {display === 'chart' && <label>Show apps<select aria-label="Apps shown" value={topN} onChange={(event) => setTopN(event.target.value as typeof topN)}><option value="10">10 apps</option><option value="25">25 apps</option><option value="50">50 apps</option><option value="all">All eligible apps</option></select></label>}
       <button className="secondary-action" type="button" aria-pressed={display === 'table'} onClick={() => setDisplay(display === 'chart' ? 'table' : 'chart')}>{display === 'chart' ? 'View full table' : 'View chart'}</button>
     </div>
     {display === 'chart' ? chartPoints.length ? <>
+      <p className="csv-chart-selection-summary">Showing {chartPoints.length} of {matchingEligible.length} eligible apps{normalized ? ` matching this search (${eligible.length} chart-eligible in total)` : ''}, sorted by {sortLabel}. {selectionContext} The full table retains all {result.rows.length} app rows.</p>
       <div className="csv-chart-context"><strong>{result.metric.metric_definition}</strong><span>{result.geo} · {result.platform} · {periodLabel(result.baseline_period)} → {periodLabel(result.current_period)}</span><span>Source measurements remain unverified unless the source explicitly verifies them.</span></div>
       <PairedChart points={chartPoints} type={chartType} unit={result.metric.unit ?? ''} onSelect={setSelectedRow} />
       {missingChart > 0 && <p className="csv-chart-note">{missingChart} rows are not charted in this view because a paired, eligible value is unavailable. They remain in the full table; missing values are not treated as zero.</p>}

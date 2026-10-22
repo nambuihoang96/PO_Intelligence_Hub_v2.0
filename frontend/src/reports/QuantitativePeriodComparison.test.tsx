@@ -78,7 +78,7 @@ describe('QuantitativePeriodComparison', () => {
     expect(screen.getByText('+25 downloads')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Open source' })).toHaveLength(4);
     expect(screen.getAllByRole('link', { name: 'Open report' })).toHaveLength(4);
-    expect(screen.getAllByRole('option', { name: 'Percentage change' })).toHaveLength(2);
+    expect(screen.getByRole('option', { name: 'Percentage change' })).toBeTruthy();
   });
 
   it('uses backend percentage values and retains an unavailable value in the full table', async () => {
@@ -120,14 +120,57 @@ describe('QuantitativePeriodComparison', () => {
     fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
     fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
     await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
-    expect(screen.getByText('App 010')).toBeTruthy();
-    expect(screen.queryByText('App 011')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Top apps'), { target: { value: 'all' } });
     expect(screen.getByText('App 100')).toBeTruthy();
+    expect(screen.queryByText('App 090')).toBeNull();
+    expect(screen.getByText(/Showing 10 of 100 eligible apps, sorted by highest current value/)).toBeTruthy();
+    expect(screen.getByText(/not the whole market/)).toBeTruthy();
+    expect(screen.queryByText('Top 10')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Sort chart and table'), { target: { value: 'name' } });
+    expect(screen.getByText(/This is an alphabetical selection, not a performance ranking/)).toBeTruthy();
+    expect(screen.queryByText(/Ranking reflects the selected exports/)).toBeNull();
+    expect(screen.getByRole('button', { name: /Inspect evidence for App 001/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sort chart and table'), { target: { value: 'current_desc' } });
+    fireEvent.change(screen.getByLabelText('Apps shown'), { target: { value: 'all' } });
+    expect(screen.getByText('App 100')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Apps shown'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Find app'), { target: { value: 'App 0' } });
+    expect(await screen.findByText(/Showing 10 of 99 eligible apps matching this search \(100 chart-eligible in total\)/)).toBeTruthy();
+    expect(screen.queryByText('App 100')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Find app'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Apps shown'), { target: { value: 'all' } });
     fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
     expect(screen.getByText('Showing 50 of 100 app rows. Values and unavailable calculations are returned by the comparison service.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('App 100')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('App 001')).toBeTruthy();
+  });
+
+  it('uses a chart-appropriate default sort and updates the criterion when the chart changes', async () => {
+    const ranked = Array.from({ length: 20 }, (_, index) => {
+      const name = index === 19 ? 'Zebra Highest Current' : `App ${String(index + 1).padStart(2, '0')}`;
+      const base = source('old', 'October export', index === 0 ? 1000 : index + 10);
+      const later = source('new', 'November export', index === 19 ? 5000 : index + 20);
+      return { ...preview.rows[0], entity_key: `sensor_tower:${index}`, entity_name: name, baseline: base, current: later, evidence: [base, later], absolute_change: index === 18 ? -200 : index * 3, percentage_change: index === 5 ? null : index - 5 };
+    });
+    vi.mocked(reportApi.previewQuantitativeComparison).mockResolvedValue({ ...preview, summary: { ...preview.summary, comparable_apps: 20, distinct_apps: 20 }, rows: ranked });
+    render(<QuantitativePeriodComparison />);
+    fireEvent.change(await screen.findByLabelText('Baseline dataset'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
+    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
+    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
+    expect(screen.getByText('Zebra Highest Current')).toBeTruthy();
+    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('current_desc');
+    fireEvent.change(screen.getByLabelText('Chart type'), { target: { value: 'absolute_change' } });
+    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('increase_desc');
+    expect(screen.getByText(/sorted by largest increase/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sort chart and table'), { target: { value: 'decrease_asc' } });
+    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('decrease_asc');
+    fireEvent.change(screen.getByLabelText('Chart type'), { target: { value: 'percentage_change' } });
+    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('percentage_desc');
+    expect(screen.getByRole('option', { name: 'Lowest percentage change' })).toBeTruthy();
   });
 
   it('loads all pages of the dataset catalog so older exports remain selectable', async () => {
