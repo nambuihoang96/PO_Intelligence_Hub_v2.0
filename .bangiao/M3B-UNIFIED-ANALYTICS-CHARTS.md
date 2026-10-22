@@ -81,4 +81,4 @@ Not verified:
 
 ## Commit
 
-Commit SHA: to be filled after commit.
+Implementation commit SHA: `90007b0e8ca23b50148356cad0c92d21b7debf70`.
