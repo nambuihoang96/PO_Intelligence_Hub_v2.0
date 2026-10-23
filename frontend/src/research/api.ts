@@ -5,6 +5,7 @@ export type ResearchProject = {
   name: string;
   owner: string | null;
   category: string | null;
+  workspace_state_json?: { selected_app_ids?: string[]; selected_app_criterion?: string | null };
   created_at: string;
   updated_at: string;
 };
@@ -148,6 +149,9 @@ export const researchApi = {
   },
   createProject(payload: Pick<ResearchProject, 'name' | 'owner' | 'category'>): Promise<ResearchProject> {
     return request('/projects', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  updateWorkspaceState(projectId: string, selected_app_ids: string[], selection_criterion: string | null = null): Promise<ResearchProject> {
+    return request(`/projects/${encodeURIComponent(projectId)}/workspace-state`, { method: 'PUT', body: JSON.stringify({ selected_app_ids, selection_criterion }) });
   },
   createPlan(projectId: string, payload: ResearchPlanPayload): Promise<ResearchPlan> {
     return request(`/projects/${encodeURIComponent(projectId)}/plans`, { method: 'POST', body: JSON.stringify(payload) });

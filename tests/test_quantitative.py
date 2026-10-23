@@ -865,16 +865,18 @@ class QuantitativeMigrationCompatibilityTest(unittest.TestCase):
                 original_selections = [{"item_type": "entity", "item_key": "historic-key"}]
                 original_workspace = {"custom_dimensions": ["historic dimension"], "entries": []}
                 try:
-                    with Session(engine) as session:
-                        session.add(ImportedResearchReport(
-                            id="historic-report", question="Old report", geo="US", os="Android",
-                            research_period="2025", content=original_content,
-                            research_data_json={"executive_summary": "Old summary"},
-                            parse_status="PARSED", benchmark_selections_json=original_selections,
-                            benchmark_workspace_json=original_workspace,
-                            content_sha256="a" * 64,
-                        ))
-                        session.commit()
+                    # Insert using the 0006 schema. The current ORM model also
+                    # knows about columns introduced by later migrations.
+                    with engine.begin() as connection:
+                        connection.exec_driver_sql(
+                            "INSERT INTO imported_research_reports "
+                            "(id, question, geo, os, research_period, content, content_sha256, origin, imported_at, "
+                            "research_data_json, parse_status, extraction_error, benchmark_selections_json, benchmark_workspace_json) "
+                            "VALUES ('historic-report', 'Old report', 'US', 'Android', '2025', ?, ?, "
+                            "'chatgpt_user_import', CURRENT_TIMESTAMP, ?, 'PARSED', NULL, ?, ?)",
+                            (original_content, "a" * 64, json.dumps({"executive_summary": "Old summary"}),
+                             json.dumps(original_selections), json.dumps(original_workspace)),
+                        )
                 finally:
                     engine.dispose()
                 command.upgrade(config, "head")

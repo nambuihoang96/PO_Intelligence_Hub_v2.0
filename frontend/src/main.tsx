@@ -79,7 +79,7 @@ const pages: Page[] = [
     title: 'Compare CSV periods',
     intro: 'Compare compatible source exports while preserving the complete app universe and evidence trail.',
     emptyTitle: 'No comparison data is available',
-    emptyCopy: 'Import CSV exports linked to a research report to compare measurement periods.',
+    emptyCopy: 'Create a research workspace, import CSV exports there, then compare compatible periods.',
   },
 ];
 
@@ -140,14 +140,15 @@ function App() {
   const projectId = params.get('projectId');
   const runId = params.get('runId');
   const projectSelected = Boolean(projectId);
+  const dataWorkspace = projectSelected && params.get('view') === 'data';
   const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : page.path === '/research/new' ? 'Create a research project'
     : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
-      : page.path === '/sources' && runId ? 'Run evidence' : projectSelected ? 'Research plan' : page.title;
+      : page.path === '/sources' && runId ? 'Run evidence' : dataWorkspace ? 'Research workspace' : projectSelected ? 'Research plan' : page.title;
   const pageIntro = page.path === '/research/new'
     ? 'Set up a project, then draft its first research plan.'
     : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Browse saved research sessions and their selected plan versions.'
       : page.path === '/sources' && runId ? 'Add and review manual evidence linked to this research run.'
-        : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
+        : dataWorkspace ? 'Explore saved CSV data, compare periods, and bring ChatGPT findings into this same workspace.' : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
 
   return (
     <div className={`app-shell${researchPage ? ' research-page' : ''}`}>
@@ -206,7 +207,7 @@ function App() {
             )}
           </section>
 
-          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/compare-periods' ? <QuantitativePeriodComparison /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
+          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/compare-periods' ? <QuantitativePeriodComparison /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : params.get('view') === 'data' ? 'data' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

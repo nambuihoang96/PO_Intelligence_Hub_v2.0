@@ -56,8 +56,23 @@ class ResearchProjectRead(APIModel):
     name: str
     owner: str | None
     category: str | None
+    workspace_state_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+
+class ResearchWorkspaceStateUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    selected_app_ids: list[str] = Field(default_factory=list, max_length=500)
+    selection_criterion: str | None = Field(default=None, max_length=500)
+
+    @field_validator("selected_app_ids")
+    @classmethod
+    def selected_ids_are_unique(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value]
+        if any(not item or len(item) > 300 for item in cleaned) or len(cleaned) != len(set(cleaned)):
+            raise ValueError("Selected app references must be non-blank, unique, and at most 300 characters.")
+        return cleaned
 
 
 class ResearchPlanCreate(APIModel):
@@ -424,6 +439,7 @@ class ImportedReportCreate(APIModel):
     research_period: str | None = Field(default=None, max_length=200)
     content: str = Field(min_length=1, max_length=2_000_000)
     structured_json: str | None = Field(default=None, max_length=2_000_000)
+    project_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @field_validator("research_period")
     @classmethod
@@ -454,6 +470,7 @@ class ImportedReportCreate(APIModel):
 
 class ImportedReportSummary(APIModel):
     id: str
+    project_id: str | None = None
     question: str
     geo: str
     os: str
@@ -675,7 +692,8 @@ class DatasetMetadataUpdate(APIModel):
 
 class DatasetMetadataRead(APIModel):
     dataset_id: str
-    report_id: str
+    report_id: str | None = None
+    project_id: str | None = None
     filename: str
     content_sha256: str
     revision: int
@@ -685,7 +703,8 @@ class DatasetMetadataRead(APIModel):
 
 class QuantitativeDatasetRead(APIModel):
     id: str
-    report_id: str
+    report_id: str | None = None
+    project_id: str | None = None
     filename: str
     content_sha256: str
     field_mapping: dict[str, Any]
@@ -767,8 +786,9 @@ class QuantitativeComparisonPeriod(APIModel):
 
 class QuantitativeDatasetCatalogItem(APIModel):
     id: str
-    report_id: str
-    report_question: str
+    report_id: str | None = None
+    project_id: str | None = None
+    report_question: str | None = None
     filename: str
     content_sha256: str
     created_at: datetime
@@ -828,8 +848,8 @@ class QuantitativeComparisonSource(APIModel):
     verification_status: Literal["unverified", "needs_review", "verified"]
     dataset_id: str
     filename: str
-    report_id: str
-    report_question: str
+    report_id: str | None = None
+    report_question: str | None = None
     source_row_number: int | None
     source_reference: str | None
     provenance_id: str | None

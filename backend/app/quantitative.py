@@ -284,9 +284,9 @@ def assess_report_observations(
 def parse_csv_observations(
     csv_text: str,
     *,
-    report_id: str,
-    report_geo: str,
-    report_platform: str,
+    report_id: str | None,
+    report_geo: str | None,
+    report_platform: str | None,
     report_period: str | None,
     entities: list[dict[str, Any]],
     field_mapping: dict[str, str],
@@ -318,7 +318,7 @@ def parse_csv_observations(
             label = "GEO" if field == "geo" else field.replace("_", " ").capitalize()
             raise ValueError(f"The selected {label} column '{header}' does not look like a {label.casefold()} field. Choose a semantically matching CSV column.")
     if "entity_id" not in field_mapping and "entity_name" not in field_mapping:
-        raise ValueError("Map an entity ID or entity name column so CSV rows can be matched to report entities.")
+        raise ValueError("Map an entity ID or entity name column so each CSV observation keeps its source identity.")
 
     metric_mappings = metric_mappings or []
     explicit_values = explicit_values or {}
@@ -358,7 +358,7 @@ def parse_csv_observations(
     unmatched_entities: list[dict[str, Any]] = []
     seen_observations: dict[tuple[str, ...], int] = {}
     duplicate_rows = 0
-    years = _report_years(report_period)
+    years = _report_years(report_period) if report_period else None
     populated_row_count = 0
     for row_number, row in enumerate(reader, 2):
         if None in row:
@@ -458,24 +458,25 @@ def parse_csv_observations(
             if parsed_source.scheme.casefold() not in {"http", "https"} or not parsed_source.hostname or parsed_source.username or parsed_source.password:
                 source_dimension_reasons.append(f"CSV row {row_number} source must be an HTTP(S) URL without credentials.")
                 source_reference = None
-        if geo and report_geo.strip().casefold() in {"unknown", "not applicable", "n/a"}:
+        if report_geo and geo and report_geo.strip().casefold() in {"unknown", "not applicable", "n/a"}:
             compatibility_reasons.append(f"Report GEO scope '{report_geo}' is unspecified.")
-        elif geo and not _scope_compatible(geo, report_geo, "geo"):
+        elif report_geo and geo and not _scope_compatible(geo, report_geo, "geo"):
             compatibility_reasons.append(f"GEO '{geo}' differs from report scope '{report_geo}'.")
-        if platform and report_platform.strip().casefold() in {"unknown", "not applicable", "n/a"}:
+        if report_platform and platform and report_platform.strip().casefold() in {"unknown", "not applicable", "n/a"}:
             compatibility_reasons.append(f"Report platform scope '{report_platform}' is unspecified.")
-        elif platform and not _scope_compatible(platform, report_platform, "platform"):
+        elif report_platform and platform and not _scope_compatible(platform, report_platform, "platform"):
             compatibility_reasons.append(f"Platform '{platform}' differs from report scope '{report_platform}'.")
         if years and start_date and end_date and (end_date.year < years[0] or start_date.year > years[1]):
             compatibility_reasons.append("Observation period does not overlap the report period.")
 
-        scope_compatible: bool | None = True
-        for supplied, report_scope, dimension in ((geo, report_geo, "GEO"), (platform, report_platform, "platform")):
-            if not supplied or report_scope.strip().casefold() in {"unknown", "not applicable", "n/a"}:
-                if scope_compatible is not False:
-                    scope_compatible = None
-            elif not _scope_compatible(supplied, report_scope, "geo" if dimension == "GEO" else "platform"):
-                scope_compatible = False
+        scope_compatible: bool | None = None if not (report_geo and report_platform) else True
+        if report_geo and report_platform:
+            for supplied, report_scope, dimension in ((geo, report_geo, "GEO"), (platform, report_platform, "platform")):
+                if not supplied or report_scope.strip().casefold() in {"unknown", "not applicable", "n/a"}:
+                    if scope_compatible is not False:
+                        scope_compatible = None
+                elif not _scope_compatible(supplied, report_scope, "geo" if dimension == "GEO" else "platform"):
+                    scope_compatible = False
 
         if metric_mappings:
             measures = [
@@ -533,7 +534,7 @@ def parse_csv_observations(
                 validation_reasons=row_reasons,
                 source_validation_reasons=row_reasons,
                 report_compatibility_reasons=compatibility_reasons,
-                report_compatibility="incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and geo and platform and ((period_start and period_end) or (period_semantics == "snapshot" and snapshot)) else "unknown"),
+                report_compatibility="unknown" if report_id is None else ("incompatible" if scope_compatible is False or compatibility_reasons else ("compatible" if scope_compatible is True and geo and platform and ((period_start and period_end) or (period_semantics == "snapshot" and snapshot)) else "unknown")),
                 scope_compatible=scope_compatible,
                 import_status="imported",
                 source_row_number=row_number,
@@ -606,7 +607,7 @@ def parse_csv_observations(
     unique_reasons = list(dict.fromkeys(reasons))
     compatible_count = sum(item.get("scope_compatible") is True for item in rows)
     incompatible_count = sum(item.get("scope_compatible") is False for item in rows)
-    status = "compatible" if all(item.get("complete_observation") and item.get("report_compatibility") == "compatible" for item in rows) and not ambiguities else ("incompatible" if rows and incompatible_count == len(rows) else "partial")
+    status = "compatible" if (all(item.get("complete_observation") for item in rows) and (report_id is None or all(item.get("report_compatibility") == "compatible" for item in rows)) and not ambiguities) else ("incompatible" if rows and incompatible_count == len(rows) else "partial")
     if duplicate_rows:
         unique_reasons.append(f"{duplicate_rows} duplicate observation row(s) need review.")
     mapping_requests = list({

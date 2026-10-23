@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError, researchApi } from './api';
 import type { ResearchPlan, ResearchPlanPayload, ResearchProject, ResearchRun } from './api';
+import { DataFirstWorkspace } from './DataFirstWorkspace';
 
 type PlanForm = {
   question: string;
@@ -103,11 +104,11 @@ function ProjectList({
         ) : (
           <div className="project-list">
             {projects.map((project) => (
-              <a className="project-row" href={`/research?projectId=${encodeURIComponent(project.id)}`} key={project.id}>
+              <div className="project-row-wrap" key={project.id}><a className="project-row" href={`/research?projectId=${encodeURIComponent(project.id)}`}>
                 <span className="project-mark" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span>
                 <span className="project-row-copy"><strong>{project.name}</strong><small>{project.category || 'Uncategorized'}{project.owner ? ` · ${project.owner}` : ''}</small></span>
                 <span className="row-arrow" aria-hidden="true">→</span>
-              </a>
+              </a><a className="secondary-action project-data-link" href={`/research?projectId=${encodeURIComponent(project.id)}&view=data`}>Open workspace</a></div>
             ))}
             {nextCursor && <button className="secondary-action load-more" type="button" onClick={onLoadMore}>Load more projects</button>}
           </div>
@@ -122,6 +123,7 @@ function NewProjectForm() {
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
   const [category, setCategory] = useState('');
+  const [startWithCsv, setStartWithCsv] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -133,7 +135,7 @@ function NewProjectForm() {
       const project = await researchApi.createProject({
         name: name.trim(), owner: owner.trim() || null, category: category.trim() || null,
       });
-      window.location.assign(`/research?projectId=${encodeURIComponent(project.id)}`);
+      window.location.assign(`/research?projectId=${encodeURIComponent(project.id)}${startWithCsv ? '&view=data' : ''}`);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : new ApiError('The project could not be created.', 0, 'REQUEST_FAILED', {}));
     } finally {
@@ -144,16 +146,17 @@ function NewProjectForm() {
   return (
     <div className="research-layout">
       <form className="research-panel research-form" onSubmit={submit}>
-        <div className="panel-heading"><div><span className="state-label">STEP 1 OF 2</span><h2>Create a research project</h2></div></div>
-        <p className="form-intro">First name the project. You can draft its research plan on the next screen.</p>
+        <div className="panel-heading"><div><span className="state-label">NEW RESEARCH WORKSPACE</span><h2>Start with the material you have</h2></div></div>
+        <p className="form-intro">Name the workspace. You can start from a question or explore CSV data first. No research starts automatically.</p>
         {error && <ErrorNotice error={error} />}
         <label className="field-label" htmlFor="project-name">Project name <span>Required</span></label>
         <input id="project-name" autoComplete="off" maxLength={200} required value={name} onChange={(event) => setName(event.target.value)} placeholder="For example, Cozy puzzle market scan" />
+        <fieldset className="workspace-start-choice"><legend>How would you like to begin?</legend><label><input type="radio" name="workspace-start" checked={!startWithCsv} onChange={() => setStartWithCsv(false)} />Start with a research question</label><label><input type="radio" name="workspace-start" checked={startWithCsv} onChange={() => setStartWithCsv(true)} />Start with CSV market data</label><small>Both paths open the same workspace. You can combine reports and datasets later.</small></fieldset>
         <div className="field-grid">
           <div><label className="field-label" htmlFor="project-owner">Owner <span>Optional</span></label><input id="project-owner" maxLength={200} value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="Person or team" /></div>
           <div><label className="field-label" htmlFor="project-category">Category <span>Optional</span></label><input id="project-category" maxLength={120} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Games, productivity…" /></div>
         </div>
-        <div className="form-actions"><a className="secondary-action" href="/research">Cancel</a><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create project and continue'}</button></div>
+        <div className="form-actions"><a className="secondary-action" href="/research">Cancel</a><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Creating…' : startWithCsv ? 'Create workspace and import CSV' : 'Create workspace and continue'}</button></div>
       </form>
       <aside className="research-side-note"><strong>No research starts automatically</strong><p>Creating a project does not start a research run or connect a source.</p><span>Project and plan setup only.</span></aside>
     </div>
@@ -252,7 +255,7 @@ function PlanEditor({ projectId }: { projectId: string }) {
       <div className="research-main-column">
         <form className="research-panel research-form" onSubmit={save}>
           <div className="panel-heading"><div><span className="state-label">{latestPlan ? `PLAN VERSION ${activePlan?.version ?? latestPlan.version}` : 'INITIAL PLAN'}</span><h2>{project.name}</h2></div>
-            <a className="text-button" href="/research">All projects</a>
+            <div><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>Open workspace data</a> <a className="text-button" href="/research">All projects</a></div>
           </div>
           {readOnly && <div className="read-only-note" role="status">This saved plan version is read-only. Editing the latest version will create a new version.</div>}
           {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
@@ -313,8 +316,9 @@ function PlanEditor({ projectId }: { projectId: string }) {
   );
 }
 
-export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' }) {
+export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' | 'data' }) {
   const projectId = new URLSearchParams(window.location.search).get('projectId');
+  const view = new URLSearchParams(window.location.search).get('view');
   const [projects, setProjects] = useState<ResearchProject[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -336,6 +340,7 @@ export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' }) {
 
   useEffect(() => { if (!projectId && mode === 'list') void loadProjects(); }, [projectId, mode]);
 
+  if (projectId && (mode === 'data' || view === 'data')) return <DataFirstWorkspace projectId={projectId} />;
   if (projectId) return <PlanEditor projectId={projectId} />;
   if (mode === 'new') return <NewProjectForm />;
   return <ProjectList projects={projects} nextCursor={nextCursor} onLoadMore={() => void loadProjects(nextCursor ?? undefined)} loading={loading} error={error} onRetry={() => void loadProjects()} />;

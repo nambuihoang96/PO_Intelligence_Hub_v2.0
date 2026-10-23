@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
-from backend.app.models import ImportedResearchReport, QuantitativeDataset, new_id
+from backend.app.models import ImportedResearchReport, QuantitativeDataset, ResearchProject, new_id
 from backend.app.quantitative import assess_observation_readiness, assess_report_observations, csv_digest, detect_csv_delimiter, parse_csv_observations
 from backend.app.dataset_metadata import effective_observations, metadata_view, review_state, updated_review
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
@@ -94,6 +94,9 @@ def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured
 
 @router.post("", response_model=ImportedReportCreated, status_code=status.HTTP_201_CREATED, responses={422: {"description": "Invalid report input"}})
 def import_report(payload: ImportedReportCreate, response: Response, session: SessionDependency) -> ImportedReportCreated:
+    project = session.get(ResearchProject, payload.project_id) if payload.project_id else None
+    if payload.project_id and project is None:
+        raise HTTPException(status_code=404, detail={"code": "PROJECT_NOT_FOUND", "message": "Research workspace was not found."})
     digest = hashlib.sha256(payload.content.encode("utf-8")).hexdigest()
     try:
         research_data, parse_status, extraction_error = normalize_report(payload.content, payload.structured_json)
@@ -108,6 +111,13 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
         ) from exc
     existing = session.scalar(select(ImportedResearchReport).where(ImportedResearchReport.content_sha256 == digest))
     if existing is not None:
+        if project:
+            if existing.project_id not in (None, project.id):
+                raise HTTPException(status_code=409, detail={"code": "REPORT_ALREADY_LINKED", "message": "This report already belongs to another research workspace."})
+            if existing.project_id is None:
+                existing.project_id = project.id
+                session.commit()
+                session.refresh(existing)
         available = False
         if parse_status == "PARSED":
             incoming = research_data.model_dump(mode="json")
@@ -126,6 +136,7 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
         return _read(existing, duplicate=True, structured_update_available=available)
 
     report = ImportedResearchReport(
+        project_id=project.id if project else None,
         question=payload.question,
         geo=payload.geo,
         os=payload.os,
@@ -185,7 +196,7 @@ def get_report(report_id: str, session: SessionDependency) -> ImportedReportRead
     return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
 
 
-def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchReport, duplicate: bool = False) -> QuantitativeDatasetRead:
+def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchReport | None = None, duplicate: bool = False) -> QuantitativeDatasetRead:
     saved_mapping = dataset.field_mapping_json or {}
     if "field_mapping" in saved_mapping:
         field_mapping = saved_mapping.get("field_mapping", {})
@@ -207,17 +218,19 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
     # compatible groups are formed from peer observations in Analytics.
     comparison_count = sum(bool(item.get("dataset_comparison_ready")) for item in observations)
     incompatible_count = sum(item.get("report_compatibility") == "incompatible" for item in observations)
-    compatibility = "compatible" if observations and all(item.get("report_compatibility") == "compatible" for item in observations) else ("incompatible" if observations and incompatible_count == len(observations) else "partial")
+    compatibility = dataset.compatibility_status if report is None else ("compatible" if observations and all(item.get("report_compatibility") == "compatible" for item in observations) else ("incompatible" if observations and incompatible_count == len(observations) else "partial"))
     source_entities = {item.get("source_entity_id") or item.get("entity_id") for item in observations if item.get("source_entity_id") or item.get("entity_id")}
     metric_identities = {item.get("metric_id") for item in observations if item.get("metric_id")}
     try:
-        source_rows = max(0, sum(1 for _ in csv.reader(io.StringIO(dataset.original_csv, newline=""), delimiter=detect_csv_delimiter(dataset.original_csv))) - 1)
+        parsed_rows = csv.reader(io.StringIO(dataset.original_csv, newline=""), delimiter=detect_csv_delimiter(dataset.original_csv))
+        source_rows = max(0, sum(1 for row in parsed_rows if any(value.strip() for value in row)) - 1)
     except (ValueError, csv.Error):
         source_rows = 0
     validation_reasons = list(dict.fromkeys(reason for item in observations for reason in item.get("validation_reasons", [])))
     return QuantitativeDatasetRead.model_validate({
         "id": dataset.id,
         "report_id": dataset.report_id,
+        "project_id": dataset.project_id,
         "filename": dataset.filename,
         "content_sha256": dataset.content_sha256,
         "field_mapping": field_mapping,
@@ -245,15 +258,15 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
     })
 
 
-def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatasetImport) -> QuantitativeDatasetPreview:
+def _preview_dataset(report: ImportedResearchReport | None, payload: QuantitativeDatasetImport) -> QuantitativeDatasetPreview:
     try:
         observations, reasons, ambiguities, compatibility = parse_csv_observations(
             payload.csv_content,
-            report_id=report.id,
-            report_geo=report.geo,
-            report_platform=report.os,
-            report_period=report.research_period,
-            entities=(report.research_data_json or {}).get("entities", []),
+            report_id=report.id if report else None,
+            report_geo=report.geo if report else None,
+            report_platform=report.os if report else None,
+            report_period=report.research_period if report else None,
+            entities=(report.research_data_json or {}).get("entities", []) if report else [],
             field_mapping=payload.field_mapping,
             entity_mappings=payload.entity_mappings,
             metric_mappings=[item.model_dump() for item in payload.metric_mappings],
@@ -282,7 +295,7 @@ def _preview_dataset(report: ImportedResearchReport, payload: QuantitativeDatase
         matched_entities=len({item.get("source_entity_id") for item in observations if item.get("entity_resolution_state") == "matched" and item.get("source_entity_id")}),
         dataset_analysis_ready_observations=sum(bool(item.get("analysis_ready")) for item in observations),
         dataset_comparison_ready_observations=sum(bool(item.get("dataset_comparison_ready")) for item in observations),
-        report_compatible_observations=sum(item.get("report_compatibility") == "compatible" for item in observations),
+        report_compatible_observations=sum(item.get("report_compatibility") == "compatible" for item in observations) if report else 0,
     )
 
 
@@ -313,6 +326,15 @@ def import_quantitative_dataset(
         QuantitativeDataset.report_id == report_id,
         QuantitativeDataset.content_sha256 == digest,
     ))
+    if existing is None and report.project_id:
+        existing = session.scalar(select(QuantitativeDataset).where(
+            QuantitativeDataset.project_id == report.project_id,
+            QuantitativeDataset.content_sha256 == digest,
+        ))
+        if existing is not None and existing.report_id is None:
+            existing.report_id = report.id
+            session.commit()
+            session.refresh(existing)
     if existing is not None:
         response.status_code = status.HTTP_200_OK
         return _dataset_read(existing, report=report, duplicate=True)
@@ -335,6 +357,7 @@ def import_quantitative_dataset(
     dataset = QuantitativeDataset(
         id=dataset_id,
         report_id=report_id,
+        project_id=report.project_id,
         filename=payload.filename,
         content_sha256=digest,
         original_csv=payload.csv_content,
@@ -368,8 +391,9 @@ def import_quantitative_dataset(
 
 @router.get("/{report_id}/quantitative-datasets/{dataset_id}/metadata", response_model=DatasetMetadataRead)
 def read_dataset_metadata(report_id: str, dataset_id: str, session: SessionDependency):
+    report = session.get(ImportedResearchReport, report_id)
     dataset = session.get(QuantitativeDataset, dataset_id)
-    if dataset is None or dataset.report_id != report_id:
+    if report is None or dataset is None or (dataset.report_id != report_id and (not report.project_id or dataset.project_id != report.project_id)):
         raise HTTPException(404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
     return metadata_view(dataset)
 
@@ -378,7 +402,7 @@ def read_dataset_metadata(report_id: str, dataset_id: str, session: SessionDepen
 def get_quantitative_dataset(report_id: str, dataset_id: str, session: SessionDependency):
     dataset = session.get(QuantitativeDataset, dataset_id)
     report = session.get(ImportedResearchReport, report_id)
-    if dataset is None or report is None or dataset.report_id != report_id:
+    if dataset is None or report is None or (dataset.report_id != report_id and dataset.project_id != report.project_id):
         raise HTTPException(404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
     return _dataset_read(dataset, report=report)
 
@@ -394,8 +418,9 @@ def find_quantitative_dataset(report_id: str, digest: str, session: SessionDepen
 
 @router.put("/{report_id}/quantitative-datasets/{dataset_id}/metadata", response_model=DatasetMetadataRead)
 def update_dataset_metadata(report_id: str, dataset_id: str, payload: DatasetMetadataUpdate, session: SessionDependency):
+    report = session.get(ImportedResearchReport, report_id)
     dataset = session.get(QuantitativeDataset, dataset_id)
-    if dataset is None or dataset.report_id != report_id:
+    if report is None or dataset is None or (dataset.report_id != report_id and (not report.project_id or dataset.project_id != report.project_id)):
         raise HTTPException(404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
     state = updated_review(dataset, payload)
     if state == review_state(dataset):
@@ -426,7 +451,7 @@ def revalidate_quantitative_dataset(
     """Rebuild one saved dataset deterministically from its preserved CSV and mappings."""
     report = session.get(ImportedResearchReport, report_id)
     dataset = session.get(QuantitativeDataset, dataset_id)
-    if report is None or dataset is None or dataset.report_id != report_id:
+    if report is None or dataset is None or (dataset.report_id != report_id and dataset.project_id != report.project_id):
         raise HTTPException(status_code=404, detail={"code": "DATASET_NOT_FOUND", "message": "Dataset was not found for this report."})
     saved = dataset.field_mapping_json or {}
     if not dataset.original_csv or not saved:
@@ -496,12 +521,15 @@ def list_quantitative_datasets(
     report = session.get(ImportedResearchReport, report_id)
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
-    query = select(QuantitativeDataset).where(QuantitativeDataset.report_id == report_id).order_by(
+    query = select(QuantitativeDataset).where(or_(
+        QuantitativeDataset.report_id == report_id,
+        QuantitativeDataset.project_id == report.project_id if report.project_id else False,
+    )).order_by(
         QuantitativeDataset.created_at.desc(), QuantitativeDataset.id.desc()
     )
     if cursor:
         cursor_dataset = session.get(QuantitativeDataset, cursor)
-        if cursor_dataset is None or cursor_dataset.report_id != report_id:
+        if cursor_dataset is None or (cursor_dataset.report_id != report_id and cursor_dataset.project_id != report.project_id):
             raise HTTPException(status_code=422, detail={"code": "INVALID_CURSOR", "message": "Dataset cursor was not found for this report."})
         query = query.where(
             or_(

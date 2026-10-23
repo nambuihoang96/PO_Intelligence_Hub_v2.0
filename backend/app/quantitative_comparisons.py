@@ -146,7 +146,7 @@ def _observation_usable(row: dict[str, Any], dataset: QuantitativeDataset) -> bo
     )
 
 
-def _dataset_catalog(dataset: QuantitativeDataset, report: ImportedResearchReport) -> QuantitativeDatasetCatalogItem:
+def _dataset_catalog(dataset: QuantitativeDataset, report: ImportedResearchReport | None = None) -> QuantitativeDatasetCatalogItem:
     observations = effective_observations(dataset, report)
     metrics: dict[str, dict[str, Any]] = {}
     periods: dict[str, dict[str, Any]] = {}
@@ -197,7 +197,8 @@ def _dataset_catalog(dataset: QuantitativeDataset, report: ImportedResearchRepor
         "platforms": sorted(item["platforms"]), "warnings": sorted(item["warnings"])[:6],
     }) for item in periods.values()]
     return QuantitativeDatasetCatalogItem(
-        id=dataset.id, report_id=dataset.report_id, report_question=report.question,
+        id=dataset.id, report_id=dataset.report_id, project_id=dataset.project_id,
+        report_question=report.question if report else None,
         filename=dataset.filename, content_sha256=dataset.content_sha256,
         created_at=dataset.created_at, compatibility_status=dataset.compatibility_status,
         metrics=metric_items, periods=period_items, geo_values=sorted(geos),
@@ -284,7 +285,7 @@ def _period_compatibility(left: QuantitativeComparisonPeriod, left_semantics: st
 
 
 def _source_read(
-    row: dict[str, Any], dataset: QuantitativeDataset, report: ImportedResearchReport,
+    row: dict[str, Any], dataset: QuantitativeDataset, report: ImportedResearchReport | None = None,
     *, confirmed_semantics: str | None = None,
 ) -> QuantitativeComparisonSource:
     row = _with_confirmed_semantics(row, confirmed_semantics)
@@ -296,7 +297,7 @@ def _source_read(
         methodology=row.get("methodology"), entity_name=row.get("source_entity_name") or row.get("entity_name"),
         source_entity_id=row.get("source_entity_id"), source_provider=row.get("source_provider"),
         verification_status=row.get("verification_status", "unverified"), dataset_id=dataset.id,
-        filename=dataset.filename, report_id=report.id, report_question=report.question,
+        filename=dataset.filename, report_id=dataset.report_id, report_question=report.question if report else None,
         source_row_number=row.get("source_row_number"), source_reference=row.get("source_reference"),
         provenance_id=row.get("provenance_id"), validation_reasons=_observation_warnings(row, dataset),
         metadata_provenance=row.get("metadata_provenance", {}),
@@ -356,8 +357,15 @@ def list_comparison_datasets(
     session: Session = Depends(get_session),
     cursor: str | None = None,
     limit: int = Query(50, ge=1, le=100),
+    project_id: str | None = None,
 ) -> QuantitativeDatasetCatalogPage:
     query = select(QuantitativeDataset).order_by(QuantitativeDataset.created_at.desc(), QuantitativeDataset.id.desc())
+    if project_id:
+        workspace_report_ids = select(ImportedResearchReport.id).where(ImportedResearchReport.project_id == project_id)
+        query = query.where(or_(
+            QuantitativeDataset.project_id == project_id,
+            QuantitativeDataset.report_id.in_(workspace_report_ids),
+        ))
     if cursor:
         cursor_dataset = session.get(QuantitativeDataset, cursor)
         if cursor_dataset is None:
@@ -371,9 +379,8 @@ def list_comparison_datasets(
     selected = rows[:limit]
     items: list[QuantitativeDatasetCatalogItem] = []
     for dataset in selected:
-        report = session.get(ImportedResearchReport, dataset.report_id)
-        if report is not None:
-            items.append(_dataset_catalog(dataset, report))
+        report = session.get(ImportedResearchReport, dataset.report_id) if dataset.report_id else None
+        items.append(_dataset_catalog(dataset, report))
     return QuantitativeDatasetCatalogPage(items=items, next_cursor=selected[-1].id if has_more and selected else None, limit=limit)
 
 
@@ -388,10 +395,8 @@ def preview_quantitative_comparison(
         raise HTTPException(status_code=404, detail={"code": "DATASET_NOT_FOUND", "message": "One or both selected CSV datasets were not found."})
     if baseline.content_sha256 == current.content_sha256:
         raise HTTPException(status_code=422, detail={"code": "DUPLICATE_DATASET_SELECTION", "message": "These files contain identical CSV data. Choose a different reporting export."})
-    baseline_report = session.get(ImportedResearchReport, baseline.report_id)
-    current_report = session.get(ImportedResearchReport, current.report_id)
-    if baseline_report is None or current_report is None:
-        raise HTTPException(status_code=409, detail={"code": "DATASET_REPORT_MISSING", "message": "A selected dataset has lost its report provenance; no comparison was produced."})
+    baseline_report = session.get(ImportedResearchReport, baseline.report_id) if baseline.report_id else None
+    current_report = session.get(ImportedResearchReport, current.report_id) if current.report_id else None
     left_catalog, right_catalog = _dataset_catalog(baseline, baseline_report), _dataset_catalog(current, current_report)
     left_period = _period_from_catalog(left_catalog, payload.baseline_period_key)
     right_period = _period_from_catalog(right_catalog, payload.current_period_key)

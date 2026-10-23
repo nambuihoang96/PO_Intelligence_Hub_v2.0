@@ -37,6 +37,7 @@ class ResearchProject(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     owner: Mapped[str | None] = mapped_column(String(200))
     category: Mapped[str | None] = mapped_column(String(120))
+    workspace_state_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -146,9 +147,11 @@ class ImportedResearchReport(Base):
         UniqueConstraint("content_sha256", name="uq_imported_research_reports_content_sha256"),
         CheckConstraint("origin = 'chatgpt_user_import'", name="ck_imported_research_reports_origin"),
         Index("ix_imported_research_reports_imported_id", "imported_at", "id"),
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"]),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str | None] = mapped_column(String(36))
     question: Mapped[str] = mapped_column(Text, nullable=False)
     geo: Mapped[str] = mapped_column(String(100), nullable=False)
     os: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -165,19 +168,22 @@ class ImportedResearchReport(Base):
 
 
 class QuantitativeDataset(Base):
-    """CSV observations linked to one report; never globally applied."""
+    """Preserved CSV dataset optionally owned by a workspace and/or report."""
 
     __tablename__ = "quantitative_datasets"
     __table_args__ = (
         UniqueConstraint("report_id", "content_sha256", name="uq_quant_datasets_report_hash"),
+        UniqueConstraint("project_id", "content_sha256", name="uq_quant_datasets_project_hash"),
+        CheckConstraint("report_id IS NOT NULL OR project_id IS NOT NULL", name="ck_quant_datasets_has_owner"),
         CheckConstraint("compatibility_status IN ('compatible','partial','incompatible')", name="ck_quant_datasets_compatibility"),
         Index("ix_quant_datasets_report_created", "report_id", "created_at"),
+        Index("ix_quant_datasets_project_created", "project_id", "created_at"),
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT", name="fk_quant_datasets_project"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    report_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("imported_research_reports.id", ondelete="RESTRICT"), nullable=False
-    )
+    report_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("imported_research_reports.id", ondelete="RESTRICT"))
+    project_id: Mapped[str | None] = mapped_column(String(36))
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     original_csv: Mapped[str] = mapped_column(Text, nullable=False)

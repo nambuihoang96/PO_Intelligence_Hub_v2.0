@@ -52,6 +52,43 @@ class DatabaseMigrationTest(unittest.TestCase):
         finally:
             engine.dispose()
 
+    def test_workspace_migration_preserves_existing_report_csv_and_po_state(self) -> None:
+        command.upgrade(self.config, "20261020_0007")
+        connection = sqlite3.connect(get_database_path())
+        try:
+            connection.execute(
+                "INSERT INTO research_projects (id, name, created_at, updated_at) "
+                "VALUES ('project-old', 'Existing project', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+            connection.execute(
+                "INSERT INTO imported_research_reports "
+                "(id, question, geo, os, research_period, content, content_sha256, origin, imported_at, "
+                "research_data_json, parse_status, extraction_error, benchmark_selections_json, benchmark_workspace_json) "
+                "VALUES ('report-old', 'Question', 'US', 'Android', '2026', 'original report', ?, "
+                "'chatgpt_user_import', CURRENT_TIMESTAMP, '{}', 'PARSED', NULL, ?, ?) ",
+                ("a" * 64, '[{"item_type":"entity","item_key":"old-app"}]', '{"entries":[{"item_type":"entity","item_key":"old-app","po_assessment":"keep"}]}'),
+            )
+            connection.execute(
+                "INSERT INTO quantitative_datasets "
+                "(id, report_id, filename, content_sha256, original_csv, field_mapping_json, entity_mappings_json, "
+                "observations_json, compatibility_status, validation_reasons_json, created_at) "
+                "VALUES ('dataset-old', 'report-old', 'old.csv', ?, 'Original CSV bytes', '{}', '{}', '[]', 'partial', '[]', CURRENT_TIMESTAMP)",
+                ("b" * 64,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        command.upgrade(self.config, "head")
+        connection = sqlite3.connect(get_database_path())
+        try:
+            self.assertEqual(connection.execute("SELECT content FROM imported_research_reports WHERE id='report-old'").fetchone()[0], "original report")
+            self.assertEqual(connection.execute("SELECT benchmark_selections_json FROM imported_research_reports WHERE id='report-old'").fetchone()[0], '[{"item_type":"entity","item_key":"old-app"}]')
+            self.assertEqual(connection.execute("SELECT original_csv, report_id, project_id FROM quantitative_datasets WHERE id='dataset-old'").fetchone(), ("Original CSV bytes", "report-old", None))
+            self.assertEqual(connection.execute("SELECT workspace_state_json FROM research_projects WHERE id='project-old'").fetchone()[0], "{}")
+        finally:
+            connection.close()
+
     def test_downgrade_removes_v2_002_schema(self) -> None:
         command.upgrade(self.config, "head")
         command.downgrade(self.config, "base")

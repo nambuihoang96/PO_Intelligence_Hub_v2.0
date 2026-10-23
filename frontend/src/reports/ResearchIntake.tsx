@@ -106,6 +106,7 @@ function MultiChoiceDropdown({ label, values, options, onChange, exclusiveValues
 }
 
 export function ResearchIntake() {
+  const workspaceProjectId = new URLSearchParams(window.location.search).get('projectId');
   const [question, setQuestion] = useState('');
   const [geos, setGeos] = useState<string[]>(['Global / not specified']);
   const [environments, setEnvironments] = useState<string[]>(['Unknown']);
@@ -195,7 +196,7 @@ export function ResearchIntake() {
     try {
       const geo = geos.map((value) => value.startsWith('custom:') ? value.slice(7).trim() : value.trim()).join(', ');
       const environment = environments.map((value) => value.startsWith('custom:') ? value.slice(7).trim() : value.trim()).join(', ');
-      const report = await reportApi.import({ question, geo, os: environment, research_period: researchPeriod.trim() || null, content: reportContent });
+      const report = await reportApi.import({ question, geo, os: environment, research_period: researchPeriod.trim() || null, content: reportContent, project_id: workspaceProjectId });
       window.history.pushState({}, '', `/reports/${report.id}?imported=1${report.duplicate ? '&duplicate=1' : ''}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (reason) {

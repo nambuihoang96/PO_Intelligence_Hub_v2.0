@@ -80,7 +80,9 @@ export function QuantitativeDatasetExplorer({ dataset, onRevalidated, reportScop
   async function revalidate() {
     setBusy(true); setFailure(''); setFeedback('');
     try {
-      const next = await reportApi.revalidateQuantitativeDataset(dataset.report_id, dataset.id);
+      const next = dataset.report_id
+        ? await reportApi.revalidateQuantitativeDataset(dataset.report_id, dataset.id)
+        : await reportApi.revalidateProjectQuantitativeDataset(dataset.project_id!, dataset.id);
       onRevalidated(next);
       setFeedback('Dataset đã được kiểm tra lại từ CSV gốc. ID dataset và liên kết report được giữ nguyên.');
     } catch (reason) {
@@ -103,7 +105,7 @@ export function QuantitativeDatasetExplorer({ dataset, onRevalidated, reportScop
   return <section className="dataset-explorer" aria-label={`Data explorer ${dataset.filename}`}>
     <header className="dataset-explorer-header"><div><span className="field-label">CSV DATA EXPLORER</span><h4>{dataset.filename}</h4><p>Measurements remain in the CSV's original scope. Report compatibility is assessed separately.</p></div><button type="button" className="secondary-action" onClick={() => void revalidate()} disabled={busy}>{busy ? 'Revalidating…' : 'Revalidate dataset'}</button></header>
     <button type="button" className="secondary-action" onClick={() => setReviewOpen(true)}>Review dataset information</button>
-    {reviewOpen && <DatasetMetadataReview reportId={dataset.report_id} datasetId={dataset.id} onSaved={onRevalidated} onClose={() => setReviewOpen(false)} />}
+    {reviewOpen && <DatasetMetadataReview reportId={dataset.report_id ?? undefined} projectId={dataset.project_id ?? undefined} datasetId={dataset.id} onSaved={onRevalidated} onClose={() => setReviewOpen(false)} />}
     <div className="dataset-summary" aria-label="Dataset summary">
       <div><strong>{sourceRows.toLocaleString()}</strong><span>Source rows</span></div>
       <div><strong>{dataset.source_apps ?? distinctSources}</strong><span>Source apps</span></div>

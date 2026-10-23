@@ -4,7 +4,7 @@ import { reportApi, type DatasetMetadata, type MetadataChange, type Quantitative
 const labels: Record<string, string> = { geo: 'GEO', platform: 'Nền tảng', methodology: 'Phương pháp đo', unit: 'Đơn vị / tiền tệ', period_start: 'Ngày bắt đầu', period_end: 'Ngày kết thúc', snapshot_date: 'Ngày snapshot', period_semantics: 'Ý nghĩa kỳ đo', granularity: 'Chu kỳ đo (nếu biết)', source_reference: 'Nguồn dữ liệu' };
 const basisLabel: Record<string, string> = { csv: 'Có trong CSV', provider_documentation: 'PO xác nhận theo tài liệu nguồn', po_unverified: 'PO cung cấp · chưa xác minh', unknown: 'Chưa biết' };
 
-export function DatasetMetadataReview({ reportId, datasetId, onSaved, onClose }: { reportId: string; datasetId: string; onSaved: (dataset: QuantitativeDataset) => void; onClose: () => void }) {
+export function DatasetMetadataReview({ reportId, projectId, datasetId, onSaved, onClose }: { reportId?: string; projectId?: string; datasetId: string; onSaved: (dataset: QuantitativeDataset) => void; onClose: () => void }) {
   const [data, setData] = useState<DatasetMetadata | null>(null);
   const [groupKey, setGroupKey] = useState('');
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -13,7 +13,8 @@ export function DatasetMetadataReview({ reportId, datasetId, onSaved, onClose }:
   const [attested, setAttested] = useState(false); const [replace, setReplace] = useState(false);
   const [showAll, setShowAll] = useState(false); const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [notice, setNotice] = useState('');
-  useEffect(() => { let active = true; reportApi.getDatasetMetadata(reportId, datasetId).then((next) => { if (active) { setData(next); setGroupKey(next.groups[0]?.key ?? ''); } }).catch((reason) => { if (active) setError(String(reason.message || reason)); }); return () => { active = false; }; }, [reportId, datasetId]);
+  const getMetadata = () => reportId ? reportApi.getDatasetMetadata(reportId, datasetId) : reportApi.getProjectDatasetMetadata(projectId!, datasetId);
+  useEffect(() => { let active = true; getMetadata().then((next) => { if (active) { setData(next); setGroupKey(next.groups[0]?.key ?? ''); } }).catch((reason) => { if (active) setError(String(reason.message || reason)); }); return () => { active = false; }; }, [reportId, projectId, datasetId]);
   useEffect(() => { if (!Object.keys(draft).length) return; const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; }; window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard); }, [draft]);
   const group = data?.groups.find((item) => item.key === groupKey);
   const semantics = draft.period_semantics ?? group?.fields.period_semantics.value;
@@ -28,9 +29,13 @@ export function DatasetMetadataReview({ reportId, datasetId, onSaved, onClose }:
     setBusy(true); setError(''); setNotice('');
     try {
       const changes = Object.entries(draft).map(([field, value]) => ({ group_key: group.key, field, value: basis === 'unknown' ? null : value.trim() || null, basis, source_url: source.trim() || null, source_excerpt: excerpt, attested, replace_existing: replace }));
-      const next = await reportApi.updateDatasetMetadata(reportId, datasetId, data.revision, changes);
+      const next = reportId
+        ? await reportApi.updateDatasetMetadata(reportId, datasetId, data.revision, changes)
+        : await reportApi.updateProjectDatasetMetadata(projectId!, datasetId, data.revision, changes);
       setData(next); setDraft({}); setReplace(false);
-      const refreshed = await reportApi.getQuantitativeDataset(reportId, datasetId);
+      const refreshed = reportId
+        ? await reportApi.getQuantitativeDataset(reportId, datasetId)
+        : await reportApi.getProjectQuantitativeDataset(projectId!, datasetId);
       onSaved(refreshed); setNotice('Đã lưu và kiểm tra lại. CSV gốc được giữ nguyên. Chỉ quan sát đủ căn cứ mới được so sánh.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Chưa lưu được. Nội dung đang nhập vẫn được giữ.'); }
     finally { setBusy(false); }

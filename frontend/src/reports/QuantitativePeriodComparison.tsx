@@ -13,7 +13,8 @@ const labelPeriod = (period: ComparisonPeriod) => period.semantics === 'snapshot
     : `${period.period_start ?? '?'} – ${period.period_end ?? '?'} · ${period.semantics === 'rolling_interval' ? 'rolling interval' : 'reporting interval'}`;
 
 export function QuantitativePeriodComparison() {
-  const [reviewDataset, setReviewDataset] = useState<{ id: string; report_id: string } | null>(null);
+  const [reviewDataset, setReviewDataset] = useState<{ id: string; report_id: string | null; project_id?: string | null } | null>(null);
+  const projectId = new URLSearchParams(window.location.search).get('projectId') ?? undefined;
   const [datasets, setDatasets] = useState<ComparisonDataset[]>([]);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [selectedReportId, setSelectedReportId] = useState('');
@@ -37,7 +38,7 @@ export function QuantitativePeriodComparison() {
       const loaded: ComparisonDataset[] = [];
       let cursor: string | undefined;
       do {
-        const response = await reportApi.listComparisonDatasets(cursor);
+        const response = await reportApi.listComparisonDatasets(cursor, projectId);
         loaded.push(...response.items);
         cursor = response.next_cursor ?? undefined;
       } while (cursor);
@@ -59,7 +60,7 @@ export function QuantitativePeriodComparison() {
       } while (cursor);
       setReports(loaded);
     })().catch((error) => setFailure(error instanceof Error ? error.message : 'Không tải được danh sách báo cáo.'));
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     if (!selectedReportId) { setImportReport(null); return; }
@@ -156,7 +157,7 @@ export function QuantitativePeriodComparison() {
       <button type="button" className="primary-action" disabled={!canCompare || busy} onClick={() => void compare()}>{busy ? 'Comparing source rows…' : 'Compare selected periods'}</button>
     </section>
 
-    {reviewDataset && <DatasetMetadataReview key={reviewDataset.id} reportId={reviewDataset.report_id} datasetId={reviewDataset.id} onClose={() => setReviewDataset(null)} onSaved={() => { setResult(null); setSelectedMetricKey(''); setBaselinePeriodKey(''); setCurrentPeriodKey(''); void loadCatalog(); }} />}
+    {reviewDataset && <DatasetMetadataReview key={reviewDataset.id} reportId={reviewDataset.report_id ?? undefined} projectId={reviewDataset.project_id ?? undefined} datasetId={reviewDataset.id} onClose={() => setReviewDataset(null)} onSaved={() => { setResult(null); setSelectedMetricKey(''); setBaselinePeriodKey(''); setCurrentPeriodKey(''); void loadCatalog(); }} />}
     {failure && <div role="alert" className="research-alert">{failure}</div>}{notice && <div role="status" className="research-success">{notice}</div>}
     {result && <section className="comparison-results" aria-labelledby="comparison-results-title">
       <header className="comparison-results-heading"><div><span className="state-label">SOURCE-TRACEABLE RESULT</span><h2 id="comparison-results-title">{result.baseline_period.semantics} comparison · {result.metric.metric_definition}</h2><p>{result.geo} · {result.platform} · {labelPeriod(result.baseline_period)} → {labelPeriod(result.current_period)}</p></div><span className={`comparison-readiness ${result.period_readiness.compatible ? 'ready' : 'blocked'}`}>{result.period_readiness.compatible ? 'Periods compatible' : 'Changes withheld'}</span></header>
