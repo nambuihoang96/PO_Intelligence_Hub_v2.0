@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.app.db import create_database_engine, get_database_path
 
 
-CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence", "app_store_listings"}
+CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence", "app_store_listings", "po_opportunity_decisions"}
 
 
 class DatabaseMigrationTest(unittest.TestCase):

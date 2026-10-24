@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 
 from backend.app.db import create_database_engine, get_database_path
 from backend.app.models import ImportedResearchReport, QuantitativeDataset, ResearchProject
+from backend.app.opportunities import get_opportunity_workspace, save_opportunity_decision
 from backend.app.quantitative_comparisons import list_comparison_datasets
 from backend.app.reports import import_report
-from backend.app.schemas import ImportedReportCreate, QuantitativeDatasetImport, ResearchWorkspaceStateUpdate
+from backend.app.schemas import ImportedReportCreate, OpportunityDecisionUpdate, QuantitativeDatasetImport, ResearchWorkspaceStateUpdate
 from backend.app.workspace_data import (
     import_workspace_dataset,
     link_report,
@@ -189,6 +190,170 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         ), Response(), self.session)
         page = list_workspace_reports(self.project.id, self.session, limit=20)
         self.assertEqual({item.id for item in page.items}, {report.id, attached_report.id})
+
+    def test_opportunity_decision_resolves_real_workspace_observation_and_survives_new_shortlist(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        row = imported.observations[0]
+        source_id = row.source_entity_id
+        context = {
+            "dataset_id": imported.id, "dataset_filename": imported.filename,
+            "dataset_content_sha256": imported.content_sha256, "selection_type": "manual",
+            "source_entity_ids": [source_id], "selection_criterion": "Selected by PO from this file",
+            "measurement": {"metric_id": row.metric_id, "metric_definition": row.metric_definition,
+                            "unit": row.unit, "geo": row.geo, "platform": row.platform,
+                            "period_start": row.period_start, "period_end": row.period_end,
+                            "snapshot_date": row.snapshot_date, "period_semantics": row.period_semantics,
+                            "granularity": row.granularity,
+                            "methodology": row.methodology},
+            "observation_refs": [{"source_entity_id": source_id, "source_row_number": row.source_row_number,
+                                  "metric_id": row.metric_id}],
+        }
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=[source_id], selection_criterion=context["selection_criterion"], selected_app_context=context), self.session)
+        candidate = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]
+        self.assertFalse(candidate["stale"])
+        self.assertEqual(candidate["quantitative_evidence"][0]["value"], row.value)
+        self.assertEqual(candidate["quantitative_evidence"][0]["verification_status"], "unverified")
+        reference = {"kind": "quantitative", "dataset_id": imported.id, "source_entity_id": source_id,
+                     "source_row_number": row.source_row_number, "metric_id": row.metric_id}
+        saved = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+            candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+            dataset_content_sha256=imported.content_sha256, source_entity_id=source_id,
+            decision_status="investigate", rationale="Worth validating", priority="high",
+            next_action="Review retention evidence", supporting_evidence=[reference],
+            assessments=[{"dimension": "Retention evidence", "kind": "unknown", "statement": "No retention data supplied."}],
+            open_questions=["Can retention be validated?"]), self.session)
+        saved_candidate = saved["candidates"][0]
+        self.assertEqual(saved_candidate["decision"]["priority"], "high")
+        self.assertEqual(len(saved_candidate["resolved_decision_evidence"]), 1)
+        self.assertEqual(saved_candidate["resolved_decision_evidence"][0]["dataset_content_sha256"], imported.content_sha256)
+
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(selected_app_ids=[], selected_app_context=None), self.session)
+        historical = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]
+        self.assertTrue(historical["stale"])
+        self.assertEqual(historical["decision"]["rationale"], "Worth validating")
+        self.assertEqual(historical["decision"]["next_action"], "Review retention evidence")
+        self.assertFalse(historical["quantitative_evidence"])
+        self.assertEqual(len(historical["resolved_decision_evidence"]), 1)
+
+    def test_opportunity_decision_rejects_forged_observation_reference(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        row = imported.observations[0]
+        source_id = row.source_entity_id
+        context = {"dataset_id": imported.id, "dataset_content_sha256": imported.content_sha256,
+                   "selection_type": "manual", "source_entity_ids": [source_id],
+                   "observation_refs": [{"source_entity_id": source_id, "source_row_number": row.source_row_number, "metric_id": row.metric_id}]}
+        self.project.workspace_state_json = {"selected_app_ids": [source_id], "selected_app_context": context,
+                                             "existing_preferences": {"keep": True}}
+        self.session.commit()
+        candidate = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]
+        with self.assertRaises(Exception) as raised:
+            save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+                candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+                dataset_content_sha256=imported.content_sha256, source_entity_id=source_id,
+                supporting_evidence=[{"kind": "quantitative", "dataset_id": imported.id,
+                                      "source_entity_id": source_id, "source_row_number": 999,
+                                      "metric_id": row.metric_id}], rationale="Do not accept fabricated row."), self.session)
+        self.assertEqual(getattr(raised.exception, "status_code", None), 409)
+        state = self.session.get(ResearchProject, self.project.id).workspace_state_json
+        self.assertEqual(state["existing_preferences"], {"keep": True})
+        self.assertNotIn("opportunity_decisions", state)
+
+    def test_opportunity_workspace_returns_one_hundred_source_only_candidates(self) -> None:
+        rows = ["Unified Name;Unified ID;Platform;Downloads (Absolute)"] + [
+            f"Product {index};vendor-{index};Unified;{index * 100}" for index in range(100)
+        ]
+        imported = import_workspace_dataset(self.project.id, self.csv_payload("\n".join(rows) + "\n"), Response(), self.session)
+        context = {"dataset_id": imported.id, "dataset_filename": imported.filename,
+                   "dataset_content_sha256": imported.content_sha256, "selection_type": "manual",
+                   "source_entity_ids": [item.source_entity_id for item in imported.observations],
+                   "selection_criterion": "Selected by PO from 100 source rows",
+                   "measurement": None,
+                   "observation_refs": [{"source_entity_id": item.source_entity_id,
+                                         "source_row_number": item.source_row_number,
+                                         "metric_id": item.metric_id} for item in imported.observations]}
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=context["source_entity_ids"], selected_app_context=context), self.session)
+        result = get_opportunity_workspace(self.project.id, self.session)
+        self.assertEqual(len(result["candidates"]), 100)
+        self.assertEqual(len({item["candidate_id"] for item in result["candidates"]}), 100)
+        self.assertTrue(all(item["dataset_content_sha256"] == imported.content_sha256 for item in result["candidates"]))
+
+    def test_qualitative_finding_requires_explicit_candidate_attachment_and_stays_unverified(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        row = imported.observations[0]
+        context = {"dataset_id": imported.id, "dataset_content_sha256": imported.content_sha256,
+                   "selection_type": "manual", "source_entity_ids": [row.source_entity_id],
+                   "observation_refs": [{"source_entity_id": row.source_entity_id,
+                                         "source_row_number": row.source_row_number, "metric_id": row.metric_id}]}
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=[row.source_entity_id], selected_app_context=context), self.session)
+        report = ImportedResearchReport(id="report-opportunity", project_id=self.project.id,
+            question="How do users respond to this product?", geo="Worldwide", os="Unknown", research_period=None,
+            content="# Original", research_data_json={"findings": [{"key": "finding-alpha", "title": "Users value ease of use",
+                "finding_type": "behavior", "description": "Report supplied finding.", "evidence_status": "unverified",
+                "evidence_references": ["https://example.org/source"]}], "entities": []},
+            parse_status="STRUCTURED", extraction_error=None, benchmark_selections_json=[{"item_type": "finding", "item_key": "finding-alpha"}],
+            benchmark_workspace_json={"entries": [{"item_type": "finding", "item_key": "finding-alpha",
+                "po_assessment": "Existing report-level judgment", "notes": "Keep this note", "next_action": "Review again"}]},
+            content_sha256="c" * 64, origin="chatgpt_user_import")
+        self.session.add(report)
+        self.session.commit()
+        before = get_opportunity_workspace(self.project.id, self.session)
+        candidate = before["candidates"][0]
+        self.assertFalse(candidate["decision"])
+        supplied_finding = before["reports"][0]["findings"][0]
+        self.assertEqual(supplied_finding["existing_po_workspace"]["po_assessment"], "Existing report-level judgment")
+        self.assertEqual(candidate["quantitative_evidence"][0]["source_entity_id"], row.source_entity_id)
+        qualitative_ref = {"kind": "report_finding", "report_id": report.id,
+                           "report_content_sha256": report.content_sha256, "item_key": "finding-alpha"}
+        saved = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+            candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+            dataset_content_sha256=imported.content_sha256, source_entity_id=row.source_entity_id,
+            rationale="PO explicitly reviewed this report finding.", supporting_evidence=[qualitative_ref]), self.session)
+        evidence = saved["candidates"][0]["resolved_decision_evidence"]
+        self.assertEqual(evidence[0]["title"], "Users value ease of use")
+        self.assertEqual(evidence[0]["verification_status"], "unverified")
+        preserved = self.session.get(ImportedResearchReport, report.id)
+        self.assertEqual(preserved.benchmark_selections_json, [{"item_type": "finding", "item_key": "finding-alpha"}])
+        self.assertEqual(preserved.benchmark_workspace_json["entries"][0]["notes"], "Keep this note")
+
+    def test_stale_decision_revision_prevents_concurrent_save_from_overwriting_edits(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        row = imported.observations[0]
+        context = {"dataset_id": imported.id, "dataset_content_sha256": imported.content_sha256,
+                   "selection_type": "manual", "source_entity_ids": [row.source_entity_id],
+                   "observation_refs": [{"source_entity_id": row.source_entity_id,
+                                         "source_row_number": row.source_row_number, "metric_id": row.metric_id}]}
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=[row.source_entity_id], selected_app_context=context), self.session)
+        stale_session = Session(self.engine, expire_on_commit=False)
+        concurrent_session = Session(self.engine, expire_on_commit=False)
+        try:
+            candidate = get_opportunity_workspace(self.project.id, stale_session)["candidates"][0]
+            payload = OpportunityDecisionUpdate(candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+                dataset_content_sha256=imported.content_sha256, source_entity_id=row.source_entity_id,
+                rationale="Initial decision.", expected_revision=0)
+            saved = save_opportunity_decision(self.project.id, payload, concurrent_session)
+            self.assertEqual(saved["candidates"][0]["decision"]["revision"], 1)
+            stale_candidate = get_opportunity_workspace(self.project.id, stale_session)["candidates"][0]
+            self.assertEqual(stale_candidate["decision"]["revision"], 1)
+            updated = OpportunityDecisionUpdate(candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+                dataset_content_sha256=imported.content_sha256, source_entity_id=row.source_entity_id,
+                rationale="A newer edit that must remain.", expected_revision=1)
+            save_opportunity_decision(self.project.id, updated, concurrent_session)
+            with self.assertRaises(Exception) as raised:
+                save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+                    candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+                    dataset_content_sha256=imported.content_sha256, source_entity_id=row.source_entity_id,
+                    rationale="Stale edit must be rejected.", expected_revision=1), stale_session)
+            self.assertEqual(getattr(raised.exception, "status_code", None), 409)
+            refreshed = get_opportunity_workspace(self.project.id, concurrent_session)["candidates"][0]["decision"]
+            self.assertEqual(refreshed["rationale"], "A newer edit that must remain.")
+            self.assertEqual(refreshed["revision"], 2)
+        finally:
+            stale_session.close()
+            concurrent_session.close()
 
 
 if __name__ == "__main__":

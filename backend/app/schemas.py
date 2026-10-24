@@ -92,6 +92,60 @@ class ResearchWorkspaceStateUpdate(APIModel):
         return value
 
 
+class OpportunityEvidenceReference(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["quantitative", "report_finding", "report_entity"]
+    dataset_id: str | None = Field(default=None, max_length=36)
+    source_entity_id: str | None = Field(default=None, max_length=240)
+    source_row_number: int | None = Field(default=None, ge=2)
+    metric_id: str | None = Field(default=None, max_length=160)
+    report_id: str | None = Field(default=None, max_length=36)
+    report_content_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    item_key: str | None = Field(default=None, max_length=120)
+
+
+class OpportunityAssessment(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    dimension: str = Field(min_length=1, max_length=120)
+    kind: Literal["observed_fact", "research_finding", "hypothesis", "po_judgment", "unknown"]
+    statement: str = Field(default="", max_length=4000)
+    evidence_refs: list[OpportunityEvidenceReference] = Field(default_factory=list, max_length=50)
+
+    @field_validator("dimension")
+    @classmethod
+    def dimension_not_blank(cls, value: str) -> str:
+        return value.strip()
+
+
+class OpportunityDecisionUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(default=0, ge=0)
+    candidate_id: str = Field(min_length=1, max_length=100)
+    dataset_id: str | None = Field(default=None, max_length=36)
+    dataset_content_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    source_entity_id: str = Field(min_length=1, max_length=240)
+    decision_status: Literal["investigate", "benchmark", "experiment", "implementation_candidate", "hold", "reject"] | None = None
+    rationale: str = Field(default="", max_length=8000)
+    supporting_evidence: list[OpportunityEvidenceReference] = Field(default_factory=list, max_length=100)
+    contradictory_evidence: list[OpportunityEvidenceReference] = Field(default_factory=list, max_length=100)
+    open_questions: list[str] = Field(default_factory=list, max_length=50)
+    assessments: list[OpportunityAssessment] = Field(default_factory=list, max_length=30)
+    priority: Literal["high", "medium", "low", "not_assessed"] = "not_assessed"
+    review_date: date | None = None
+    next_action: str = Field(default="", max_length=4000)
+
+    @model_validator(mode="after")
+    def unique_dimensions_and_questions(self) -> "OpportunityDecisionUpdate":
+        dimensions = [item.dimension.casefold() for item in self.assessments]
+        if len(dimensions) != len(set(dimensions)):
+            raise ValueError("Assessment dimensions must be unique.")
+        if any(not question.strip() or len(question) > 1000 for question in self.open_questions):
+            raise ValueError("Open questions must be non-blank and at most 1000 characters.")
+        if self.decision_status == "reject" and not self.rationale.strip():
+            raise ValueError("A rejection needs a PO-written reason in rationale.")
+        return self
+
+
 class ResearchPlanCreate(APIModel):
     question: str = Field(min_length=1, max_length=5000)
     geos: list[str] = Field(default_factory=list, max_length=100)

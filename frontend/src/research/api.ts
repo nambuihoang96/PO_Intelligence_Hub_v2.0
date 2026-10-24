@@ -21,6 +21,85 @@ export type ShortlistContext = {
   observation_refs: { source_entity_id: string; source_row_number: number | null; metric_id: string | null }[];
 };
 
+export type OpportunityEvidenceReference = {
+  kind: 'quantitative' | 'report_finding' | 'report_entity';
+  dataset_id?: string | null;
+  source_entity_id?: string | null;
+  source_row_number?: number | null;
+  metric_id?: string | null;
+  report_id?: string | null;
+  report_content_sha256?: string | null;
+  item_key?: string | null;
+};
+
+export type OpportunityAssessment = {
+  dimension: string;
+  kind: 'observed_fact' | 'research_finding' | 'hypothesis' | 'po_judgment' | 'unknown';
+  statement: string;
+  evidence_refs: OpportunityEvidenceReference[];
+};
+
+export type OpportunityDecision = {
+  candidate_id: string;
+  expected_revision?: number;
+  revision?: number;
+  dataset_id: string | null;
+  dataset_content_sha256: string | null;
+  source_entity_id: string;
+  decision_status: 'investigate' | 'benchmark' | 'experiment' | 'implementation_candidate' | 'hold' | 'reject' | null;
+  rationale: string;
+  supporting_evidence: OpportunityEvidenceReference[];
+  contradictory_evidence: OpportunityEvidenceReference[];
+  open_questions: string[];
+  assessments: OpportunityAssessment[];
+  priority: 'high' | 'medium' | 'low' | 'not_assessed';
+  review_date: string | null;
+  next_action: string;
+  candidate_name?: string;
+  dataset_filename?: string;
+  selection_reason?: string;
+  updated_at?: string;
+};
+
+export type OpportunityCandidate = {
+  candidate_id: string;
+  name: string;
+  source_entity_id: string;
+  dataset_id: string | null;
+  dataset_content_sha256: string | null;
+  dataset_filename: string;
+  selection_reason: string;
+  stale: boolean;
+  stale_reasons: string[];
+  evidence_gaps: string[];
+  quantitative_evidence: Record<string, unknown>[];
+  decision: OpportunityDecision | null;
+  resolved_decision_evidence: Record<string, unknown>[];
+  unresolved_decision_evidence: Record<string, unknown>[];
+};
+
+export type OpportunityReport = {
+  report_id: string;
+  question: string;
+  geo: string;
+  os: string;
+  research_period: string | null;
+  content_sha256: string;
+  verification_status: 'unverified';
+  parse_status: string;
+  findings: { key: string; title: string; finding_type: string; description: string; evidence_status: string; uncertainty: string | null; po_implications: string | null; evidence_references: string[]; existing_po_workspace: { po_assessment?: string; notes?: string; next_action?: string } }[];
+  entities: { key: string; name: string; entity_type: string; evidence_references: string[] }[];
+};
+
+export type OpportunityWorkspace = {
+  project_id: string;
+  shortlist_dataset_id: string | null;
+  shortlist_valid: boolean;
+  shortlist_warning: string | null;
+  candidates: OpportunityCandidate[];
+  reports: OpportunityReport[];
+};
+
 export type ResearchPlanPayload = {
   question: string;
   geos: string[];
@@ -163,6 +242,12 @@ export const researchApi = {
   },
   updateWorkspaceState(projectId: string, selected_app_ids: string[], selection_criterion: string | null = null, selected_app_context?: ShortlistContext | null): Promise<ResearchProject> {
     return request(`/projects/${encodeURIComponent(projectId)}/workspace-state`, { method: 'PUT', body: JSON.stringify({ selected_app_ids, selection_criterion, ...(selected_app_context !== undefined ? { selected_app_context } : {}) }) });
+  },
+  getOpportunities(projectId: string): Promise<OpportunityWorkspace> {
+    return request(`/projects/${encodeURIComponent(projectId)}/opportunities`);
+  },
+  saveOpportunityDecision(projectId: string, payload: OpportunityDecision): Promise<OpportunityWorkspace> {
+    return request(`/projects/${encodeURIComponent(projectId)}/opportunities/decisions`, { method: 'PUT', body: JSON.stringify(payload) });
   },
   createPlan(projectId: string, payload: ResearchPlanPayload): Promise<ResearchPlan> {
     return request(`/projects/${encodeURIComponent(projectId)}/plans`, { method: 'POST', body: JSON.stringify(payload) });

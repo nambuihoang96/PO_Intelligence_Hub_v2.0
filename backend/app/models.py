@@ -42,6 +42,26 @@ class ResearchProject(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
 
+class POOpportunityDecision(Base):
+    """PO-owned candidate decisions with optimistic concurrency, separate from imported research."""
+
+    __tablename__ = "po_opportunity_decisions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "candidate_id", name="uq_po_opportunity_decisions_project_candidate"),
+        CheckConstraint("revision >= 1", name="ck_po_opportunity_decisions_revision_positive"),
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_po_opportunity_decisions_project"),
+        Index("ix_po_opportunity_decisions_project_updated", "project_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    candidate_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    decision_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class ResearchPlan(Base):
     __tablename__ = "research_plans"
     __table_args__ = (

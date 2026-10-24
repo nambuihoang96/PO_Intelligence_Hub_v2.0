@@ -140,7 +140,8 @@ function App() {
   const projectId = params.get('projectId');
   const runId = params.get('runId');
   const projectSelected = Boolean(projectId);
-  const dataWorkspace = projectSelected && params.get('view') === 'data';
+  const opportunityReviewView = params.get('view') === 'opportunities';
+  const dataWorkspace = projectSelected && ['data', 'opportunities'].includes(params.get('view') ?? '');
   const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : page.path === '/research/new' ? 'Create a research project'
     : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
       : page.path === '/sources' && runId ? 'Run evidence' : dataWorkspace ? 'Research workspace' : projectSelected ? 'Research plan' : page.title;
@@ -195,7 +196,7 @@ function App() {
         </header>
 
         <div className="content-wrap">
-          <section className="page-heading" aria-labelledby="page-title">
+          {!opportunityReviewView && <section className="page-heading" aria-labelledby="page-title">
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>
             <p className="intro">{pageIntro}</p>
@@ -205,9 +206,9 @@ function App() {
                 <a className="secondary-action" href="/research/runs">View research runs</a>
               </div>
             )}
-          </section>
+          </section>}
 
-          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/compare-periods' ? <QuantitativePeriodComparison /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : params.get('view') === 'data' ? 'data' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
+          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/compare-periods' ? <QuantitativePeriodComparison /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : ['data', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

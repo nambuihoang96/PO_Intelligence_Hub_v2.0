@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { reportApi, type ComparisonDataset, type QuantitativeDataset, type ReportSummary } from '../reports/api';
 import { QuantitativeDatasetImport } from '../reports/QuantitativeDatasetImport';
 import { researchApi, type ResearchProject, type ShortlistContext } from './api';
+import { OpportunityReview } from './OpportunityReview';
 
 type AppObservation = QuantitativeDataset['observations'][number];
 type AppGroup = { id: string; name: string; rows: AppObservation[] };
@@ -178,8 +179,12 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
       .catch((cause) => { if (active) { setDataset(null); setError(cause instanceof Error ? cause.message : 'Không mở được dataset.'); } });
     return () => { active = false; };
   }, [projectId, selectedDatasetId]);
+
   const apps = useMemo(() => groupsFor(dataset), [dataset]);
   const rankingOptions = useMemo(() => rankingOptionsFor(apps), [apps]);
+  if (new URLSearchParams(window.location.search).get('view') === 'opportunities') {
+    return <OpportunityReview projectId={projectId} />;
+  }
   const rankingOption = rankingOptions.find((item) => item.key === rankingKey) ?? rankingOptions[0];
   const selected = apps.filter((app) => selectedApps.includes(app.id));
   const activeSelectionMatchesDataset = selectedApps.length === 0
@@ -285,7 +290,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   if (!project) return <section className="research-panel"><div className="research-alert" role="alert">{error || 'Không tìm thấy workspace.'}</div><a href="/research">Quay lại Research</a></section>;
 
   return <div className="data-first-workspace">
-    <section className="research-panel data-workspace-heading"><div><span className="state-label">RESEARCH WORKSPACE</span><h2>{project.name}</h2><p>Bắt đầu từ dữ liệu thị trường, bổ sung nghiên cứu ChatGPT sau. CSV gốc và từng phạm vi đo được giữ nguyên.</p></div><div className="data-workspace-actions"><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Research plan</a><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>Compare periods</a><a className="primary-action" href={`/?projectId=${encodeURIComponent(projectId)}`}>Import ChatGPT research</a></div></section>
+    <section className="research-panel data-workspace-heading"><div><span className="state-label">RESEARCH WORKSPACE</span><h2>{project.name}</h2><p>Bắt đầu từ dữ liệu thị trường, bổ sung nghiên cứu ChatGPT sau. CSV gốc và từng phạm vi đo được giữ nguyên.</p></div><div className="data-workspace-actions"><a className="primary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities`}>Review opportunities</a><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Research plan</a><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>Compare periods</a><a className="secondary-action" href={`/?projectId=${encodeURIComponent(projectId)}`}>Import ChatGPT research</a></div></section>
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     <div className="workspace-source-grid">
       <section className="research-panel"><div className="panel-heading"><div><span className="state-label">MARKET DATA</span><h3>CSV datasets</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Close import' : 'Import CSV'}</button></div><p>{datasets.length ? `${datasets.length} dataset${datasets.length === 1 ? '' : 's'} saved` : 'Chưa cần có báo cáo ChatGPT để bắt đầu khám phá dữ liệu.'}</p>
