@@ -5,9 +5,20 @@ export type ResearchProject = {
   name: string;
   owner: string | null;
   category: string | null;
-  workspace_state_json?: { selected_app_ids?: string[]; selected_app_criterion?: string | null };
+  workspace_state_json?: { selected_app_ids?: string[]; selected_app_criterion?: string | null; selected_app_context?: ShortlistContext };
   created_at: string;
   updated_at: string;
+};
+
+export type ShortlistContext = {
+  dataset_id: string;
+  dataset_filename: string;
+  dataset_content_sha256: string;
+  selection_type: 'manual' | 'rule_based' | 'legacy';
+  source_entity_ids: string[];
+  selection_criterion: string | null;
+  measurement: { metric_id: string | null; metric_definition: string | null; unit: string | null; geo: string | null; platform: string | null; period_start: string | null; period_end: string | null; snapshot_date: string | null; period_semantics: string | null; granularity: string | null; methodology: string | null } | null;
+  observation_refs: { source_entity_id: string; source_row_number: number | null; metric_id: string | null }[];
 };
 
 export type ResearchPlanPayload = {
@@ -150,8 +161,8 @@ export const researchApi = {
   createProject(payload: Pick<ResearchProject, 'name' | 'owner' | 'category'>): Promise<ResearchProject> {
     return request('/projects', { method: 'POST', body: JSON.stringify(payload) });
   },
-  updateWorkspaceState(projectId: string, selected_app_ids: string[], selection_criterion: string | null = null): Promise<ResearchProject> {
-    return request(`/projects/${encodeURIComponent(projectId)}/workspace-state`, { method: 'PUT', body: JSON.stringify({ selected_app_ids, selection_criterion }) });
+  updateWorkspaceState(projectId: string, selected_app_ids: string[], selection_criterion: string | null = null, selected_app_context?: ShortlistContext | null): Promise<ResearchProject> {
+    return request(`/projects/${encodeURIComponent(projectId)}/workspace-state`, { method: 'PUT', body: JSON.stringify({ selected_app_ids, selection_criterion, ...(selected_app_context !== undefined ? { selected_app_context } : {}) }) });
   },
   createPlan(projectId: string, payload: ResearchPlanPayload): Promise<ResearchPlan> {
     return request(`/projects/${encodeURIComponent(projectId)}/plans`, { method: 'POST', body: JSON.stringify(payload) });

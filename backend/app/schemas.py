@@ -65,6 +65,7 @@ class ResearchWorkspaceStateUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     selected_app_ids: list[str] = Field(default_factory=list, max_length=500)
     selection_criterion: str | None = Field(default=None, max_length=500)
+    selected_app_context: dict[str, Any] | None = None
 
     @field_validator("selected_app_ids")
     @classmethod
@@ -73,6 +74,22 @@ class ResearchWorkspaceStateUpdate(APIModel):
         if any(not item or len(item) > 300 for item in cleaned) or len(cleaned) != len(set(cleaned)):
             raise ValueError("Selected app references must be non-blank, unique, and at most 300 characters.")
         return cleaned
+
+    @field_validator("selected_app_context")
+    @classmethod
+    def selection_context_is_bounded(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return value
+        # Workspace state stores stable references and the selection scope, never CSV contents.
+        if len(str(value).encode("utf-8")) > 64_000:
+            raise ValueError("Selection context must be at most 64 KB and must not contain source file contents.")
+        if value.get("selection_type") not in {"manual", "rule_based", "legacy"}:
+            raise ValueError("Selection context requires a supported selection_type.")
+        if not isinstance(value.get("dataset_id"), str) or not value["dataset_id"].strip():
+            raise ValueError("Selection context requires the source dataset_id.")
+        if not isinstance(value.get("source_entity_ids", []), list) or len(value.get("source_entity_ids", [])) > 500:
+            raise ValueError("Selection context supports at most 500 source entity references.")
+        return value
 
 
 class ResearchPlanCreate(APIModel):

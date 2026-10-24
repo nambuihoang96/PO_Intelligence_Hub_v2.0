@@ -50,6 +50,7 @@ export function QuantitativePeriodComparison() {
 
   useEffect(() => {
     void loadCatalog();
+    if (projectId) { setReports([]); setSelectedReportId(''); setImportReport(null); return; }
     void (async () => {
       const loaded: ReportSummary[] = [];
       let cursor: string | undefined;
@@ -129,14 +130,16 @@ export function QuantitativePeriodComparison() {
   return <div className="period-comparison-page">
     <section className="comparison-intro-panel">
       <span className="comparison-icon"><ResultsIcon name="comparison" /></span>
-      <div><span className="state-label">PERIOD COMPARISON</span><h2>Compare CSV exports</h2><p>Chọn hai lần export, đối chiếu theo ID nguồn ổn định và xem mọi app xuất hiện ở một hoặc cả hai kỳ.</p></div>
+      <div><span className="state-label">PERIOD COMPARISON</span><h2>Compare CSV exports</h2><p>Chọn hai lần export, đối chiếu theo ID nguồn ổn định và xem mọi app xuất hiện ở một hoặc cả hai kỳ.</p>{projectId && <a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>← Back to research workspace</a>}</div>
     </section>
 
     <section className="comparison-import-panel" aria-labelledby="comparison-import-title">
-      <div className="comparison-section-heading"><div><span className="state-label">ADD SOURCE FILES</span><h2 id="comparison-import-title">Import an export</h2></div><span>CSV gốc sẽ gắn với báo cáo được chọn, được giữ nguyên và không bị gộp.</span></div>
-      <label>Báo cáo để giữ provenance<select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}><option value="">Chọn báo cáo…</option>{reports.map((report) => <option value={report.id} key={report.id}>{report.question}</option>)}</select></label>
-      {importReport && <QuantitativeDatasetImport key={importReport.id} report={importReport} onImported={onImported} />}
-      {!importReport && <p className="comparison-muted">Chọn báo cáo rồi thêm mỗi file export một lần. Không cần ghép CSV bằng tay.</p>}
+      <div className="comparison-section-heading"><div><span className="state-label">ADD SOURCE FILES</span><h2 id="comparison-import-title">Import an export</h2></div><span>{projectId ? 'CSV gốc sẽ được lưu riêng trong workspace này cùng provenance.' : 'CSV gốc sẽ gắn với báo cáo được chọn, được giữ nguyên và không bị gộp.'}</span></div>
+      {projectId ? <QuantitativeDatasetImport key={projectId} projectId={projectId} onImported={onImported} /> : <>
+        <label>Báo cáo để giữ provenance<select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}><option value="">Chọn báo cáo…</option>{reports.map((report) => <option value={report.id} key={report.id}>{report.question}</option>)}</select></label>
+        {importReport && <QuantitativeDatasetImport key={importReport.id} report={importReport} onImported={onImported} />}
+        {!importReport && <p className="comparison-muted">Chọn báo cáo rồi thêm mỗi file export một lần. Không cần ghép CSV bằng tay.</p>}
+      </>}
     </section>
 
     <section className="comparison-config-panel" aria-labelledby="comparison-config-title">
@@ -164,6 +167,6 @@ export function QuantitativePeriodComparison() {
       {!result.period_readiness.compatible && <p className="comparison-warning">{result.period_readiness.reasons.join(' ')}</p>}
       <QuantitativeComparisonCharts result={result} />
     </section>}
-    {!datasets.length && <section className="empty-card"><span className="comparison-icon"><ResultsIcon name="comparison" /></span><div><h2>No CSV exports linked yet</h2><p>Choose a report above and import the original exports to begin a comparison.</p></div></section>}
+    {!datasets.length && <section className="empty-card"><span className="comparison-icon"><ResultsIcon name="comparison" /></span><div><h2>No CSV exports linked yet</h2><p>{projectId ? 'Import original exports into this workspace to begin a comparison.' : 'Choose a report above and import the original exports to begin a comparison.'}</p></div></section>}
   </div>;
 }

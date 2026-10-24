@@ -49,6 +49,11 @@ def update_workspace_state(project_id: str, payload: ResearchWorkspaceStateUpdat
     state = {**(project.workspace_state_json or {}), "selected_app_ids": payload.selected_app_ids}
     if "selection_criterion" in payload.model_fields_set:
         state["selected_app_criterion"] = payload.selection_criterion
+    if "selected_app_context" in payload.model_fields_set:
+        if payload.selected_app_context is None:
+            state.pop("selected_app_context", None)
+        else:
+            state["selected_app_context"] = payload.selected_app_context
     project.workspace_state_json = state
     session.commit()
     session.refresh(project)

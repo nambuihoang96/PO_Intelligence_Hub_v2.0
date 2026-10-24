@@ -49,7 +49,7 @@ describe('QuantitativePeriodComparison', () => {
     vi.mocked(reportApi.list).mockResolvedValue({ items: [], next_cursor: null, limit: 10 });
     vi.mocked(reportApi.previewQuantitativeComparison).mockResolvedValue(preview);
   });
-  afterEach(() => cleanup());
+  afterEach(() => { cleanup(); window.history.replaceState({}, '', '/'); });
 
   it('selects original exports and displays matched and source-only app evidence without treating report mismatch as a block', async () => {
     render(<QuantitativePeriodComparison />);
@@ -181,5 +181,17 @@ describe('QuantitativePeriodComparison', () => {
     await waitFor(() => expect(reportApi.listComparisonDatasets).toHaveBeenCalledTimes(2));
     expect(screen.getAllByRole('option', { name: /October export/ })).toHaveLength(2);
     expect(screen.getAllByRole('option', { name: /November export/ })).toHaveLength(2);
+  });
+
+  it('allows importing directly into the active workspace without loading or selecting a report', async () => {
+    window.history.replaceState({}, '', '/compare-periods?projectId=workspace-1');
+    vi.mocked(reportApi.listComparisonDatasets).mockResolvedValue({ items: [], next_cursor: null, limit: 100 });
+    render(<QuantitativePeriodComparison />);
+
+    expect(await screen.findByTestId('dataset-import')).toBeTruthy();
+    expect(screen.queryByLabelText('Báo cáo để giữ provenance')).toBeNull();
+    expect(reportApi.list).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: '← Back to research workspace' }).getAttribute('href'))
+      .toBe('/research?projectId=workspace-1&view=data');
   });
 });

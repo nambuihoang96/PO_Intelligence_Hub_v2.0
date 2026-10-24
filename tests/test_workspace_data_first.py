@@ -79,6 +79,69 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(selected_app_ids=["st-alpha"], selection_criterion="Highest supplied downloads in this file"), self.session)
         self.assertEqual(self.session.get(ResearchProject, self.project.id).workspace_state_json["selected_app_criterion"], "Highest supplied downloads in this file")
 
+    def test_shortlist_context_persists_without_replacing_other_workspace_state(self) -> None:
+        project = self.session.get(ResearchProject, self.project.id)
+        project.workspace_state_json = {"po_workspace_preferences": {"view": "data"}}
+        self.session.commit()
+        context = {
+            "dataset_id": "dataset-source-1", "dataset_filename": "market.csv", "dataset_content_sha256": "a" * 64,
+            "selection_type": "rule_based", "source_entity_ids": ["st-alpha"],
+            "selection_criterion": "Five highest supplied values in one CSV scope", "measurement": {"metric_id": "downloads_absolute", "unit": "downloads", "geo": "Worldwide", "platform": "Unified", "period_start": "2026-09-01", "period_end": "2026-09-30", "methodology": "Sensor export"},
+            "observation_refs": [{"source_entity_id": "st-alpha", "source_row_number": 2, "metric_id": "downloads_absolute"}],
+        }
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(selected_app_ids=["st-alpha"], selection_criterion=context["selection_criterion"], selected_app_context=context), self.session)
+        saved = self.session.get(ResearchProject, self.project.id).workspace_state_json
+        self.assertEqual(saved["selected_app_context"], context)
+        self.assertEqual(saved["selected_app_context"]["dataset_id"], "dataset-source-1")
+        self.assertEqual(saved["po_workspace_preferences"], {"view": "data"})
+
+    def test_legacy_shortlist_state_does_not_gain_invented_provenance(self) -> None:
+        project = self.session.get(ResearchProject, self.project.id)
+        project.workspace_state_json = {"selected_app_ids": ["legacy-app"], "selected_app_criterion": "Previously saved"}
+        self.session.commit()
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(selected_app_ids=["legacy-app"]), self.session)
+        saved = self.session.get(ResearchProject, self.project.id).workspace_state_json
+        self.assertNotIn("selected_app_context", saved)
+        self.assertEqual(saved["selected_app_ids"], ["legacy-app"])
+        self.assertEqual(saved["selected_app_criterion"], "Previously saved")
+
+    def test_workspace_dataset_and_report_cursors_expose_records_beyond_first_page(self) -> None:
+        datasets = [QuantitativeDataset(
+            id=f"dataset-{index:03d}", project_id=self.project.id, report_id=None,
+            filename=f"export-{index:03d}.csv", content_sha256=f"{index:064x}", original_csv="",
+            field_mapping_json={}, entity_mappings_json={}, observations_json=[],
+            compatibility_status="partial", validation_reasons_json=[],
+        ) for index in range(101)]
+        reports = [ImportedResearchReport(
+            id=f"report-{index:03d}", project_id=self.project.id, question=f"Question {index}", geo="Worldwide", os="Unknown",
+            research_period=None, content=f"# Report {index}", research_data_json={}, parse_status="NEEDS_STRUCTURING",
+            extraction_error=None, benchmark_selections_json=[], benchmark_workspace_json={},
+            content_sha256=f"{index + 1000:064x}", origin="chatgpt_user_import",
+        ) for index in range(101)]
+        self.session.add_all([*datasets, *reports])
+        self.session.commit()
+
+        dataset_ids: list[str] = []
+        cursor = None
+        while True:
+            page = list_workspace_datasets(self.project.id, self.session, cursor=cursor, limit=20)
+            dataset_ids.extend(item.id for item in page.items)
+            cursor = page.next_cursor
+            if not cursor:
+                break
+        report_ids: list[str] = []
+        cursor = None
+        while True:
+            page = list_workspace_reports(self.project.id, self.session, cursor=cursor, limit=20)
+            report_ids.extend(item.id for item in page.items)
+            cursor = page.next_cursor
+            if not cursor:
+                break
+        self.assertEqual(len(dataset_ids), 101)
+        self.assertEqual(len(set(dataset_ids)), 101)
+        self.assertEqual(len(report_ids), 101)
+        self.assertEqual(len(set(report_ids)), 101)
+
     def test_saved_source_row_count_ignores_blank_csv_padding(self) -> None:
         populated = "Unified Name;Unified ID;Platform;Downloads (Absolute)\nAlpha;st-alpha;Unified;120\n"
         padded = populated + ("\n" * 9975)
