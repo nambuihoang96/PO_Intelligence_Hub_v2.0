@@ -4,8 +4,9 @@
 
 - Branch: `feat/ux-recovery-01-research-results`
 - Base reviewed: `2bfc8127268c371d798c16176623a3313647eb36`
-- Commit SHA: `e7d8846f32745243616c6c8225ff69c79903022d`.
-- Push: pending.
+- Implementation commit SHA: `35b0b71d7820e228eabc9be75df3a8b9226cde39`.
+- Handoff report is finalized in a follow-up documentation commit on this same branch.
+- Push: completed to `origin/feat/ux-recovery-01-research-results`.
 - Production SQLite: not used or modified.
 
 ## What changed
