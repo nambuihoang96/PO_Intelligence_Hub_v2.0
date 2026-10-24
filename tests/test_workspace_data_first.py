@@ -12,9 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.db import create_database_engine, get_database_path
-from backend.app.models import ImportedResearchReport, QuantitativeDataset, ResearchProject
+from backend.app.models import ImportedResearchReport, POOpportunityDecision, QuantitativeDataset, ResearchProject
 from backend.app.opportunities import get_opportunity_workspace, save_opportunity_decision
+from backend.app.dataset_metadata import effective_observations, metadata_group
 from backend.app.quantitative_comparisons import list_comparison_datasets
+from backend.app.quantitative_comparisons import _observation_usable
 from backend.app.reports import import_report
 from backend.app.schemas import ImportedReportCreate, OpportunityDecisionUpdate, QuantitativeDatasetImport, ResearchWorkspaceStateUpdate
 from backend.app.workspace_data import (
@@ -230,11 +232,74 @@ class DataFirstWorkspaceTest(unittest.TestCase):
 
         update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(selected_app_ids=[], selected_app_context=None), self.session)
         historical = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]
-        self.assertTrue(historical["stale"])
+        self.assertFalse(historical["stale"])
+        self.assertTrue(historical["historical"])
         self.assertEqual(historical["decision"]["rationale"], "Worth validating")
         self.assertEqual(historical["decision"]["next_action"], "Review retention evidence")
-        self.assertFalse(historical["quantitative_evidence"])
+        self.assertEqual(len(historical["quantitative_evidence"]), 1)
+        self.assertIn("Historical decision", " ".join(historical["evidence_gaps"]))
         self.assertEqual(len(historical["resolved_decision_evidence"]), 1)
+
+    def test_opportunity_evidence_uses_m2_effective_metadata_and_keeps_csv_immutable(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        dataset = self.session.get(QuantitativeDataset, imported.id)
+        original_csv = dataset.original_csv
+        original_hash = dataset.content_sha256
+        original_rows = [dict(row) for row in dataset.observations_json]
+        row = original_rows[0]
+        group_key = metadata_group(row)
+        confirmed = {
+            "geo": row["geo"], "platform": row["platform"], "unit": row["unit"],
+            "period_start": row["period_start"], "period_end": row["period_end"],
+            "period_semantics": row["period_semantics"], "granularity": row["granularity"],
+            "methodology": "Provider documented unique-download definition v2",
+        }
+        entries = {field: {"value": value, "basis": "provider_documentation",
+            "source_url": "https://example.org/provider-methodology", "source_excerpt": f"Provider docs define {field} for the export.",
+            "attested": True, "confirmed_at": "2026-10-24T00:00:00Z"} for field, value in confirmed.items()}
+        dataset.field_mapping_json = {**(dataset.field_mapping_json or {}), "metadata_review": {
+            "revision": 1, "entries": {group_key: entries}, "history": []}}
+        self.session.commit()
+
+        context = {"dataset_id": dataset.id, "dataset_filename": dataset.filename,
+            "dataset_content_sha256": dataset.content_sha256, "selection_type": "manual",
+            "source_entity_ids": [row["source_entity_id"]], "measurement": None,
+            "observation_refs": [{"source_entity_id": row["source_entity_id"], "source_row_number": row["source_row_number"], "metric_id": row["metric_id"]}]}
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=[row["source_entity_id"]], selected_app_context=context), self.session)
+        item = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]["quantitative_evidence"][0]
+        effective = effective_observations(dataset)[0]
+        self.assertEqual(item["methodology"], confirmed["methodology"])
+        self.assertEqual(item["metadata_provenance"]["methodology"]["basis"], "provider_documentation")
+        self.assertEqual(item["metadata_provenance"]["methodology"]["original_value"], row["methodology"])
+        self.assertEqual(item["source_row_number"], row["source_row_number"])
+        self.assertEqual(item["geo"], row["geo"])
+        self.assertEqual(item["platform"], "Unified")
+        self.assertEqual(item["period_start"], row["period_start"])
+        self.assertEqual(item["m2_observation_usable"], _observation_usable(effective, dataset))
+        self.assertEqual(item["comparison_ready"], effective["comparison_ready"])
+        self.assertTrue(item["m2_observation_usable"])
+        self.assertEqual(dataset.original_csv, original_csv)
+        self.assertEqual(dataset.content_sha256, original_hash)
+        self.assertEqual(dataset.observations_json, original_rows)
+
+    def test_opportunity_evidence_preserves_approximate_zero_and_metadata_provenance(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        dataset = self.session.get(QuantitativeDataset, imported.id)
+        source = dict(dataset.observations_json[0])
+        source.update(value=0, value_precision="approximate", reported_value_text="approximately zero")
+        dataset.observations_json = [source]
+        self.session.commit()
+        context = {"dataset_id": dataset.id, "dataset_filename": dataset.filename,
+            "dataset_content_sha256": dataset.content_sha256, "selection_type": "manual",
+            "source_entity_ids": [source["source_entity_id"]], "measurement": None,
+            "observation_refs": [{"source_entity_id": source["source_entity_id"], "source_row_number": source["source_row_number"], "metric_id": source["metric_id"]}]}
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=[source["source_entity_id"]], selected_app_context=context), self.session)
+        evidence = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]["quantitative_evidence"][0]
+        self.assertEqual(evidence["value"], 0)
+        self.assertEqual(evidence["value_precision"], "approximate")
+        self.assertEqual(evidence["reported_value_text"], "approximately zero")
 
     def test_opportunity_decision_rejects_forged_observation_reference(self) -> None:
         imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
@@ -258,6 +323,28 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         state = self.session.get(ResearchProject, self.project.id).workspace_state_json
         self.assertEqual(state["existing_preferences"], {"keep": True})
         self.assertNotIn("opportunity_decisions", state)
+
+    def test_opportunity_decision_rejects_forged_assessment_evidence_reference(self) -> None:
+        imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
+        row = imported.observations[0]
+        context = {"dataset_id": imported.id, "dataset_content_sha256": imported.content_sha256,
+                   "selection_type": "manual", "source_entity_ids": [row.source_entity_id],
+                   "observation_refs": [{"source_entity_id": row.source_entity_id,
+                                         "source_row_number": row.source_row_number, "metric_id": row.metric_id}]}
+        update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
+            selected_app_ids=[row.source_entity_id], selected_app_context=context), self.session)
+        candidate = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]
+        with self.assertRaises(Exception) as raised:
+            save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+                candidate_id=candidate["candidate_id"], dataset_id=imported.id,
+                dataset_content_sha256=imported.content_sha256, source_entity_id=row.source_entity_id,
+                assessments=[{"dimension": "Source-backed fact", "kind": "observed_fact",
+                    "statement": "This deliberately points to a nonexistent source row.",
+                    "evidence_refs": [{"kind": "quantitative", "dataset_id": imported.id,
+                        "source_entity_id": row.source_entity_id, "source_row_number": 999,
+                        "metric_id": row.metric_id}]}]), self.session)
+        self.assertEqual(getattr(raised.exception, "status_code", None), 409)
+        self.assertIsNone(self.session.scalar(select(POOpportunityDecision)))
 
     def test_opportunity_workspace_returns_one_hundred_source_only_candidates(self) -> None:
         rows = ["Unified Name;Unified ID;Platform;Downloads (Absolute)"] + [
@@ -307,13 +394,21 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         self.assertEqual(candidate["quantitative_evidence"][0]["source_entity_id"], row.source_entity_id)
         qualitative_ref = {"kind": "report_finding", "report_id": report.id,
                            "report_content_sha256": report.content_sha256, "item_key": "finding-alpha"}
+        quantitative_ref = {"kind": "quantitative", "dataset_id": imported.id,
+                            "source_entity_id": row.source_entity_id, "source_row_number": row.source_row_number,
+                            "metric_id": row.metric_id}
         saved = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
             candidate_id=candidate["candidate_id"], dataset_id=imported.id,
             dataset_content_sha256=imported.content_sha256, source_entity_id=row.source_entity_id,
-            rationale="PO explicitly reviewed this report finding.", supporting_evidence=[qualitative_ref]), self.session)
+            rationale="PO explicitly reviewed this report finding.", supporting_evidence=[qualitative_ref],
+            assessments=[{"dimension": "Source-backed observation", "kind": "observed_fact",
+                          "statement": "The supplied report and source row were reviewed together.",
+                          "evidence_refs": [qualitative_ref, quantitative_ref]}]), self.session)
         evidence = saved["candidates"][0]["resolved_decision_evidence"]
         self.assertEqual(evidence[0]["title"], "Users value ease of use")
         self.assertEqual(evidence[0]["verification_status"], "unverified")
+        self.assertEqual(len(saved["candidates"][0]["decision"]["assessments"][0]["evidence_refs"]), 2)
+        self.assertEqual(len(evidence), 2)  # Repeated use of one finding does not duplicate the resolved reference.
         preserved = self.session.get(ImportedResearchReport, report.id)
         self.assertEqual(preserved.benchmark_selections_json, [{"item_type": "finding", "item_key": "finding-alpha"}])
         self.assertEqual(preserved.benchmark_workspace_json["entries"][0]["notes"], "Keep this note")

@@ -11,7 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
+from backend.app.dataset_metadata import effective_observations
 from backend.app.models import ImportedResearchReport, POOpportunityDecision, QuantitativeDataset, ResearchProject
+from backend.app.quantitative_comparisons import _observation_usable
 from backend.app.schemas import OpportunityDecisionUpdate
 
 router = APIRouter(prefix="/api/v1/projects", tags=["opportunity decisions"])
@@ -41,8 +43,24 @@ def _dataset_for_workspace(session: Session, project_id: str, dataset_id: str) -
 
 
 def _source_rows(dataset: QuantitativeDataset, source_entity_id: str) -> list[dict[str, Any]]:
+    """Original imported rows, used only to resolve immutable source identity."""
     return [row for row in (dataset.observations_json or []) if isinstance(row, dict) and
             (row.get("source_entity_id") or row.get("entity_id")) == source_entity_id]
+
+
+def _dataset_report(session: Session, project_id: str, dataset: QuantitativeDataset) -> ImportedResearchReport | None:
+    if not dataset.report_id:
+        return None
+    report = session.get(ImportedResearchReport, dataset.report_id)
+    return report if report is not None and report.project_id == project_id else None
+
+
+def _effective_source_rows(session: Session, project_id: str, dataset: QuantitativeDataset,
+                           source_entity_id: str) -> list[dict[str, Any]]:
+    """M2's metadata overlay/readiness projection, without changing stored CSV rows."""
+    report = _dataset_report(session, project_id, dataset)
+    return [row for row in effective_observations(dataset, report)
+            if isinstance(row, dict) and (row.get("source_entity_id") or row.get("entity_id")) == source_entity_id]
 
 
 def _evidence(row: dict[str, Any], dataset: QuantitativeDataset) -> dict[str, Any]:
@@ -52,12 +70,25 @@ def _evidence(row: dict[str, Any], dataset: QuantitativeDataset) -> dict[str, An
         "source_entity_id": row.get("source_entity_id") or row.get("entity_id"),
         "source_entity_name": row.get("source_entity_name") or row.get("entity_name"),
         "source_row_number": row.get("source_row_number"), "metric_id": row.get("metric_id"),
-        "metric_definition": row.get("metric_definition"), "value": row.get("value"), "unit": row.get("unit"),
+        "metric_definition": row.get("metric_definition"), "value": row.get("value"),
+        "value_precision": row.get("value_precision", "exact"),
+        "reported_value_text": row.get("reported_value_text"), "unit": row.get("unit"),
         "geo": row.get("geo"), "platform": row.get("platform"), "period_start": row.get("period_start"),
         "period_end": row.get("period_end"), "snapshot_date": row.get("snapshot_date"),
+        "period_semantics": row.get("period_semantics", "unknown"), "granularity": row.get("granularity"),
         "methodology": row.get("methodology"), "verification_status": row.get("verification_status", "unverified"),
         "observation_type": row.get("observation_type", "imported"),
+        "source_provider": row.get("source_provider"), "source_reference": row.get("source_reference"),
+        "provenance_id": row.get("provenance_id"), "metadata_provenance": row.get("metadata_provenance", {}),
+        "complete_observation": row.get("complete_observation") is True,
         "analysis_ready": row.get("analysis_ready") is True,
+        "dataset_comparison_ready": row.get("dataset_comparison_ready") is True,
+        "comparison_ready": row.get("comparison_ready") is True,
+        "m2_observation_usable": _observation_usable(row, dataset),
+        "comparison_note": "This is observation-level readiness. Compare Periods still checks pair scope and period compatibility.",
+        "report_compatibility": row.get("report_compatibility", "unknown"),
+        "source_validation_reasons": row.get("source_validation_reasons", []),
+        "metadata_validation_reasons": row.get("metadata_validation_reasons", []),
         "validation_reasons": row.get("validation_reasons", []),
     }
 
@@ -123,7 +154,7 @@ def _resolve_saved_refs(session: Session, project_id: str, candidate: dict[str, 
             continue
         if ref.get("kind") == "quantitative":
             dataset = _dataset_for_workspace(session, project_id, ref["dataset_id"])
-            row = next((item for item in _source_rows(dataset, candidate["source_entity_id"])
+            row = next((item for item in _effective_source_rows(session, project_id, dataset, candidate["source_entity_id"])
                         if item.get("source_row_number") == ref.get("source_row_number") and item.get("metric_id") == ref.get("metric_id")), None) if dataset else None
             if row and dataset:
                 available.append(_evidence(row, dataset))
@@ -166,14 +197,14 @@ def get_opportunity_workspace(project_id: str, session: Session) -> dict[str, An
                         "source_entity_id": source_id, "dataset_id": dataset.id,
                         "dataset_content_sha256": dataset.content_sha256, "dataset_filename": dataset.filename,
                         "selection_reason": context.get("selection_criterion") or "Selected from this source file",
+                    "active_in_shortlist": source_id in saved_ids if isinstance(saved_ids, list) else False,
+                    "historical": source_id not in saved_ids if isinstance(saved_ids, list) else True,
                         "stale": True, "stale_reasons": ["Selected source product no longer exists in the saved dataset."],
                         "quantitative_evidence": [], "decision": saved.get(candidate_key)}
                     continue
                 context_refs = [ref for ref in context.get("observation_refs", []) if isinstance(ref, dict) and ref.get("source_entity_id") == source_id]
                 bad_refs = [ref for ref in context_refs if not any(row.get("source_row_number") == ref.get("source_row_number") and row.get("metric_id") == ref.get("metric_id") for row in rows)]
                 reasons = []
-                if not isinstance(saved_ids, list) or source_id not in saved_ids:
-                    reasons.append("The source product is not present in the saved shortlist selection.")
                 if not context_refs:
                     reasons.append("No source observation references were saved for this product.")
                 if bad_refs:
@@ -192,27 +223,42 @@ def get_opportunity_workspace(project_id: str, session: Session) -> dict[str, An
                     "source_entity_id": source_id, "dataset_id": dataset.id,
                     "dataset_content_sha256": dataset.content_sha256, "dataset_filename": dataset.filename,
                     "selection_reason": context.get("selection_criterion") or "Selected from this source file",
-                    "stale": bool(reasons), "stale_reasons": reasons,
-                    "quantitative_evidence": [] if reasons else [_evidence(row, dataset) for row in rows],
+                    "active_in_shortlist": source_id in saved_ids if isinstance(saved_ids, list) else False,
+                    "historical": source_id not in saved_ids if isinstance(saved_ids, list) else True,
+                    "stale": bool(bad_refs or any("scope does not match" in reason for reason in reasons)),
+                    "stale_reasons": [reason for reason in reasons if "scope does not match" in reason or "no longer resolve" in reason],
+                    "quantitative_evidence": [
+                        _evidence(row, dataset) for row in _effective_source_rows(session, project_id, dataset, source_id)
+                    ],
                     "decision": saved.get(candidate_key)}
     for candidate_key, decision in saved.items():
         if candidate_key not in candidates and isinstance(decision, dict):
+            dataset = _dataset_for_workspace(session, project_id, str(decision.get("dataset_id") or ""))
+            source_id = decision.get("source_entity_id")
+            source_available = bool(dataset and dataset.content_sha256 == decision.get("dataset_content_sha256")
+                                    and source_id and _source_rows(dataset, source_id))
+            historical_rows = _effective_source_rows(session, project_id, dataset, source_id) if source_available and dataset and source_id else []
+            reasons = [] if source_available else ["The original source file or product identity is no longer available; saved evidence references are retained for review."]
             candidates[candidate_key] = {"candidate_id": candidate_key,
                 "name": decision.get("candidate_name") or decision.get("source_entity_id", "Historical candidate"),
-                "source_entity_id": decision.get("source_entity_id"), "dataset_id": decision.get("dataset_id"),
+                "source_entity_id": source_id, "dataset_id": decision.get("dataset_id"),
                 "dataset_content_sha256": decision.get("dataset_content_sha256"),
                 "dataset_filename": decision.get("dataset_filename", "Source file unavailable"),
                 "selection_reason": decision.get("selection_reason", "Previously assessed candidate"),
-                "stale": True, "stale_reasons": [context_error or "Candidate is no longer in the active shortlist; saved decision is retained."],
-                "quantitative_evidence": [], "decision": decision}
+                "active_in_shortlist": False, "historical": True,
+                "source_available": source_available, "stale": not source_available, "stale_reasons": reasons,
+                "quantitative_evidence": [_evidence(row, dataset) for row in historical_rows] if dataset else [],
+                "decision": decision}
     for candidate in candidates.values():
         gaps: list[str] = []
         if candidate.get("stale"):
             gaps.extend(candidate.get("stale_reasons", []))
+        if candidate.get("historical") and not candidate.get("stale"):
+            gaps.append("Historical decision; its original source is still available, but the product is not on the active shortlist.")
         evidence_rows = candidate.get("quantitative_evidence", [])
         if not evidence_rows:
             gaps.append("No current quantitative observations resolve to this candidate.")
-        elif any(not item.get("analysis_ready") for item in evidence_rows):
+        elif any(not item.get("dataset_comparison_ready") for item in evidence_rows):
             gaps.append("Some imported measurements are incomplete for analysis; review their validation details.")
         decision = candidate.get("decision")
         if not isinstance(decision, dict):
@@ -222,6 +268,9 @@ def get_opportunity_workspace(project_id: str, session: Session) -> dict[str, An
             gaps.append("No PO assessment or qualitative finding has been saved for this candidate.")
         else:
             refs = list(decision.get("supporting_evidence", [])) + list(decision.get("contradictory_evidence", []))
+            refs.extend(ref for assessment in decision.get("assessments", []) if isinstance(assessment, dict)
+                        for ref in assessment.get("evidence_refs", []) if isinstance(ref, dict))
+            refs = list({str(sorted(ref.items())): ref for ref in refs if isinstance(ref, dict)}.values())
             resolved, unresolved = _resolve_saved_refs(session, project_id, candidate, refs)
             candidate["resolved_decision_evidence"] = resolved
             candidate["unresolved_decision_evidence"] = unresolved

@@ -69,6 +69,9 @@ export type OpportunityCandidate = {
   dataset_content_sha256: string | null;
   dataset_filename: string;
   selection_reason: string;
+  active_in_shortlist?: boolean;
+  historical?: boolean;
+  source_available?: boolean;
   stale: boolean;
   stale_reasons: string[];
   evidence_gaps: string[];
@@ -176,8 +179,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ErrorEnvelope;
     const error = body.error ?? {};
+    const validationErrors = Array.isArray(error.details?.errors)
+      ? error.details.errors.flatMap((item) => {
+        if (!item || typeof item !== 'object') return [];
+        const issue = item as { location?: unknown[]; message?: unknown };
+        const field = Array.isArray(issue.location) ? issue.location.filter((part) => part !== 'body').join('.') : '';
+        const message = typeof issue.message === 'string' ? issue.message : 'Invalid value';
+        return [`${field ? `${field}: ` : ''}${message}`];
+      })
+      : [];
+    const message = error.message ?? `The request failed (${response.status}).`;
     throw new ApiError(
-      error.message ?? `The request failed (${response.status}).`,
+      validationErrors.length ? `${message} ${validationErrors.join('; ')}` : message,
       response.status,
       error.code ?? 'HTTP_ERROR',
       error.details ?? {},

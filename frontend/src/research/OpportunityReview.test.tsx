@@ -23,13 +23,30 @@ const workspace: OpportunityWorkspace = {
     findings: [{ key: 'finding-1', title: 'Users value simplicity', finding_type: 'behavior', description: 'The report says users prefer simple flows.', evidence_status: 'unverified', uncertainty: 'Small sample.', po_implications: 'Test a simpler flow.', evidence_references: ['https://example.org/source'], existing_po_workspace: {} }], entities: [] }],
 };
 
+function workspaceWithTwoCandidates(): OpportunityWorkspace {
+  const result = structuredClone(workspace);
+  const first = result.candidates[0];
+  result.candidates.push({ ...structuredClone(first), candidate_id: 'csv:candidate-two', name: 'Product Beta',
+    source_entity_id: 'provider:beta', quantitative_evidence: [], decision: null,
+    resolved_decision_evidence: [], unresolved_decision_evidence: [] });
+  return result;
+}
+
+function savedWorkspace(payload: Parameters<typeof researchApi.saveOpportunityDecision>[1]): OpportunityWorkspace {
+  const result = workspaceWithTwoCandidates();
+  result.candidates = result.candidates.map((candidate) => candidate.candidate_id === payload.candidate_id
+    ? { ...candidate, decision: { ...payload, revision: (payload.expected_revision ?? 0) + 1,
+      candidate_name: candidate.name, dataset_filename: candidate.dataset_filename,
+      selection_reason: candidate.selection_reason, updated_at: '2026-10-24T00:00:00Z' },
+      resolved_decision_evidence: payload.supporting_evidence, unresolved_decision_evidence: [] }
+    : candidate);
+  return result;
+}
+
 describe('OpportunityReview', () => {
   beforeEach(() => {
     vi.mocked(researchApi.getOpportunities).mockResolvedValue(structuredClone(workspace));
-    vi.mocked(researchApi.saveOpportunityDecision).mockImplementation(async (_projectId, payload) => ({
-      ...structuredClone(workspace), candidates: [{ ...structuredClone(workspace.candidates[0]), decision: payload,
-        resolved_decision_evidence: payload.supporting_evidence, unresolved_decision_evidence: [] }],
-    }));
+    vi.mocked(researchApi.saveOpportunityDecision).mockImplementation(async (_projectId, payload) => savedWorkspace(payload));
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -60,7 +77,7 @@ describe('OpportunityReview', () => {
 
   it('saves explicit PO judgment, priority, follow-up and attached evidence', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByText('Product Alpha');
+    await screen.findByLabelText('PO rationale');
     fireEvent.click(screen.getByLabelText('Attach Downloads source row 2'));
     fireEvent.change(screen.getByLabelText('PO decision'), { target: { value: 'investigate' } });
     fireEvent.change(screen.getByLabelText('Set PO priority'), { target: { value: 'high' } });
@@ -77,6 +94,25 @@ describe('OpportunityReview', () => {
     expect(submitted.open_questions).toEqual(['What is D7 retention?']);
     expect(submitted.supporting_evidence).toEqual([{ kind: 'quantitative', dataset_id: 'dataset-1',
       source_entity_id: 'provider:alpha', source_row_number: 2, metric_id: 'downloads_absolute' }]);
+    expect(await screen.findByText('Decision saved.')).toBeTruthy();
+  });
+
+  it('saves repeatedly without echoing response-only metadata into the strict request contract', async () => {
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'First saved judgment.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await screen.findByText('Decision saved.');
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Updated saved judgment.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(2));
+    const secondPayload = vi.mocked(researchApi.saveOpportunityDecision).mock.calls[1][1] as Record<string, unknown>;
+    expect(secondPayload.expected_revision).toBe(1);
+    expect(secondPayload.rationale).toBe('Updated saved judgment.');
+    expect(secondPayload).not.toHaveProperty('candidate_name');
+    expect(secondPayload).not.toHaveProperty('dataset_filename');
+    expect(secondPayload).not.toHaveProperty('updated_at');
+    expect(secondPayload).not.toHaveProperty('revision');
     expect(await screen.findByText('Decision saved.')).toBeTruthy();
   });
 
@@ -98,7 +134,7 @@ describe('OpportunityReview', () => {
   it('keeps draft text after a failed save and allows an explicit retry', async () => {
     vi.mocked(researchApi.saveOpportunityDecision).mockRejectedValueOnce(new Error('Network unavailable'));
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByText('Product Alpha');
+    await screen.findByLabelText('PO rationale');
     fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Keep this draft after the failure.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
     expect(await screen.findByText('Save failed')).toBeTruthy();
@@ -106,5 +142,89 @@ describe('OpportunityReview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('Decision saved.')).toBeTruthy();
+  });
+
+  it('protects an unsaved draft when switching candidates, then reopens the saved decision', async () => {
+    const two = workspaceWithTwoCandidates();
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(two);
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Keep this decision rationale.' } });
+    fireEvent.change(screen.getByLabelText('Next action'), { target: { value: 'Ask for comparable retention data.' } });
+    fireEvent.click(screen.getByText('Product Beta').closest('button')!);
+    expect(await screen.findByRole('alertdialog', { name: 'Unsaved PO changes' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.getByLabelText('PO rationale')).toHaveProperty('value', 'Keep this decision rationale.');
+    fireEvent.click(screen.getByText('Product Beta').closest('button')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    await screen.findByRole('region', { name: 'Review Product Beta' });
+    expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].rationale).toBe('Keep this decision rationale.');
+    fireEvent.click(screen.getByText('Product Alpha').closest('button')!);
+    expect((await screen.findByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('Keep this decision rationale.');
+    expect((screen.getByLabelText('Next action') as HTMLTextAreaElement).value).toBe('Ask for comparable retention data.');
+  });
+
+  it('lets the PO explicitly discard a draft before changing candidates', async () => {
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(workspaceWithTwoCandidates());
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Discard this draft.' } });
+    fireEvent.click(screen.getByText('Product Beta').closest('button')!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Discard changes' }));
+    await screen.findByRole('region', { name: 'Review Product Beta' });
+    expect(researchApi.saveOpportunityDecision).not.toHaveBeenCalled();
+  });
+
+  it('keeps edits made while a save is pending instead of applying a stale response', async () => {
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(workspaceWithTwoCandidates());
+    let resolveSave!: () => void;
+    vi.mocked(researchApi.saveOpportunityDecision).mockImplementation((_projectId, payload) => new Promise((resolve) => {
+      resolveSave = () => resolve(savedWorkspace(payload));
+    }));
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'First submitted draft.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Newer edit after save began.' } });
+    resolveSave();
+    await waitFor(() => expect(screen.getByText('Unsaved changes')).toBeTruthy());
+    expect((screen.getByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('Newer edit after save began.');
+  });
+
+  it('preserves the draft and explains a revision conflict', async () => {
+    vi.mocked(researchApi.saveOpportunityDecision).mockRejectedValueOnce(new Error('Decision changed in another session. Refresh and review the saved version.'));
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'My conflicting edit stays here.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/changed in another session/i);
+    expect((screen.getByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('My conflicting edit stays here.');
+  });
+
+  it('requires evidence to be attached to an observed fact assessment and saves its exact reference', async () => {
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    fireEvent.change(screen.getByLabelText('Suggested assessment dimension'), { target: { value: 'Market signal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.change(screen.getByLabelText('Market signal evidence type'), { target: { value: 'observed_fact' } });
+    expect(screen.getByText(/Observed facts need supporting evidence attached/i)).toBeTruthy();
+    fireEvent.click(screen.getByText(/Attach evidence to this assessment/));
+    fireEvent.click(screen.getByLabelText('Market signal: Downloads · source row 2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].assessments[0].evidence_refs).toEqual([
+      { kind: 'quantitative', dataset_id: 'dataset-1', source_entity_id: 'provider:alpha', source_row_number: 2, metric_id: 'downloads_absolute' },
+    ]);
+  });
+
+  it('labels approximate values and preserves zero as a supplied value', async () => {
+    const approx = structuredClone(workspace);
+    approx.candidates[0].quantitative_evidence[0] = { ...approx.candidates[0].quantitative_evidence[0], value: 0,
+      value_precision: 'approximate', reported_value_text: 'approximately zero' };
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(approx);
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByLabelText('PO rationale');
+    expect(screen.getByText(/Downloads: 0 downloads/)).toBeTruthy();
+    expect(screen.getByText(/Approximate value · as reported: approximately zero/)).toBeTruthy();
   });
 });

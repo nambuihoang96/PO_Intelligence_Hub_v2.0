@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { researchApi, type OpportunityAssessment, type OpportunityCandidate, type OpportunityDecision, type OpportunityEvidenceReference, type OpportunityReport, type OpportunityWorkspace } from './api';
 
 const dimensionSuggestions = ['Market signal', 'Product differentiation', 'User motivation', 'Retention evidence', 'Monetization evidence', 'Product feasibility', 'Competitive risk', 'Research gaps'];
@@ -29,6 +29,21 @@ function sameRef(left: OpportunityEvidenceReference, right: OpportunityEvidenceR
     && sameOptionalValue('report_content_sha256') && sameOptionalValue('item_key');
 }
 
+function normalizedQuestions(value: string): string[] {
+  return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function decisionSnapshot(value: OpportunityDecision, questions: string): string {
+  const { revision: _revision, expected_revision: _expectedRevision, ...content } = value;
+  return JSON.stringify({ ...content, open_questions: normalizedQuestions(questions) });
+}
+
+function quantitativeRef(item: Record<string, unknown>): OpportunityEvidenceReference {
+  return { kind: 'quantitative', dataset_id: String(item.dataset_id), source_entity_id: String(item.source_entity_id),
+    source_row_number: typeof item.source_row_number === 'number' ? item.source_row_number : null,
+    metric_id: typeof item.metric_id === 'string' ? item.metric_id : null };
+}
+
 export function OpportunityReview({ projectId }: { projectId: string }) {
   const [workspace, setWorkspace] = useState<OpportunityWorkspace | null>(null);
   const [selectedId, setSelectedId] = useState('');
@@ -45,24 +60,44 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const revision = useRef(0);
+  const loadRevision = useRef(0);
+  const baseline = useRef<{ candidateId: string; snapshot: string } | null>(null);
+  const [pendingAction, setPendingAction] = useState<null | { type: 'candidate'; candidateId: string } | { type: 'refresh' } | { type: 'navigate'; href: string }>(null);
 
   async function load() {
+    const requestRevision = ++loadRevision.current;
     setLoading(true); setError('');
     try {
       const result = await researchApi.getOpportunities(projectId);
+      if (requestRevision !== loadRevision.current) return;
       setWorkspace(result);
       setSelectedId((current) => result.candidates.some((candidate) => candidate.candidate_id === current) ? current : result.candidates[0]?.candidate_id ?? '');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load opportunity review.'); }
-    finally { setLoading(false); }
+    } catch (cause) { if (requestRevision === loadRevision.current) setError(cause instanceof Error ? cause.message : 'Could not load opportunity review.'); }
+    finally { if (requestRevision === loadRevision.current) setLoading(false); }
   }
   useEffect(() => { void load(); }, [projectId]);
 
   const candidate = workspace?.candidates.find((item) => item.candidate_id === selectedId) ?? null;
   useEffect(() => {
     revision.current += 1;
-    setDecision(candidate ? decisionDraft(candidate) : null);
-    setSaveState('saved'); setQuestionDraft(candidate?.decision?.open_questions.join('\n') ?? '');
+    const nextDecision = candidate ? decisionDraft(candidate) : null;
+    const nextQuestions = candidate?.decision?.open_questions.join('\n') ?? '';
+    setDecision(nextDecision); setQuestionDraft(nextQuestions); setSaveState('saved'); setError(''); setNotice('');
+    baseline.current = nextDecision ? { candidateId: nextDecision.candidate_id, snapshot: decisionSnapshot(nextDecision, nextQuestions) } : null;
+    const linkedReport = candidate?.decision?.assessments.flatMap((assessment) => assessment.evidence_refs)
+      .find((reference) => reference.kind.startsWith('report_'));
+    setSelectedReportId(linkedReport?.report_id ?? '');
   }, [candidate?.candidate_id]);
+
+  const hasUnsavedChanges = Boolean(candidate && decision?.candidate_id === candidate.candidate_id && baseline.current?.candidateId === candidate.candidate_id
+    && decisionSnapshot(decision, questionDraft) !== baseline.current.snapshot);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges && saveState !== 'saving') return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedChanges, saveState]);
 
   const filtered = useMemo(() => (workspace?.candidates ?? []).filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -75,6 +110,48 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
   const reviewCount = workspace?.candidates.filter((item) => item.stale || item.evidence_gaps.length > 0).length ?? 0;
   const savedCount = workspace?.candidates.filter((item) => item.decision !== null).length ?? 0;
   const report = workspace?.reports.find((item) => item.report_id === selectedReportId);
+  const assessmentEvidenceOptions = [
+    ...(candidate?.quantitative_evidence ?? []).map((raw) => {
+      const item = raw as Record<string, unknown>;
+      return { reference: quantitativeRef(item), label: `${String(item.metric_definition || item.metric_id || 'Metric')} · source row ${String(item.source_row_number ?? 'unknown')}` };
+    }),
+    ...(report?.findings ?? []).map((finding) => ({ reference: reportRef(report!, 'report_finding', finding.key), label: `Report finding · ${finding.title}` })),
+    ...(report?.entities ?? []).map((entity) => ({ reference: reportRef(report!, 'report_entity', entity.key), label: `Report entity · ${entity.name}` })),
+  ];
+  const visibleSaveState = saveState === 'saving' ? 'saving' : saveState === 'failed' && hasUnsavedChanges ? 'failed' : hasUnsavedChanges ? 'unsaved' : 'saved';
+
+  function requestCandidate(candidateId: string) {
+    if (candidateId === selectedId) return;
+    if (saveState === 'saving') return;
+    if (hasUnsavedChanges) setPendingAction({ type: 'candidate', candidateId });
+    else setSelectedId(candidateId);
+  }
+
+  function requestRefresh() {
+    if (saveState === 'saving') return;
+    if (hasUnsavedChanges) setPendingAction({ type: 'refresh' });
+    else void load();
+  }
+
+  function requestNavigation(event: MouseEvent<HTMLAnchorElement>) {
+    if (saveState === 'saving') { event.preventDefault(); return; }
+    if (hasUnsavedChanges) {
+      event.preventDefault(); setPendingAction({ type: 'navigate', href: event.currentTarget.href });
+    }
+  }
+
+  function completePendingAction() {
+    const action = pendingAction;
+    setPendingAction(null);
+    if (!action) return;
+    if (action.type === 'candidate') setSelectedId(action.candidateId);
+    else if (action.type === 'refresh') void load();
+    else window.location.assign(action.href);
+  }
+
+  function discardAndContinue() {
+    completePendingAction();
+  }
 
   function changeDecision(patch: Partial<OpportunityDecision>) {
     revision.current += 1; setSaveState('unsaved'); setNotice('');
@@ -92,51 +169,86 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
     changeDecision({ assessments: [...(decision?.assessments ?? []), { dimension, kind: 'unknown', statement: '', evidence_refs: [] }] });
     setAssessmentDimension('');
   }
-  async function save() {
-    if (!candidate || !decision || saveState === 'saving') return;
+  function toggleAssessmentEvidence(index: number, reference: OpportunityEvidenceReference) {
+    if (!decision) return;
+    const assessment = decision.assessments[index];
+    const exists = assessment.evidence_refs.some((item) => sameRef(item, reference));
+    changeDecision({ assessments: decision.assessments.map((item, itemIndex) => itemIndex === index
+      ? { ...item, evidence_refs: exists ? item.evidence_refs.filter((ref) => !sameRef(ref, reference)) : [...item.evidence_refs, reference] }
+      : item) });
+  }
+  async function save(): Promise<boolean> {
+    if (!candidate || !decision || saveState === 'saving') return false;
     const savingRevision = revision.current;
-    const { revision: savedRevision, ...draft } = decision;
-    const payload = { ...draft, expected_revision: savedRevision ?? decision.expected_revision ?? 0,
-      open_questions: questionDraft.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) };
+    const savingCandidateId = candidate.candidate_id;
+    const payload = {
+      expected_revision: decision.revision ?? decision.expected_revision ?? 0,
+      candidate_id: decision.candidate_id,
+      dataset_id: decision.dataset_id,
+      dataset_content_sha256: decision.dataset_content_sha256,
+      source_entity_id: decision.source_entity_id,
+      decision_status: decision.decision_status,
+      rationale: decision.rationale,
+      supporting_evidence: decision.supporting_evidence,
+      contradictory_evidence: decision.contradictory_evidence,
+      open_questions: normalizedQuestions(questionDraft),
+      assessments: decision.assessments,
+      priority: decision.priority,
+      review_date: decision.review_date,
+      next_action: decision.next_action,
+    };
     setSaveState('saving'); setError(''); setNotice('');
     try {
       const saved = await researchApi.saveOpportunityDecision(projectId, payload);
-      setWorkspace(saved);
-      if (revision.current === savingRevision) { setDecision(saved.candidates.find((item) => item.candidate_id === candidate.candidate_id)?.decision ?? { ...payload, revision: payload.expected_revision + 1 }); setSaveState('saved'); setNotice('Decision saved.'); }
-      else setSaveState('unsaved');
-    } catch (cause) { setSaveState('failed'); setError(cause instanceof Error ? cause.message : 'Save failed. Your edits remain on this screen.'); }
+      const savedCandidate = saved.candidates.find((item) => item.candidate_id === savingCandidateId);
+      setWorkspace((current) => current ? { ...current, candidates: current.candidates.map((item) =>
+        item.candidate_id === savingCandidateId && savedCandidate ? { ...item, decision: savedCandidate.decision } : item) } : saved);
+      const persisted = savedCandidate?.decision ?? { ...payload, revision: payload.expected_revision + 1 };
+      baseline.current = { candidateId: savingCandidateId, snapshot: decisionSnapshot(persisted, persisted.open_questions.join('\n')) };
+      if (revision.current === savingRevision && selectedId === savingCandidateId) {
+        setDecision(persisted); setQuestionDraft(persisted.open_questions.join('\n')); setSaveState('saved'); setNotice('Decision saved.');
+        return true;
+      }
+      if (selectedId === savingCandidateId) {
+        setDecision((current) => current?.candidate_id === savingCandidateId
+          ? { ...current, revision: persisted.revision, expected_revision: persisted.revision } : current);
+        setSaveState('unsaved');
+      }
+      return false;
+    } catch (cause) { setSaveState('failed'); setError(cause instanceof Error ? cause.message : 'Save failed. Your edits remain on this screen.'); return false; }
   }
 
   if (loading) return <div className="opportunity-page"><p role="status">Loading opportunity review…</p></div>;
   if (error && !workspace) return <div className="opportunity-page"><p className="research-alert" role="alert">{error}</p><button className="secondary-action" onClick={() => void load()}>Retry</button></div>;
 
   return <main className="opportunity-page">
-    <header className="opportunity-header"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>← Back to workspace</a><span className="state-label">PRODUCT OWNER REVIEW</span><h1>Review opportunities</h1><p>Review source evidence, record your judgment, and preserve the next action for each selected product.</p></div><div className="opportunity-header-actions"><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>Compare periods</a><button className="secondary-action" onClick={() => void load()}>Refresh</button></div></header>
+    <header className="opportunity-header"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`} onClick={requestNavigation}>← Back to workspace</a><span className="state-label">PRODUCT OWNER REVIEW</span><h1>Review opportunities</h1><p>Review source evidence, record your judgment, and preserve the next action for each selected product.</p></div><div className="opportunity-header-actions"><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`} onClick={requestNavigation}>Compare periods</a><button className="secondary-action" onClick={requestRefresh} disabled={saveState === 'saving'}>Refresh</button></div></header>
     <div className="opportunity-summary" aria-label="Opportunity review summary"><span><strong>{workspace?.candidates.length ?? 0}</strong> candidates</span><span><strong>{investigateCount}</strong> investigate further</span><span><strong>{benchmarkCount}</strong> benchmark in detail</span><span><strong>{followupCount}</strong> actions ready</span><span><strong>{reviewCount}</strong> with evidence gaps</span><span><strong>{savedCount}</strong> saved decisions</span></div>
     {workspace?.shortlist_warning && <div className="research-alert" role="status">{workspace.shortlist_warning} This workspace will not guess the missing source. Existing saved decisions remain available below.</div>}
     {!workspace?.candidates.length && <section className="research-panel opportunity-empty"><h2>No candidates to review yet</h2><p>Save a shortlist from a CSV in this workspace. The opportunity list will use those exact source identities and keep the file’s measurement scope.</p><a className="primary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>Open workspace data</a></section>}
     {!!workspace?.candidates.length && <div className="opportunity-layout">
       <aside className="opportunity-list"><div className="opportunity-filters"><label>Find a product<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search selected products" /></label><label>Decision<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All decisions</option>{Object.entries(decisionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Priority<select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}><option value="all">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="not_assessed">Not assessed</option></select></label></div>
-        <div className="opportunity-candidate-list" role="list" aria-label="Candidates">{filtered.map((item) => <button role="listitem" key={item.candidate_id} className={selectedId === item.candidate_id ? 'active' : ''} onClick={() => setSelectedId(item.candidate_id)}><strong>{item.name}</strong><span>{item.dataset_filename} · {item.quantitative_evidence.length} observations</span><small>{item.stale ? 'Source needs review' : item.decision?.decision_status ? decisionLabels[item.decision.decision_status] : 'Not assessed'} · {item.decision?.priority ?? 'Priority not assessed'}</small></button>)}{!filtered.length && <p>No candidates match these filters.</p>}</div>
+        <div className="opportunity-candidate-list" role="list" aria-label="Candidates">{filtered.map((item) => <button role="listitem" key={item.candidate_id} className={selectedId === item.candidate_id ? 'active' : ''} onClick={() => requestCandidate(item.candidate_id)} disabled={saveState === 'saving'}><strong>{item.name}</strong><span>{item.dataset_filename} · {item.quantitative_evidence.length} observations</span><small>{item.historical && !item.stale ? 'Historical decision · source available' : item.stale ? 'Source needs review' : item.decision?.decision_status ? decisionLabels[item.decision.decision_status] : 'Not assessed'} · {item.decision?.priority ?? 'Priority not assessed'}</small></button>)}{!filtered.length && <p>No candidates match these filters.</p>}</div>
       </aside>
-      {candidate && decision && <section className="opportunity-detail" aria-label={`Review ${candidate.name}`}>
+      {candidate && decision?.candidate_id === candidate.candidate_id && <section className="opportunity-detail" aria-label={`Review ${candidate.name}`}>
         <div className="opportunity-candidate-heading"><div><span className="state-label">SOURCE PRODUCT</span><h2>{candidate.name}</h2><p>{candidate.dataset_filename} · {candidate.selection_reason}</p><details><summary>Source identity and scope</summary><code>{candidate.source_entity_id}</code><p>Dataset hash: {candidate.dataset_content_sha256 || 'Unavailable'}</p></details></div>{candidate.stale && <span className="opportunity-stale">Source needs review</span>}</div>
         {candidate.stale_reasons.map((reason) => <p className="research-alert" role="status" key={reason}>{reason} Saved PO judgment is retained; unresolved evidence is not presented as current.</p>)}
         {!!candidate.evidence_gaps.length && <section className="opportunity-gap-panel"><h3>Evidence gaps and open questions</h3><ul>{candidate.evidence_gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul><p>These are gaps in the evidence linked here; they do not prove that a product feature or behavior is absent.</p></section>}
-        <section className="opportunity-evidence"><div className="opportunity-section-heading"><div><span className="state-label">CSV SOURCE</span><h3>Observed measurements</h3></div><span>Imported values remain unverified unless independently confirmed.</span></div>{candidate.quantitative_evidence.length ? <div className="opportunity-observations">{candidate.quantitative_evidence.map((raw, index) => { const item = raw as Record<string, unknown>; const ref: OpportunityEvidenceReference = { kind: 'quantitative', dataset_id: String(item.dataset_id), source_entity_id: String(item.source_entity_id), source_row_number: typeof item.source_row_number === 'number' ? item.source_row_number : null, metric_id: typeof item.metric_id === 'string' ? item.metric_id : null }; const checked = (decision[evidenceRole] ?? []).some((saved) => sameRef(saved, ref)); const metricLabel = String(item.metric_definition || item.metric_id || 'Metric not identified'); return <label className="opportunity-observation" key={`${String(item.metric_id)}:${String(item.source_row_number)}:${index}`}><input type="checkbox" aria-label={`Attach ${metricLabel} source row ${String(item.source_row_number ?? 'unknown')}`} checked={checked} onChange={() => toggleEvidence(ref)} /><span><strong>{metricLabel}: {item.value === null || item.value === undefined ? 'Unknown' : String(item.value)} {String(item.unit ?? '')}</strong><small>{[item.geo, item.platform, item.snapshot_date || (item.period_start && item.period_end ? `${item.period_start}–${item.period_end}` : 'Period not provided'), item.methodology].filter(Boolean).join(' · ')}</small><small>{candidate.dataset_filename} · row {String(item.source_row_number ?? 'unknown')} · {String(item.verification_status ?? 'unverified')} · {item.analysis_ready === true ? 'complete source observation' : 'incomplete for analysis'}</small>{Array.isArray(item.validation_reasons) && item.validation_reasons.length > 0 && <small>{(item.validation_reasons as string[]).join(' ')}</small>}</span></label>; })}</div> : <p className="opportunity-muted">No current measurements resolve to this candidate. Missing values stay unknown.</p>}<label className="opportunity-evidence-role">Attach checked items as<select aria-label="Evidence role" value={evidenceRole} onChange={(event) => setEvidenceRole(event.target.value as typeof evidenceRole)}><option value="supporting_evidence">Supporting evidence</option><option value="contradictory_evidence">Contradictory evidence</option></select></label></section>
+        <section className="opportunity-evidence"><div className="opportunity-section-heading"><div><span className="state-label">CSV SOURCE</span><h3>Observed measurements</h3></div><span>Imported values remain unverified unless independently confirmed.</span></div>{candidate.historical && !candidate.stale && <p className="opportunity-muted">Historical decision · original source still available. This product is not on the active shortlist.</p>}{candidate.quantitative_evidence.length ? <div className="opportunity-observations">{candidate.quantitative_evidence.map((raw, index) => { const item = raw as Record<string, unknown>; const ref = quantitativeRef(item); const checked = (decision[evidenceRole] ?? []).some((saved) => sameRef(saved, ref)); const metricLabel = String(item.metric_definition || item.metric_id || 'Metric not identified'); const provenance = item.metadata_provenance && typeof item.metadata_provenance === 'object' ? Object.entries(item.metadata_provenance as Record<string, Record<string, unknown>>) : []; const validationReasons = [...new Set([...(Array.isArray(item.source_validation_reasons) ? item.source_validation_reasons as string[] : []), ...(Array.isArray(item.metadata_validation_reasons) ? item.metadata_validation_reasons as string[] : []), ...(Array.isArray(item.validation_reasons) ? item.validation_reasons as string[] : [])])]; return <label className="opportunity-observation" key={`${String(item.metric_id)}:${String(item.source_row_number)}:${index}`}><input type="checkbox" aria-label={`Attach ${metricLabel} source row ${String(item.source_row_number ?? 'unknown')}`} checked={checked} onChange={() => toggleEvidence(ref)} /><span><strong>{metricLabel}: {item.value === null || item.value === undefined ? 'Unknown' : String(item.value)} {String(item.unit ?? '')}</strong>{item.value_precision === 'approximate' && <small className="opportunity-approximate-value">Approximate value{item.reported_value_text ? ` · as reported: ${String(item.reported_value_text)}` : ''}</small>}<small>{[item.geo, item.platform, item.snapshot_date || (item.period_start && item.period_end ? `${item.period_start}–${item.period_end}` : 'Period not provided'), item.period_semantics, item.granularity, item.methodology].filter(Boolean).join(' · ')}</small><small>{candidate.dataset_filename} · row {String(item.source_row_number ?? 'unknown')} · {String(item.verification_status ?? 'unverified')} · {item.complete_observation === true ? 'complete observation' : 'incomplete observation'} · {item.m2_observation_usable === true ? 'eligible observation under M2 rules' : 'not eligible under M2 rules'}</small>{typeof item.comparison_note === 'string' && <small>{item.comparison_note}</small>}{validationReasons.length > 0 && <details className="opportunity-observation-validation"><summary>Why this measurement needs review ({validationReasons.length})</summary><ul>{validationReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></details>}{provenance.some(([, entry]) => entry.basis || entry.confirmed_at) && <details className="opportunity-observation-validation"><summary>Metadata provenance</summary><ul>{provenance.map(([field, entry]) => <li key={field}>{field}: {String(entry.value ?? 'Unknown')} · {String(entry.basis ?? 'unknown basis')}{entry.original_value !== entry.value ? ` · originally ${String(entry.original_value ?? 'Unknown')}` : ''}{entry.source_url ? <> · <a href={String(entry.source_url)} target="_blank" rel="noreferrer">documentation</a></> : ''}</li>)}</ul></details>}</span></label>; })}</div> : <p className="opportunity-muted">No current measurements resolve to this candidate. Missing values stay unknown.</p>}<label className="opportunity-evidence-role">Attach checked items as<select aria-label="Evidence role" value={evidenceRole} onChange={(event) => setEvidenceRole(event.target.value as typeof evidenceRole)}><option value="supporting_evidence">Supporting evidence</option><option value="contradictory_evidence">Contradictory evidence</option></select></label></section>
         <section className="opportunity-evidence"><div className="opportunity-section-heading"><div><span className="state-label">REPORT RESEARCH</span><h3>Qualitative evidence</h3></div><span>Reports are not matched by product name. Choose a report finding explicitly to attach it.</span></div><label className="opportunity-report-picker">Research report<select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}><option value="">Choose a workspace report</option>{(workspace?.reports ?? []).map((item) => <option key={item.report_id} value={item.report_id}>{item.question} · {item.geo} / {item.os}</option>)}</select></label>{report ? report.findings.length ? <div className="opportunity-report-findings">{report.findings.map((finding) => { const ref = reportRef(report, 'report_finding', finding.key); const checked = (decision[evidenceRole] ?? []).some((saved) => sameRef(saved, ref)); return <label key={finding.key}><input type="checkbox" aria-label={`Attach report finding: ${finding.title}`} checked={checked} onChange={() => toggleEvidence(ref)} /><span><strong>{finding.title}</strong><small>{finding.finding_type} · {finding.evidence_status} · {finding.description}</small>{finding.uncertainty && <small>Uncertainty: {finding.uncertainty}</small>}{finding.po_implications && <small>Report recommendation: {finding.po_implications}</small>}{(finding.existing_po_workspace.po_assessment || finding.existing_po_workspace.notes || finding.existing_po_workspace.next_action) && <small>Existing PO assessment · {finding.existing_po_workspace.po_assessment || finding.existing_po_workspace.notes || "No assessment text"}{finding.existing_po_workspace.next_action ? ` · Next action: ${finding.existing_po_workspace.next_action}` : ""}</small>}{finding.evidence_references.map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>Open supplied source</a>)}</span></label>; })}</div> : <p className="opportunity-muted">This report has no structured findings to attach. Its original report remains available from Reports.</p> : <p className="opportunity-muted">No qualitative report is selected. Candidate identity will not be inferred from a similar display name.</p>}</section>
-        <section className="opportunity-decision"><div className="opportunity-section-heading"><div><span className="state-label">YOUR DECISION</span><h3>Assessment and next action</h3></div><span className={`benchmark-save-state is-${saveState === 'failed' ? 'failed' : saveState}`} role="status">{saveState === 'saved' ? 'Saved' : saveState === 'unsaved' ? 'Unsaved changes' : saveState === 'saving' ? 'Saving…' : 'Save failed'}</span></div>
+        <section className="opportunity-decision"><div className="opportunity-section-heading"><div><span className="state-label">YOUR DECISION</span><h3>Assessment and next action</h3></div><span className={`benchmark-save-state is-${visibleSaveState}`} role="status">{visibleSaveState === 'saved' ? 'Saved' : visibleSaveState === 'unsaved' ? 'Unsaved changes' : visibleSaveState === 'saving' ? 'Saving…' : 'Save failed'}</span></div>
           <div className="opportunity-fields"><label>PO decision<select aria-label="PO decision" value={decision.decision_status ?? ''} onChange={(event) => changeDecision({ decision_status: (event.target.value || null) as OpportunityDecision['decision_status'] })}><option value="">Not decided</option>{Object.entries(decisionLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>PO priority<select aria-label="Set PO priority" value={decision.priority} onChange={(event) => changeDecision({ priority: event.target.value as OpportunityDecision['priority'] })}><option value="not_assessed">Not assessed</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select><small>Explicit PO judgment; this is not a market score.</small></label><label>Review date<input type="date" value={decision.review_date ?? ''} onChange={(event) => changeDecision({ review_date: event.target.value || null })} /></label></div>
           <label className="opportunity-block-field">PO rationale<textarea rows={3} value={decision.rationale} onChange={(event) => changeDecision({ rationale: event.target.value })} placeholder="What is your assessment, and why?" /></label>
-          <div className="opportunity-assessments"><div className="opportunity-section-heading"><h4>Assessment dimensions</h4><span>Classify each entry as fact, finding, hypothesis, PO judgment, or unknown.</span></div><div className="opportunity-add-dimension"><select aria-label="Suggested assessment dimension" value={dimensionSuggestions.includes(assessmentDimension) ? assessmentDimension : ''} onChange={(event) => setAssessmentDimension(event.target.value)}><option value="">Choose a suggested dimension</option>{dimensionSuggestions.map((item) => <option value={item} key={item}>{item}</option>)}</select><input aria-label="Custom assessment dimension" value={dimensionSuggestions.includes(assessmentDimension) ? '' : assessmentDimension} onChange={(event) => setAssessmentDimension(event.target.value)} placeholder="Or add a custom criterion" /><button type="button" className="secondary-action" onClick={addAssessment} disabled={!assessmentDimension.trim()}>Add</button></div>{decision.assessments.map((item, index) => <div className="opportunity-assessment-row" key={`${item.dimension}:${index}`}><div><strong>{item.dimension}</strong><button type="button" className="text-button" onClick={() => changeDecision({ assessments: decision.assessments.filter((_, itemIndex) => itemIndex !== index) })}>Remove</button></div><select aria-label={`${item.dimension} evidence type`} value={item.kind} onChange={(event) => changeDecision({ assessments: decision.assessments.map((value, itemIndex) => itemIndex === index ? { ...value, kind: event.target.value as OpportunityAssessment['kind'] } : value) })}>{Object.entries(assessmentKinds).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select><textarea aria-label={`${item.dimension} assessment`} rows={2} value={item.statement} onChange={(event) => changeDecision({ assessments: decision.assessments.map((value, itemIndex) => itemIndex === index ? { ...value, statement: event.target.value } : value) })} placeholder={item.kind === 'unknown' ? 'What evidence is missing?' : 'Record the supporting assessment'} /></div>)}</div>
+          <div className="opportunity-assessments"><div className="opportunity-section-heading"><h4>Assessment dimensions</h4><span>Classify each entry as fact, finding, hypothesis, PO judgment, or unknown.</span></div><div className="opportunity-add-dimension"><select aria-label="Suggested assessment dimension" value={dimensionSuggestions.includes(assessmentDimension) ? assessmentDimension : ''} onChange={(event) => setAssessmentDimension(event.target.value)}><option value="">Choose a suggested dimension</option>{dimensionSuggestions.map((item) => <option value={item} key={item}>{item}</option>)}</select><input aria-label="Custom assessment dimension" value={dimensionSuggestions.includes(assessmentDimension) ? '' : assessmentDimension} onChange={(event) => setAssessmentDimension(event.target.value)} placeholder="Or add a custom criterion" /><button type="button" className="secondary-action" onClick={addAssessment} disabled={!assessmentDimension.trim()}>Add</button></div>{decision.assessments.map((item, index) => <div className="opportunity-assessment-row" key={`${item.dimension}:${index}`}><div><strong>{item.dimension}</strong><button type="button" className="text-button" onClick={() => changeDecision({ assessments: decision.assessments.filter((_, itemIndex) => itemIndex !== index) })}>Remove</button></div><select aria-label={`${item.dimension} evidence type`} value={item.kind} onChange={(event) => changeDecision({ assessments: decision.assessments.map((value, itemIndex) => itemIndex === index ? { ...value, kind: event.target.value as OpportunityAssessment['kind'] } : value) })}>{Object.entries(assessmentKinds).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select><textarea aria-label={`${item.dimension} assessment`} rows={2} value={item.statement} onChange={(event) => changeDecision({ assessments: decision.assessments.map((value, itemIndex) => itemIndex === index ? { ...value, statement: event.target.value } : value) })} placeholder={item.kind === 'unknown' ? 'What evidence is missing?' : 'Record the supporting assessment'} />{item.kind === 'observed_fact' && item.evidence_refs.length === 0 && <p className="opportunity-assessment-warning" role="status">Observed facts need supporting evidence attached to this assessment.</p>}<details className="opportunity-assessment-evidence"><summary>Attach evidence to this assessment ({item.evidence_refs.length})</summary>{assessmentEvidenceOptions.length ? assessmentEvidenceOptions.map((option, optionIndex) => <label key={`${option.reference.kind}:${option.reference.item_key ?? option.reference.source_row_number}:${optionIndex}`}><input type="checkbox" aria-label={`${item.dimension}: ${option.label}`} checked={item.evidence_refs.some((reference) => sameRef(reference, option.reference))} onChange={() => toggleAssessmentEvidence(index, option.reference)} /><span>{option.label}</span></label>) : <p>No source observations or report findings are available for this assessment yet.</p>}</details></div>)}</div>
           <label className="opportunity-block-field">Open questions<textarea rows={2} value={questionDraft} onChange={(event) => { setQuestionDraft(event.target.value); revision.current += 1; setSaveState('unsaved'); }} placeholder="One question per line" /></label>
           <label className="opportunity-block-field">Next action<textarea rows={2} value={decision.next_action} onChange={(event) => changeDecision({ next_action: event.target.value })} placeholder="What should happen next?" /></label>
           <details className="opportunity-attached-evidence"><summary>Selected evidence ({decision.supporting_evidence.length} supporting · {decision.contradictory_evidence.length} contradictory)</summary><strong>Supporting evidence</strong>{decision.supporting_evidence.map((ref, index) => <div key={`support:${ref.kind}:${ref.report_id || ref.dataset_id}:${ref.item_key || ref.source_row_number}:${index}`}><span>{ref.kind === 'quantitative' ? `CSV row ${ref.source_row_number ?? 'unknown'} · ${ref.metric_id ?? 'metric'}` : `Report ${ref.report_id} · ${ref.item_key}`}</span><button className="text-button" onClick={() => toggleEvidence(ref, 'supporting_evidence')}>Remove</button></div>)}<strong>Contradictory evidence</strong>{decision.contradictory_evidence.map((ref, index) => <div key={`contradict:${ref.kind}:${ref.report_id || ref.dataset_id}:${ref.item_key || ref.source_row_number}:${index}`}><span>{ref.kind === 'quantitative' ? `CSV row ${ref.source_row_number ?? 'unknown'} · ${ref.metric_id ?? 'metric'}` : `Report ${ref.report_id} · ${ref.item_key}`}</span><button className="text-button" onClick={() => toggleEvidence(ref, 'contradictory_evidence')}>Remove</button></div>)}</details>
           {!!candidate.unresolved_decision_evidence.length && <p className="research-alert">Some previously attached evidence is stale. It is retained in the saved decision but excluded from current evidence.</p>}
           {error && <p className="research-alert" role="alert">{error}</p>}{notice && <p className="workspace-success" role="status">{notice}</p>}
-          <div className="opportunity-save-row"><span>Research report evidence remains unverified; your judgment is stored separately.</span><button className="primary-action" disabled={saveState === 'saving' || saveState === 'saved'} onClick={() => void save()}>{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Retry save' : 'Save PO decision'}</button></div>
+          <div className="opportunity-save-row"><span>Research report evidence remains unverified; your judgment is stored separately.</span><button className="primary-action" disabled={saveState === 'saving' || !hasUnsavedChanges} onClick={() => void save()}>{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Retry save' : 'Save PO decision'}</button></div>
         </section>
       </section>}
     </div>}
+    {pendingAction && <div className="opportunity-draft-backdrop"><section className="opportunity-draft-dialog" role="alertdialog" aria-modal="true" aria-labelledby="opportunity-draft-title" aria-describedby="opportunity-draft-description"><h2 id="opportunity-draft-title">Unsaved PO changes</h2><p id="opportunity-draft-description">Save this candidate's assessment before you leave, discard the edits, or continue editing.</p>{error && saveState === 'failed' && <p className="research-alert" role="alert">{error}</p>}<div className="opportunity-draft-actions"><button type="button" className="primary-action" disabled={saveState === 'saving' || !hasUnsavedChanges} onClick={() => { void save().then((saved) => { if (saved) completePendingAction(); }); }}>{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Retry save and continue' : 'Save and continue'}</button><button type="button" className="secondary-action" disabled={saveState === 'saving'} onClick={discardAndContinue}>Discard changes</button><button type="button" className="text-button" onClick={() => setPendingAction(null)}>Continue editing</button></div></section></div>}
   </main>;
 }
