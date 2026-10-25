@@ -101,6 +101,17 @@ describe('QuantitativeDatasetImport', () => {
     expect(payload.csv_content.startsWith('\ufeff')).toBe(true);
   });
 
+  it('explains when a selected CSV is not valid UTF-8 and does not preview it', async () => {
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
+    const invalidUtf8 = new File([new Uint8Array([0xff, 0xfe, 0x00, 0x81])], 'invalid-encoding.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [invalidUtf8] } });
+
+    expect(await screen.findByText('Không đọc được file. Hãy chọn lại file CSV.')).toBeTruthy();
+    expect(reportApi.previewQuantitativeDataset).not.toHaveBeenCalled();
+    expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
+  });
+
   it('keeps a Date-only column semantically unknown until the user confirms snapshot meaning', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);

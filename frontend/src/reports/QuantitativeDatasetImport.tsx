@@ -1,4 +1,5 @@
 import { DatasetMetadataReview } from './DatasetMetadataReview';
+import { canonicalCsvIdentityBytes } from './csvIdentity';
 import { useMemo, useRef, useState } from 'react';
 import { reportApi, type ImportedReport, type QuantitativeDataset, type QuantitativeDatasetInput, type QuantitativeDatasetPreview, type QuantitativeMetricColumnMapping } from './api';
 
@@ -201,7 +202,7 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
       setExplicitValues((current) => ({ ...current, period_semantics: explicitPeriodMeaning }));
       if (globalThis.crypto?.subtle) {
         try {
-          const bytes = new TextEncoder().encode('\ufeff' + content);
+          const bytes = canonicalCsvIdentityBytes(content);
           const hash = await crypto.subtle.digest('SHA-256', bytes);
           const digest = Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, '0')).join('');
           if (!report) return;

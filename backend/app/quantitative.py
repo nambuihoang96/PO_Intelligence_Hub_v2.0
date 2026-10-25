@@ -701,4 +701,14 @@ def calculate_change(current: dict[str, Any], previous: dict[str, Any], period_k
 
 
 def csv_digest(csv_text: str) -> str:
-    return hashlib.sha256(csv_text.encode("utf-8-sig")).hexdigest()
+    """Return the legacy-compatible canonical CSV identity, not a raw-file checksum.
+
+    Historical imports encoded decoded text as UTF-8-SIG, which adds one BOM
+    regardless of whether the physical file had one. The frontend used the same
+    convention. Ignore exactly one physical leading BOM before applying that
+    established encoding so old hashes remain valid while original_csv retains
+    the BOM exactly as imported. All other characters, including line endings,
+    remain significant.
+    """
+    canonical_text = csv_text.removeprefix("\ufeff")
+    return hashlib.sha256(canonical_text.encode("utf-8-sig")).hexdigest()

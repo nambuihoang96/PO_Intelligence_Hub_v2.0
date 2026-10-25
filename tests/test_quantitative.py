@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import tempfile
@@ -14,11 +15,27 @@ from sqlalchemy.orm import Session
 from backend.app.db import create_database_engine, get_database_path
 from backend.app.main import create_app
 from backend.app.models import ImportedResearchReport, QuantitativeDataset
-from backend.app.quantitative import assess_observation_readiness, calculate_change, compatible_for_comparison, normalize_metric_id, normalize_unit, parse_csv_observations
+from backend.app.quantitative import assess_observation_readiness, calculate_change, compatible_for_comparison, csv_digest, normalize_metric_id, normalize_unit, parse_csv_observations
 from backend.app.research_data import QuantitativeObservation, UniversalResearchData
 
 
 class QuantitativeObservationTest(unittest.TestCase):
+    def test_csv_identity_is_legacy_compatible_across_optional_utf8_bom(self):
+        without_bom = b'Unified Name;Downloads\r\nNguy\xe1\xbb\x85n;120\r\n'
+        with_bom = b'\xef\xbb\xbf' + without_bom
+        without_bom_text = without_bom.decode('utf-8')
+        with_bom_text = with_bom.decode('utf-8')
+
+        # Legacy FileReader removed the physical BOM, then utf-8-sig added one
+        # during hashing. The canonical identity must preserve that old digest.
+        legacy_digest = hashlib.sha256(without_bom_text.encode('utf-8-sig')).hexdigest()
+        self.assertEqual(csv_digest(without_bom_text), legacy_digest)
+        self.assertEqual(csv_digest(with_bom_text), legacy_digest)
+        self.assertNotEqual(hashlib.sha256(without_bom).hexdigest(), legacy_digest)
+        self.assertEqual(hashlib.sha256(with_bom).hexdigest(), legacy_digest)
+        self.assertNotEqual(csv_digest(f'\ufeff{with_bom_text}'), legacy_digest, "Only the optional physical BOM is normalized; a second BOM remains content.")
+        self.assertNotEqual(csv_digest(with_bom_text.replace('\r\n', '\n')), legacy_digest, "Line endings remain part of dataset identity.")
+
     def test_readiness_separates_csv_analysis_from_report_scope_and_keeps_explicit_dates(self):
         observation = assess_observation_readiness({
             "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)",
@@ -508,11 +525,106 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(saved.json()["report_id"], report_id)
         self.assertEqual(saved.json()["compatibility_status"], "compatible")
         self.assertEqual(saved.json()["observations"][0]["verification_status"], "unverified")
-        duplicate = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
-        self.assertEqual(duplicate.status_code, 200)
+        dataset_id = saved.json()["id"]
+
+        # Simulate reviewed legacy metadata that must not be reset during a
+        # compatible duplicate import from either report or workspace scope.
+        metadata_review = {"revision": 1, "entries": {"sentinel": {"value": "kept"}}, "history": [{"field": "methodology", "value": "historical review"}]}
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                dataset = session.get(QuantitativeDataset, dataset_id)
+                self.assertIsNotNone(dataset)
+                dataset.field_mapping_json = {**dataset.field_mapping_json, "metadata_review": metadata_review}
+                session.commit()
+        finally:
+            engine.dispose()
+
+        project = self.client.post("/api/v1/projects", json={"name": "Legacy CSV identity compatibility"}).json()
+        linked = self.client.put(f"/api/v1/projects/{project['id']}/reports/{report_id}")
+        self.assertEqual(linked.status_code, 200, linked.text)
+
+        # An old FileReader removed a source BOM before sending this same CSV.
+        # New browser code preserves it; both forms must resolve to the same
+        # existing dataset without rewriting its original representation.
+        bom_body = {**body, "filename": "weekly-with-bom.csv", "csv_content": "\ufeff" + body["csv_content"]}
+        duplicate = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=bom_body)
+        self.assertEqual(duplicate.status_code, 200, duplicate.text)
+        self.assertEqual(duplicate.json()["id"], dataset_id)
         self.assertTrue(duplicate.json()["duplicate"])
+        repeated = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=bom_body)
+        self.assertEqual(repeated.status_code, 200, repeated.text)
+        self.assertEqual(repeated.json()["id"], dataset_id)
+        workspace_duplicate = self.client.post(f"/api/v1/projects/{project['id']}/quantitative-datasets", json=bom_body)
+        self.assertEqual(workspace_duplicate.status_code, 200, workspace_duplicate.text)
+        self.assertEqual(workspace_duplicate.json()["id"], dataset_id)
+        self.assertTrue(workspace_duplicate.json()["duplicate"])
+
         listing = self.client.get(f"/api/v1/reports/{report_id}/quantitative-datasets")
         self.assertEqual(len(listing.json()["items"]), 1)
+        workspace_listing = self.client.get(f"/api/v1/projects/{project['id']}/quantitative-datasets")
+        self.assertEqual(len(workspace_listing.json()["items"]), 1)
+        self.assertEqual(workspace_listing.json()["items"][0]["id"], dataset_id)
+
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                persisted = session.get(QuantitativeDataset, dataset_id)
+                self.assertEqual(persisted.original_csv, body["csv_content"])
+                self.assertEqual(persisted.content_sha256, saved.json()["content_sha256"])
+                self.assertEqual(persisted.field_mapping_json["metadata_review"], metadata_review)
+                self.assertEqual(len(persisted.observations_json), len(saved.json()["observations"]))
+        finally:
+            engine.dispose()
+
+    def test_bom_import_preserves_exact_original_content_and_is_idempotent(self):
+        project = self.client.post("/api/v1/projects", json={"name": "BOM original-content round trip"}).json()
+        raw_bytes = (
+            b"\xef\xbb\xbfUnified Name;Unified ID;Platform;Downloads (Absolute)\r\n"
+            b'"\xe1\xbb\xa8ng d\xe1\xbb\xa5ng, ""A""";st-a;Unified;1200\r\n'
+        )
+        csv_content = raw_bytes.decode("utf-8")
+        body = {
+            "filename": "unicode-quoted-crlf-bom.csv", "csv_content": csv_content,
+            "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
+            "metric_mappings": [{
+                "column": "Downloads (Absolute)", "metric_id": "downloads_absolute",
+                "metric_definition": "Downloads (Absolute)", "unit": "downloads",
+                "methodology": "Sensor Tower exported metric definition",
+            }],
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-09-01", "period_end": "2026-09-30", "period_semantics": "reporting_interval", "granularity": "month"},
+        }
+        first = self.client.post(f"/api/v1/projects/{project['id']}/quantitative-datasets", json=body)
+        self.assertEqual(first.status_code, 201, first.text)
+        dataset_id = first.json()["id"]
+        self.assertEqual(first.json()["content_sha256"], csv_digest(csv_content))
+        self.assertNotEqual(first.json()["content_sha256"], hashlib.sha256(raw_bytes.removeprefix(b"\xef\xbb\xbf")).hexdigest(), "content_sha256 follows the canonical UTF-8-SIG identity, not the raw bytes of the BOM-free variant")
+        self.assertEqual(first.json()["observations"][0]["value"], 1200)
+        self.assertEqual(first.json()["observations"][0]["source_entity_name"], "Ứng dụng, \"A\"")
+
+        exact_duplicate = self.client.post(f"/api/v1/projects/{project['id']}/quantitative-datasets", json=body)
+        self.assertEqual(exact_duplicate.status_code, 200, exact_duplicate.text)
+        self.assertEqual(exact_duplicate.json()["id"], dataset_id)
+        without_bom = {**body, "csv_content": csv_content.removeprefix("\ufeff")}
+        bom_variant_duplicate = self.client.post(f"/api/v1/projects/{project['id']}/quantitative-datasets", json=without_bom)
+        self.assertEqual(bom_variant_duplicate.status_code, 200, bom_variant_duplicate.text)
+        self.assertEqual(bom_variant_duplicate.json()["id"], dataset_id)
+        self.assertTrue(bom_variant_duplicate.json()["duplicate"])
+
+        listing = self.client.get(f"/api/v1/projects/{project['id']}/quantitative-datasets")
+        self.assertEqual(len(listing.json()["items"]), 1)
+        reopened = self.client.get(f"/api/v1/projects/{project['id']}/quantitative-datasets/{dataset_id}")
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+        engine = create_database_engine(get_database_path())
+        try:
+            with Session(engine) as session:
+                persisted = session.get(QuantitativeDataset, dataset_id)
+                self.assertEqual(persisted.original_csv.encode("utf-8"), raw_bytes)
+                self.assertTrue(persisted.original_csv.startswith("\ufeff"))
+                self.assertEqual(persisted.observations_json[0]["value"], 1200)
+                self.assertEqual(persisted.observations_json[0]["source_entity_name"], "Ứng dụng, \"A\"")
+        finally:
+            engine.dispose()
 
     def test_semicolon_wide_csv_import_persists_mapping_and_unpivoted_metrics(self):
         report_id = self.create_report()
