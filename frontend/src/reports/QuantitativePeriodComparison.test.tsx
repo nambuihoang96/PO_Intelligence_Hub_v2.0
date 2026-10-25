@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuantitativePeriodComparison } from './QuantitativePeriodComparison';
+import { QuantitativeComparisonCharts } from './QuantitativeComparisonCharts';
 import { reportApi, type ComparisonDataset, type QuantitativeComparisonPreview } from './api';
 
 vi.mock('./QuantitativeDatasetImport', () => ({
@@ -193,5 +194,19 @@ describe('QuantitativePeriodComparison', () => {
     expect(reportApi.list).not.toHaveBeenCalled();
     expect(screen.getByRole('link', { name: '← Back to research workspace' }).getAttribute('href'))
       .toBe('/research?projectId=workspace-1&view=data');
+  });
+
+  it('does not link CSV-only evidence to a nonexistent report', () => {
+    const csvOnlyPreview: QuantitativeComparisonPreview = {
+      ...preview,
+      rows: preview.rows.map((row) => ({
+        ...row,
+        evidence: row.evidence.map((item) => ({ ...item, report_id: null, report_question: null })),
+      })),
+    };
+    render(<QuantitativeComparisonCharts result={csvOnlyPreview} />);
+    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
+    expect(screen.queryByRole('link', { name: 'Open report' })).toBeNull();
+    expect(screen.getAllByText(/October export · row 2 · unverified/).length).toBeGreaterThan(0);
   });
 });
