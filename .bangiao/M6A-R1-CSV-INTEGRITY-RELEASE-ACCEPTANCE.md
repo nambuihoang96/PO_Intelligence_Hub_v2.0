@@ -2,7 +2,7 @@
 
 **Branch:** `feat/ux-recovery-01-research-results`
 **Starting HEAD:** `bce93610b495e5748bd927e00dbd452305056c68`
-**Implementation commit:** pending
+**Implementation commit:** `b316147` — `fix(csv): preserve legacy identity with optional BOM`
 **Release gate:** `RELEASE PENDING VERIFICATION`
 
 ## Root cause and hash contract
@@ -79,4 +79,4 @@ The regression suite simulates the prior frontend hash behavior and verifies the
 
 **`RELEASE PENDING VERIFICATION`** — the BOM/hash integrity defect is fixed and the core owner-CSV duplicate/import path passed isolated tests and browser checks. Do not treat this as final M6-A release acceptance until the remaining owner-data and workflow gates above are verified. No merge or release was performed.
 
-**Implementation commit:** pending
+**Implementation commit:** `b3161475f2b9efc9da053eabd8b0b54d24f8a55a`
