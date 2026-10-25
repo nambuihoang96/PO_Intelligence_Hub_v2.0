@@ -53,7 +53,7 @@ CSV-only evidence has `report_id = null`. The comparison evidence UI previously 
 - Frontend TypeScript check and production build: **passed**. Existing Vite warning: one bundle chunk is 501.51 kB (gzip 143.71 kB), slightly above the 500 kB advisory threshold.
 - Alembic on isolated SQLite: `upgrade head` passed through `20261024_0009`; `check` reported no pending operations; `current` was `20261024_0009 (head)`.
 - Backup/restore `PRAGMA integrity_check`: **ok** for all three isolated database copies.
-- `git diff --check`: to be recorded after final handoff edit.
+- `git diff --check`: **passed** (only Git line-ending conversion warnings; no whitespace errors).
 
 ## Known limitations / open release blockers
 
@@ -76,6 +76,6 @@ CSV-only evidence has `report_id = null`. The comparison evidence UI previously 
 
 ## Commit
 
-- **Commit SHA:** pending commit.
+- **Implementation commit SHA:** `531f4a7` (`fix-csv-only-evidence-report-links`).
 - **Push:** pending push to `feat/ux-recovery-01-research-results`.
 - **Merge/deployment/tag:** not performed.
