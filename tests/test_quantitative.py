@@ -542,7 +542,9 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
             "csv_content": "Unified Name;Unified ID;Platform;Downloads (Absolute)\nExternal App;st-interval;Unified;120\n",
             "field_mapping": {"entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform"},
             "metric_mappings": [{"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads"}],
-            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-14", "period_end": "2026-11-13"},
+            # Keep the interval historical so this test covers the absence of
+            # inferred granularity, not the future-period safety guard.
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-09-14", "period_end": "2026-10-13"},
         }
         preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
         self.assertEqual(preview.status_code, 200, preview.text)
@@ -589,14 +591,53 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
         self.assertEqual(value["matched_entities"], 10)
         self.assertEqual(value["source_only_entities"], 90)
         self.assertEqual(value["dataset_analysis_ready_observations"], 100)
-        self.assertEqual(value["dataset_comparison_ready_observations"], 100)
+        self.assertEqual(value["dataset_comparison_ready_observations"], 0)
+        self.assertTrue(all(
+            any("documented provider basis" in reason or "methodology is not confirmed" in reason for reason in item["validation_reasons"])
+            for item in value["observations"]
+        ))
         self.assertEqual(value["ambiguities"], [])
         saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
         self.assertEqual(saved.status_code, 201, saved.text)
-        self.assertEqual(saved.json()["dataset_comparison_ready_observations"], 0)  # Free-text metadata needs a documented basis.
+        self.assertEqual(saved.json()["dataset_comparison_ready_observations"], value["dataset_comparison_ready_observations"])
         observations = saved.json()["observations"]
         self.assertEqual(len({item["source_entity_id"] for item in observations}), 100)
         self.assertEqual(sum(item["entity_resolution_state"] == "source_only" for item in observations), 90)
+
+    def test_preview_and_saved_dataset_share_effective_metadata_readiness(self):
+        report_id = self.create_report("Metadata-ready preview parity")
+        body = {
+            "filename": "metadata-ready.csv",
+            "csv_content": (
+                "Unified Name;Unified ID;Platform;GEO;Period Start;Period End;Period Semantics;"
+                "Granularity;Unit;Methodology;Downloads (Absolute)\n"
+                "Example App;st-example;Android;US;2026-09-01;2026-09-30;reporting_interval;"
+                "monthly;downloads;Sensor Tower exact monthly export;120\n"
+            ),
+            "field_mapping": {
+                "entity_id": "Unified ID", "entity_name": "Unified Name", "platform": "Platform",
+                "geo": "GEO", "period_start": "Period Start", "period_end": "Period End",
+                "period_semantics": "Period Semantics", "granularity": "Granularity",
+                "unit": "Unit", "methodology": "Methodology",
+            },
+            "metric_mappings": [{
+                "column": "Downloads (Absolute)", "metric_id": "downloads_absolute",
+                "metric_definition": "Downloads, exact source count", "unit": "downloads",
+            }],
+            "explicit_values": {},
+        }
+
+        preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        preview_data = preview.json()
+        self.assertEqual(preview_data["dataset_analysis_ready_observations"], 1)
+        self.assertEqual(preview_data["dataset_comparison_ready_observations"], 1)
+        self.assertEqual(preview_data["observations"][0]["metadata_provenance"]["methodology"]["basis"], "csv")
+        self.assertEqual(preview_data["observations"][0]["verification_status"], "unverified")
+
+        saved = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets", json=body)
+        self.assertEqual(saved.status_code, 201, saved.text)
+        self.assertEqual(saved.json()["dataset_comparison_ready_observations"], preview_data["dataset_comparison_ready_observations"])
 
     def test_unmatched_dataset_imports_without_any_report_matches(self):
         report_id = self.create_report("No matching report apps")
@@ -686,7 +727,9 @@ class QuantitativeDatasetAPITest(unittest.TestCase):
                 {"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower export"},
                 {"column": "Revenue (Absolute)", "metric_id": "revenue_absolute", "metric_definition": "Revenue (Absolute)", "unit": "USD", "methodology": "Sensor Tower export"},
             ],
-            "explicit_values": {"geo": "Worldwide", "period_start": "2026-10-14", "period_end": "2026-11-13", "granularity": "rolling_period"},
+            # This is a historical interval; the future-period validation is
+            # tested independently and must not mask entity-mapping assertions.
+            "explicit_values": {"geo": "Worldwide", "period_start": "2026-09-14", "period_end": "2026-10-13", "granularity": "rolling_period"},
         }
         first_preview = self.client.post(f"/api/v1/reports/{report_id}/quantitative-datasets/preview", json=body)
         self.assertEqual(first_preview.status_code, 200, first_preview.text)

@@ -2,6 +2,7 @@ import hashlib
 import json
 import csv
 import io
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -274,6 +275,17 @@ def _preview_dataset(report: ImportedResearchReport | None, payload: Quantitativ
         )
     except (ValueError, csv.Error) as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_QUANTITATIVE_DATASET", "message": str(exc)}) from exc
+    # A preview must apply the same non-destructive metadata provenance rules
+    # as a persisted dataset. Free-text import defaults are not evidence that
+    # required metadata came from the CSV or documented provider material.
+    preview_dataset = SimpleNamespace(
+        observations_json=observations,
+        field_mapping_json={
+            "field_mapping": payload.field_mapping,
+            "metadata_review": {"revision": 0, "entries": {}, "history": []},
+        },
+    )
+    observations = effective_observations(preview_dataset, report)
     for item in observations:
         item["import_status"] = "preview"
     complete = sum(bool(item.get("complete_observation")) for item in observations)

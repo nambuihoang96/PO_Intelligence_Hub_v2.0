@@ -125,11 +125,21 @@ function dateHints(filename: string): { geo?: string; period_start?: string; per
 function readLocalFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Unsupported file encoding'));
+    reader.onload = () => {
+      if (!(reader.result instanceof ArrayBuffer)) { reject(new Error('Unsupported file encoding')); return; }
+      try {
+        const bytes = new Uint8Array(reader.result);
+        const hasUtf8Bom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+        // TextDecoder normally consumes a UTF-8 BOM. Keep it in the stored CSV
+        // text so the payload hash and original_csv still describe the source
+        // bytes; parseDelimited removes it only from the first header cell.
+        const decoded = new TextDecoder('utf-8', { fatal: true }).decode(reader.result);
+        resolve(hasUtf8Bom && !decoded.startsWith('\ufeff') ? `\ufeff${decoded}` : decoded);
+      } catch { reject(new Error('Unsupported file encoding')); }
+    };
     reader.onerror = () => reject(reader.error ?? new Error('Could not read file'));
-    // File.text() is inconsistently implemented by browser test runtimes and
-    // can reject after a change event. FileReader is the common browser API.
-    reader.readAsText(file, 'UTF-8');
+    // Read bytes so decoding cannot silently remove the source UTF-8 BOM.
+    reader.readAsArrayBuffer(file);
   });
 }
 

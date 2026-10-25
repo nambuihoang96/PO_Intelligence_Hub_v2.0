@@ -85,6 +85,22 @@ describe('QuantitativeDatasetImport', () => {
     expect(payload.metric_mappings).toEqual([expect.objectContaining({ column: 'Downloads (Absolute)', metric_definition: 'Downloads (Absolute)' })]);
   });
 
+  it('preserves a UTF-8 BOM in the original CSV payload while parsing the first header', async () => {
+    vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn file → kiểm tra → lưu vào báo cáo'));
+    const original = '\ufeffMetric,definition,value,unit,entity,geo,platform,start,end,granularity,source\nweekly_downloads,Weekly downloads,10,downloads,App A,US,Android,2026-01-01,2026-01-07,week,https://example.com';
+    const file = new File([original], 'metrics-with-bom.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText('metrics-with-bom.csv');
+    expect(screen.getByText(/1 dòng có dữ liệu/)).toBeTruthy();
+    fireEvent.click(screen.getByText('3. Xem thử dữ liệu'));
+    await waitFor(() => expect(reportApi.previewQuantitativeDataset).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(reportApi.previewQuantitativeDataset).mock.calls[0][1];
+    expect(payload.csv_content).toBe(original);
+    expect(payload.csv_content.startsWith('\ufeff')).toBe(true);
+  });
+
   it('keeps a Date-only column semantically unknown until the user confirms snapshot meaning', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
