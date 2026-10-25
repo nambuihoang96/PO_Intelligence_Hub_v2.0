@@ -173,5 +173,5 @@ The backend suite was run after the backend readiness fix and test fixture updat
 ## Git handoff
 
 - **Starting HEAD:** `4cba3cf0887a7436c688804f1774f969831503f2`.
-- **Implementation commit:** to be recorded after commit.
+- **Implementation commit:** `bda8467` (`fix(m6a): align preview readiness and preserve CSV source bytes`).
 - **Push:** to `feat/ux-recovery-01-research-results`; no merge to master.
