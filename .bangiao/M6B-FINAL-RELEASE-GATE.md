@@ -77,5 +77,5 @@ CSV-only evidence has `report_id = null`. The comparison evidence UI previously 
 ## Commit
 
 - **Implementation commit SHA:** `531f4a7` (`fix-csv-only-evidence-report-links`).
-- **Push:** pending push to `feat/ux-recovery-01-research-results`.
+- **Push:** task commits pushed to `origin/feat/ux-recovery-01-research-results`.
 - **Merge/deployment/tag:** not performed.
