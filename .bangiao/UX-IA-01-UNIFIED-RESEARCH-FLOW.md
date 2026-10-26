@@ -78,7 +78,7 @@ Browser checks used a separate local frontend/backend on ports `15201`/`15200`, 
 - **Expected result:** Research, Reports, and Tracking feel like stages of one project workflow; the PO can find existing tools and saved decisions without knowing their internal module names.
 - **Remaining friction:** Tracking is only a truthful pending entry point; advanced tools remain separate screens; report and project decision records are not physically consolidated.
 - **Verification:** Focused UI tests 54/54 and separate CSV/period regression tests 8/8; TypeScript/Vite build passed; isolated browser workflow checked at 1440, 768, and 390 widths. Full suite had 3 parallel-timeout failures and backend tests were not rerun.
-- **Decision:** **TECHNICAL PASS · PRODUCT PASS for UX-IA-01 navigation/consolidation scope**, with TRACK-01 and UX-IA-02 explicitly outstanding. Full-suite regression is not all-green, as noted above.
+- **Decision:** **TECHNICAL PASS for build and focused tests · PRODUCT NEEDS FIX / owner review.** The ChatGPT-first workflow and project-linked report/decision paths were exercised, but the complete CSV-first sequence through compatible comparison, chart, shortlist, and PO decision was not verified end-to-end in this browser run. Do not treat this as Product PASS until that gap is checked. TRACK-01 and UX-IA-02 remain outstanding.
 
 ## Commit
 
