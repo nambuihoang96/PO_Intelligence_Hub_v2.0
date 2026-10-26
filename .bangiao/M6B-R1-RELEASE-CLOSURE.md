@@ -4,7 +4,7 @@
 
 - Branch: `feat/ux-recovery-01-research-results`
 - Starting HEAD: `ecef683b67572dfd51f6d5423f5cd8075d1522ee`
-- Ending HEAD: pending commit
+- Ending HEAD: documentation follow-up commit; full final SHA is in the review handoff.
 - No master merge, release tag, deployment, or production database access was performed.
 - Preserved the pre-existing `scripts/setup.ps1` modification and unrelated untracked folders. They are not part of this task.
 
@@ -78,4 +78,4 @@ Used Codex’s separate in-app browser tab at `http://127.0.0.1:15189/`, with ba
 - **Product Acceptance:** NEEDS FIX (real viewport verification is outstanding).
 - **Owner Acceptance:** PENDING (genuine report, source comparability, and PO sign-off remain owner-run).
 - **Final release classification:** `RELEASE PENDING VERIFICATION`.
-- Implementation commit SHA: pending commit.
+- Implementation commit SHA: `873d685` (`fix: close M6-B release acceptance gaps`).
