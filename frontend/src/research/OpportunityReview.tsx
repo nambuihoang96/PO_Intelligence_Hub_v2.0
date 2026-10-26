@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { researchApi, type OpportunityAssessment, type OpportunityCandidate, type OpportunityDecision, type OpportunityEvidenceReference, type OpportunityReport, type OpportunityWorkspace } from './api';
+import { ProjectJourneyNav } from './ProjectJourneyNav';
 
 const dimensionSuggestions = ['Market signal', 'Product differentiation', 'User motivation', 'Retention evidence', 'Monetization evidence', 'Product feasibility', 'Competitive risk', 'Research gaps'];
 const decisionLabels: Record<NonNullable<OpportunityDecision['decision_status']>, string> = {
@@ -222,6 +223,7 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
   if (error && !workspace) return <div className="opportunity-page"><p className="research-alert" role="alert">{error}</p><button className="secondary-action" onClick={() => void load()}>Retry</button></div>;
 
   return <main className="opportunity-page">
+    <ProjectJourneyNav projectId={projectId} active="research" />
     <header className="opportunity-header"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`} onClick={requestNavigation}>← Back to workspace</a><span className="state-label">PRODUCT OWNER REVIEW</span><h1>Review opportunities</h1><p>Review source evidence, record your judgment, and preserve the next action for each selected product.</p></div><div className="opportunity-header-actions"><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`} onClick={requestNavigation}>Compare periods</a><button className="secondary-action" onClick={requestRefresh} disabled={saveState === 'saving'}>Refresh</button></div></header>
     <div className="opportunity-summary" aria-label="Opportunity review summary"><span><strong>{workspace?.candidates.length ?? 0}</strong> candidates</span><span><strong>{investigateCount}</strong> investigate further</span><span><strong>{benchmarkCount}</strong> benchmark in detail</span><span><strong>{followupCount}</strong> actions ready</span><span><strong>{reviewCount}</strong> with evidence gaps</span><span><strong>{savedCount}</strong> saved decisions</span></div>
     {workspace?.shortlist_warning && <div className="research-alert" role="status">{workspace.shortlist_warning} This workspace will not guess the missing source. Existing saved decisions remain available below.</div>}

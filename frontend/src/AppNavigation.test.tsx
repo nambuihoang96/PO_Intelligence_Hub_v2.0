@@ -4,25 +4,24 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AppNavigation, type NavigationPage } from './AppNavigation';
 
 const pages: NavigationPage[] = [
-  { path: '/', label: 'Home', icon: 'home' },
-  { path: '/research', label: 'Research', icon: 'search' },
-  { path: '/explorer', label: 'Explorer', icon: 'compass' },
-  { path: '/sources', label: 'Sources', icon: 'sources' },
+  { path: '/research', label: 'Research', icon: 'home' },
   { path: '/reports', label: 'Reports', icon: 'reports' },
-  { path: '/compare-periods', label: 'Compare periods', icon: 'comparison' },
+  { path: '/tracking', label: 'Tracking', icon: 'runs' },
 ];
-const secondaryPages: NavigationPage[] = [
-  { path: '/research/new', label: 'New research', icon: 'findings' },
-  { path: '/research/runs', label: 'Research runs', icon: 'runs' },
-];
-
-function renderNavigation(currentPath = '/reports', currentLabel = 'Reports', researchPage = false) {
-  return render(<AppNavigation pages={pages} secondaryPages={secondaryPages} currentPath={currentPath} currentLabel={currentLabel} researchPage={researchPage} />);
+function renderNavigation(currentPath = '/reports', currentLabel = 'Reports') {
+  return render(<AppNavigation pages={pages} currentPath={currentPath} currentLabel={currentLabel} />);
 }
 
 afterEach(() => cleanup());
 
 describe('AppNavigation', () => {
+  it('keeps exactly Research, Reports, and Tracking as primary areas', () => {
+    renderNavigation();
+    expect(screen.getByRole('navigation', { name: 'Main navigation' }).querySelectorAll('a')).toHaveLength(3);
+    expect(screen.getByRole('link', { name: 'Research' }).getAttribute('href')).toBe('/research');
+    expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports');
+    expect(screen.getByRole('link', { name: 'Tracking' }).getAttribute('href')).toBe('/tracking');
+  });
   it('shows the current location and exposes every destination from the expandable menu', () => {
     renderNavigation();
 
@@ -34,13 +33,14 @@ describe('AppNavigation', () => {
 
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(document.getElementById('app-navigation')?.classList.contains('is-open')).toBe(true);
-    for (const item of [...pages, ...secondaryPages]) {
+    for (const item of pages) {
       expect(screen.getByRole('link', { name: item.label }).getAttribute('href')).toBe(item.path);
     }
+    expect(screen.queryByRole('navigation', { name: 'Research navigation' })).toBeNull();
   });
 
   it('closes on Escape and returns keyboard focus to the menu button', () => {
-    renderNavigation('/research/runs', 'Research runs', true);
+    renderNavigation('/research/runs', 'Research runs');
     const toggle = screen.getByRole('button', { name: 'Open navigation menu. Current page: Research runs' });
 
     fireEvent.click(toggle);
@@ -50,13 +50,12 @@ describe('AppNavigation', () => {
     expect(document.activeElement).toBe(toggle);
   });
 
-  it('closes after a destination is selected and keeps research links available on other sections', () => {
-    renderNavigation('/explorer', 'Explorer');
-    const toggle = screen.getByRole('button', { name: 'Open navigation menu. Current page: Explorer' });
+  it('closes after a primary destination is selected', () => {
+    renderNavigation('/research', 'Research');
+    const toggle = screen.getByRole('button', { name: 'Open navigation menu. Current page: Research' });
     fireEvent.click(toggle);
 
-    const researchLink = screen.getByRole('link', { name: 'Research runs' });
-    expect(researchLink.getAttribute('href')).toBe('/research/runs');
+    const researchLink = screen.getByRole('link', { name: 'Tracking' });
     researchLink.addEventListener('click', (event) => event.preventDefault(), { once: true });
     fireEvent.click(researchLink);
 
@@ -64,9 +63,8 @@ describe('AppNavigation', () => {
     expect(document.getElementById('app-navigation')?.classList.contains('is-open')).toBe(false);
   });
 
-  it('marks nested research destinations as the current Research section', () => {
-    renderNavigation('/research/new', 'New research', true);
+  it('marks nested research routes as the current Research section', () => {
+    renderNavigation('/research/runs', 'Research runs');
     expect(screen.getByRole('link', { name: 'Research' }).getAttribute('aria-current')).toBe('page');
-    expect(screen.getByRole('link', { name: 'New research' }).getAttribute('aria-current')).toBe('page');
   });
 });

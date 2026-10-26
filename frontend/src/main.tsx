@@ -8,6 +8,7 @@ import { ReportHistory, ReportViewer, ResearchIntake } from './reports/ResearchI
 import { QuantitativePeriodComparison } from './reports/QuantitativePeriodComparison';
 import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
 import { AppNavigation } from './AppNavigation';
+import { TrackingWorkspace } from './tracking/TrackingWorkspace';
 import './style.css';
 
 type Page = {
@@ -23,16 +24,6 @@ type Page = {
 
 const pages: Page[] = [
   {
-    path: '/',
-    label: 'Home',
-    icon: 'home',
-    eyebrow: 'CHATGPT RESEARCH + LOCAL WORKSPACE',
-    title: 'Turn research questions into reusable reports.',
-    intro: 'Build a research prompt, use ChatGPT Plus, then bring the report back here.',
-    emptyTitle: 'Your workspace is ready',
-    emptyCopy: 'Start with a research question.',
-  },
-  {
     path: '/research',
     label: 'Research',
     icon: 'search',
@@ -40,27 +31,7 @@ const pages: Page[] = [
     title: 'Research projects',
     intro: 'Plan and follow research work from a focused workspace.',
     emptyTitle: 'No research projects yet',
-    emptyCopy: 'Projects and their research runs will appear here when project creation is available.',
-  },
-  {
-    path: '/explorer',
-    label: 'Explorer',
-    icon: 'compass',
-    eyebrow: 'APP EXPLORER',
-    title: 'Explore app store listings',
-    intro: 'Search store-specific listings by app name, platform, and country.',
-    emptyTitle: 'Nothing to explore yet',
-    emptyCopy: 'Evidence will appear here after it has been collected by a research run.',
-  },
-  {
-    path: '/sources',
-    label: 'Sources',
-    icon: 'sources',
-    eyebrow: 'DATA SOURCES',
-    title: 'Research sources',
-    intro: 'Keep track of the sources that support research findings.',
-    emptyTitle: 'No sources have been added',
-    emptyCopy: 'Sources will be listed here when they are connected to a research project.',
+    emptyCopy: 'Create a project to start from a research question or CSV market data.',
   },
   {
     path: '/reports',
@@ -73,14 +44,14 @@ const pages: Page[] = [
     emptyCopy: 'Completed research reports will appear here. No example or placeholder findings are shown.',
   },
   {
-    path: '/compare-periods',
-    label: 'Compare periods',
-    icon: 'comparison',
-    eyebrow: 'QUANTITATIVE WORKSPACE',
-    title: 'Compare CSV periods',
-    intro: 'Compare compatible source exports while preserving the complete app universe and evidence trail.',
-    emptyTitle: 'No comparison data is available',
-    emptyCopy: 'Create a research workspace, import CSV exports there, then compare compatible periods.',
+    path: '/tracking',
+    label: 'Tracking',
+    icon: 'runs',
+    eyebrow: 'PRODUCT TRACKING',
+    title: 'Tracking',
+    intro: 'Follow up on decisions and future research updates by project.',
+    emptyTitle: 'Tracking setup is pending',
+    emptyCopy: 'No automatic monitoring or report-to-report change tracking is configured yet.',
   },
 ];
 
@@ -111,7 +82,10 @@ const allPages = [...pages, ...secondaryPages];
 
 function currentPage(pathname: string): Page {
   const path = pathname.replace(/\/$/, '') || '/';
+  if (path === '/') return pages.find((page) => page.path === '/research')!;
   if (path.startsWith('/reports/')) return pages.find((page) => page.path === '/reports')!;
+  if (path.startsWith('/compare-periods')) return pages.find((page) => page.path === '/research')!;
+  if (path.startsWith('/sources') || path.startsWith('/explorer')) return pages.find((page) => page.path === '/research')!;
   return allPages.find((page) => page.path === path) ?? pages[0];
 }
 
@@ -135,18 +109,18 @@ function App() {
     window.addEventListener('popstate', syncPath);
     return () => window.removeEventListener('popstate', syncPath);
   }, []);
-  const page = currentPage(pathname);
-  const researchPage = page.path.startsWith('/research');
   const params = new URLSearchParams(window.location.search);
   const projectId = params.get('projectId');
+  const page = pathname === '/' && projectId ? pages.find((item) => item.path === '/reports')! : currentPage(pathname);
+  const researchPage = page.path.startsWith('/research');
   const runId = params.get('runId');
   const projectSelected = Boolean(projectId);
   const opportunityReviewView = params.get('view') === 'opportunities';
   const dataWorkspace = projectSelected && ['data', 'opportunities'].includes(params.get('view') ?? '');
-  const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : page.path === '/research/new' ? 'Create a research project'
+  const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : pathname === '/' && projectId ? 'Import research report' : pathname === '/reports' ? 'Saved research reports' : pathname === '/tracking' ? 'Tracking' : pathname === '/explorer' ? 'App Store listings explorer' : pathname === '/compare-periods' ? 'Compare periods' : pathname === '/sources' ? runId ? 'Run evidence' : 'Research sources' : page.path === '/research/new' ? 'Create a research project'
     : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
       : page.path === '/sources' && runId ? 'Run evidence' : dataWorkspace ? 'Research workspace' : projectSelected ? 'Research plan' : page.title;
-  const pageIntro = page.path === '/research/new'
+  const pageIntro = pathname === '/' && projectId ? 'Add a ChatGPT research report to this project workspace.' : pathname === '/reports' ? 'Search and reopen saved research outputs, or follow them back to their project decisions.' : pathname === '/tracking' ? 'Project follow-up and tracking setup status.' : pathname === '/explorer' ? 'Search listings by app name, platform, and country.' : pathname === '/compare-periods' ? 'Compare only CSV measurements with compatible metric and scope.' : pathname === '/sources' ? runId ? 'Review evidence connected to the selected research run.' : 'Review source records used by research projects.' : page.path === '/research/new'
     ? 'Set up a project, then draft its first research plan.'
     : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Browse saved research sessions and their selected plan versions.'
       : page.path === '/sources' && runId ? 'Add and review manual evidence linked to this research run.'
@@ -154,7 +128,7 @@ function App() {
 
   return (
     <div className={`app-shell${researchPage ? ' research-page' : ''}`}>
-      <AppNavigation pages={pages} secondaryPages={secondaryPages} currentPath={page.path} currentLabel={page.label} researchPage={researchPage} />
+      <AppNavigation pages={pages} currentPath={page.path} currentLabel={page.label} />
 
       <main className="main-panel">
         <header className="topbar">
@@ -163,19 +137,18 @@ function App() {
         </header>
 
         <div className="content-wrap">
-          {!opportunityReviewView && <section className="page-heading" aria-labelledby="page-title">
+          {!opportunityReviewView && !pathname.startsWith('/reports/') && !(pathname === '/' && projectId) && !(pathname === '/reports' && projectId) && <section className="page-heading" aria-labelledby="page-title">
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>
             <p className="intro">{pageIntro}</p>
-            {page.path === '/research' && (
+            {page.path === '/research' && !projectId && (
               <div className="home-actions">
-                <a className="primary-action" href="/research/new">View project setup <span aria-hidden="true">→</span></a>
-                <a className="secondary-action" href="/research/runs">View research runs</a>
+                <a className="secondary-action" href="/explorer">App Store listings explorer</a>
               </div>
             )}
           </section>}
 
-          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : page.path === '/compare-periods' ? <QuantitativePeriodComparison /> : page.path === '/' ? <ResearchIntake /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : researchPage ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : ['data', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : page.path === '/sources' ? <SourcesWorkspace runId={runId} /> : page.path === '/explorer' ? <ExplorerWorkspace /> : <>
+          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : pathname === '/tracking' ? <TrackingWorkspace projectId={projectId} /> : pathname === '/compare-periods' ? <QuantitativePeriodComparison /> : pathname === '/' ? projectId ? <ResearchIntake /> : <ResearchWorkspace mode="list" /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : page.path.startsWith('/research') ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : ['data', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : pathname === '/sources' ? <SourcesWorkspace runId={runId} /> : pathname === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">

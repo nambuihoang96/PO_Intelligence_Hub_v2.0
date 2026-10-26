@@ -5,13 +5,11 @@ export type NavigationPage = { path: string; label: string; icon: ResultsIconNam
 
 type AppNavigationProps = {
   pages: NavigationPage[];
-  secondaryPages: NavigationPage[];
   currentPath: string;
   currentLabel: string;
-  researchPage: boolean;
 };
 
-export function AppNavigation({ pages, secondaryPages, currentPath, currentLabel, researchPage }: AppNavigationProps) {
+export function AppNavigation({ pages, currentPath, currentLabel }: AppNavigationProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
 
@@ -63,17 +61,6 @@ export function AppNavigation({ pages, secondaryPages, currentPath, currentLabel
           </a>;
         })}
       </nav>
-
-      <div className={`subnav-wrap mobile-research-links${researchPage ? ' is-current-section' : ''}`}>
-        <div className="nav-label">RESEARCH</div>
-        <nav aria-label="Research navigation" className="secondary-nav">
-          {secondaryPages.map((item) => <a className={`nav-item subnav-item${currentPath === item.path ? ' active' : ''}`} href={item.path} key={item.path}
-            aria-current={currentPath === item.path ? 'page' : undefined} onClick={closeAfterNavigation}>
-            <span className="nav-icon"><ResultsIcon name={item.icon} /></span>
-            <span>{item.label}</span>
-          </a>)}
-        </nav>
-      </div>
 
       <div className="sidebar-footer"><span className="footer-dot" />LOCAL WORKSPACE</div>
     </div>

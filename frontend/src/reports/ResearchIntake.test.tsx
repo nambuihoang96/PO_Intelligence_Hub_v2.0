@@ -44,6 +44,24 @@ describe('ChatGPT research intake', () => {
     expect(prompt).not.toContain('iOS and Android findings separate');
   });
 
+  it('searches the report library and filters reports by project while keeping workspace decisions linked', async () => {
+    const linked = { ...report, id: 'linked-report', project_id: 'project-1' };
+    const unlinked = { ...report, id: 'unlinked-report', question: 'Unlinked utility research' };
+    mockFetch((url) => {
+      if (url.includes('/api/v1/reports?')) return { items: [linked, unlinked], next_cursor: null, limit: 10 };
+      if (url.includes('/api/v1/projects?')) return { items: [{ id: 'project-1', name: 'Learning apps', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' }], next_cursor: null, limit: 20 };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ReportHistory />);
+    expect(await screen.findByText('How do learning apps engage children?')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Workspace decisions · Learning apps/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Search reports'), { target: { value: 'utility' } });
+    expect(screen.getByText('Unlinked utility research')).toBeTruthy();
+    expect(screen.queryByText('How do learning apps engage children?')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-1' } });
+    expect(screen.getByText('No reports match these filters.')).toBeTruthy();
+  });
+
   it('copies the prompt for ChatGPT without calling an AI service', async () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -108,7 +126,7 @@ describe('ChatGPT research intake', () => {
   });
 
   it('loads history again and displays Markdown headings and safe source links', async () => {
-    mockFetch((url) => url.includes('/reports?') ? { items: [report], next_cursor: null, limit: 10 } : report);
+    mockFetch((url) => url.includes('/api/v1/reports?') ? { items: [report], next_cursor: null, limit: 10 } : url.includes('/api/v1/projects?') ? { items: [], next_cursor: null, limit: 20 } : report);
     render(<ReportHistory />);
     const saved = await screen.findByRole('link', { name: /How do learning apps engage children/ });
     expect(saved.getAttribute('href')).toBe('/reports/saved-report');

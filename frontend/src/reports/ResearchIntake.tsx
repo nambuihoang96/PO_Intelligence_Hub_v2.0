@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { reportApi, type ReportSummary } from './api';
 import { extractHeadings } from './MarkdownReport';
 import { buildRepairPrompt, buildResearchPrompt } from './researchPrompt';
+import { researchApi, type ResearchProject } from '../research/api';
+import { ProjectJourneyNav } from '../research/ProjectJourneyNav';
 export { buildResearchPrompt } from './researchPrompt';
 
 export function inspectResearchContent(content: string): { format: 'Markdown/TXT' | 'JSON' | 'Markdown + JSON'; jsonError: string | null } {
@@ -216,7 +218,7 @@ export function ResearchIntake() {
   ];
   const validationMessage = validation.every((item) => item.valid) ? 'Thông tin hợp lệ để xem trước và nhập.' : validation.filter((item) => !item.valid).map((item) => item.error).join(' ');
 
-  return <div className="intake-workspace">
+  return <div className="intake-workspace">{workspaceProjectId && <ProjectJourneyNav projectId={workspaceProjectId} active="report" />}
     <section className="research-panel intake-form" aria-labelledby="intake-title">
       <div className="panel-heading"><div><span className="field-label">CHATGPT PLUS + LOCAL WORKSPACE</span><h2 id="intake-title">Bắt đầu với câu hỏi sản phẩm</h2></div></div>
       <label className="intake-field"><span className="field-label">Bạn muốn nghiên cứu gì?</span><textarea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ví dụ: Các app học tiếng Anh cho trẻ em tại Mỹ đang tạo động lực học tập như thế nào?" /></label>
@@ -255,18 +257,41 @@ export function ResearchIntake() {
 
 export function ReportHistory() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [projects, setProjects] = useState<ResearchProject[]>([]);
+  const [query, setQuery] = useState('');
+  const [projectFilter, setProjectFilter] = useState(new URLSearchParams(window.location.search).get('projectId') || 'all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  useEffect(() => { reportApi.list().then((page) => { setReports(page.items); setCursor(page.next_cursor); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Không tải được lịch sử.')).finally(() => setLoading(false)); }, []);
-  async function loadMore() {
-    if (!cursor) return;
-    setLoading(true);
-    try { const page = await reportApi.list(cursor); setReports((current) => [...current, ...page.items]); setCursor(page.next_cursor); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Không tải thêm được lịch sử.'); }
-    finally { setLoading(false); }
-  }
-  return <section className="research-panel report-history-page"><div className="panel-heading"><div><span className="field-label">REPORT LIBRARY</span><h2>Lịch sử báo cáo</h2></div><a className="primary-action" href="/">Nhập báo cáo</a></div>{error && <div className="research-alert" role="alert">{error}</div>}{loading && reports.length === 0 ? <p role="status">Đang tải báo cáo…</p> : reports.length === 0 ? <p>Chưa có báo cáo. Hãy nhập báo cáo từ ChatGPT để lưu lại.</p> : <div className="report-history-list">{reports.map((report) => <a className="report-history-row" href={`/reports/${report.id}`} key={report.id}><span className="report-history-copy"><strong>{recentTitle(report)}</strong><small>{report.geo} · {report.os} · {report.research_period || 'Chưa ghi kỳ nghiên cứu'}</small></span><span className="report-date">{new Date(report.imported_at).toLocaleString()}</span><span aria-hidden="true">→</span></a>)}</div>}{cursor && <div className="report-load-more"><button className="secondary-action" onClick={loadMore} disabled={loading}>{loading ? 'Đang tải…' : 'Tải thêm báo cáo'}</button></div>}<a className="text-button" href="/">← Quay lại Research</a></section>;
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [allReports, allProjects] = await Promise.all([(async () => {
+        const result: ReportSummary[] = []; let cursor: string | undefined;
+        do { const page = await reportApi.list(cursor); result.push(...page.items); cursor = page.next_cursor ?? undefined; } while (cursor);
+        return result;
+      })(), (async () => {
+        const result: ResearchProject[] = []; let cursor: string | undefined;
+        do { const page = await researchApi.listProjects(cursor); result.push(...page.items); cursor = page.next_cursor ?? undefined; } while (cursor);
+        return result;
+      })()]);
+      if (active) { setReports(allReports); setProjects(allProjects); }
+    })().catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Không tải được thư viện báo cáo.'); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+  const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return reports.filter((report) => (projectFilter === 'all' || report.project_id === projectFilter)
+      && (!needle || `${report.question} ${report.geo} ${report.os} ${report.research_period ?? ''} ${projectNames.get(report.project_id ?? '') ?? ''}`.toLocaleLowerCase().includes(needle)));
+  }, [reports, projectFilter, query, projectNames]);
+  const scopedProject = projects.find((project) => project.id === projectFilter);
+  return <div className="report-library-page">{scopedProject && <ProjectJourneyNav projectId={scopedProject.id} active="report" />}
+    <section className="research-panel report-history-page"><div className="panel-heading"><div><span className="field-label">REPORT LIBRARY</span><h2>Saved research reports</h2><p>Search reports and open the project workspace they inform.</p></div><a className="primary-action" href={scopedProject ? `/?projectId=${encodeURIComponent(scopedProject.id)}` : '/research'}>{scopedProject ? 'Import report' : 'Choose a project to import'}</a></div>
+      <div className="report-library-filters"><label className="field-label" htmlFor="report-search">Search reports<input id="report-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Question, GEO, environment, or project" /></label><label className="field-label" htmlFor="report-project-filter">Project<select id="report-project-filter" value={projectFilter} onChange={(event) => { setProjectFilter(event.target.value); const url = new URL(window.location.href); event.target.value === 'all' ? url.searchParams.delete('projectId') : url.searchParams.set('projectId', event.target.value); window.history.replaceState({}, '', url); }}><option value="all">All projects</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label></div>
+      {error && <div className="research-alert" role="alert">{error}</div>}{loading && <p role="status">Loading reports…</p>}{!loading && reports.length === 0 ? <p>No reports have been imported yet.</p> : !loading && filtered.length === 0 ? <p>No reports match these filters.</p> : <div className="report-history-list">{filtered.map((report) => <article className="report-library-row" key={report.id}><a className="report-history-row" href={`/reports/${report.id}`}><span className="report-history-copy"><strong>{recentTitle(report)}</strong><small>{report.geo} · {report.os} · {report.research_period || 'Period not specified'}</small></span><span className="report-date">{new Date(report.imported_at).toLocaleString()}</span><span aria-hidden="true">→</span></a><div className="report-project-link">{report.project_id && projectNames.has(report.project_id) ? <a href={`/research?projectId=${encodeURIComponent(report.project_id)}&view=opportunities`}>Workspace decisions · {projectNames.get(report.project_id)}</a> : <span>Not linked to a project workspace</span>}</div></article>)}</div>}
+      <a className="text-button" href="/research">← Back to Research</a>
+    </section>
+  </div>;
 }
 
 export { ReportViewer } from './ReportResults';

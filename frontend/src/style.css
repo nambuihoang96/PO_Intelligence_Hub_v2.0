@@ -1544,6 +1544,48 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   .quant-bar-missing { flex-direction: column; gap: 2px; }
 }
 
+/* UX-IA-01: project journey and truthful tracking workspace */
+.project-journey { display: grid; gap: 12px; margin: 0 0 18px; padding: 16px 18px 12px; border: 1px solid #dce5ee; border-radius: 14px; background: #fff; }
+.project-journey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.project-journey-heading > div { display: grid; gap: 4px; min-width: 0; }
+.project-journey-heading strong { overflow-wrap: anywhere; color: #17263a; font-size: 17px; }
+.project-journey-heading small { color: #66788e; line-height: 1.4; }
+.project-journey-heading .project-objective { max-width: 900px; color: #3f5570; }
+.project-journey-steps { display: flex; gap: 8px; border-top: 1px solid #edf1f5; padding-top: 10px; }
+.project-journey-steps a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; color: #52667e; border-radius: 9px; text-decoration: none; }
+.project-journey-steps a > span { display: grid; width: 23px; height: 23px; place-items: center; border-radius: 50%; background: #eff4fa; font-size: 12px; font-weight: 700; }
+.project-journey-steps a:hover, .project-journey-steps a:focus-visible { background: #f2f7ff; outline-color: #3981e6; }
+.project-journey-steps a.active { color: #0758c9; background: #edf5ff; font-weight: 700; }
+.project-context-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 4px; }
+.report-library-page, .tracking-workspace { display: grid; gap: 16px; }
+.report-library-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(210px, 1fr); gap: 14px; margin: 16px 0; }
+.report-library-filters label { display: grid; gap: 6px; }
+.report-library-row { padding: 4px 0 10px; border-bottom: 1px solid #edf1f5; }
+.report-project-link { padding: 0 12px 4px; font-size: 13px; }
+.report-project-link a { color: #175da9; }
+.report-project-link span { color: #718096; }
+.tracking-pending { display: grid; justify-items: start; gap: 10px; padding: 24px; }
+.tracking-pending h2 { margin: 0; }
+.tracking-pending p { max-width: 760px; margin: 0; color: #5f7188; line-height: 1.55; }
+.tracking-status { display: inline-flex; padding: 5px 9px; border-radius: 999px; background: #f1f4f8; color: #475569; font-size: 13px; font-weight: 700; }
+.tracking-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.tracking-project-list { display: grid; }
+.tracking-project-list article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 0; border-top: 1px solid #edf1f5; }
+.tracking-project-list article > div { display: grid; gap: 4px; }
+.tracking-project-list small { color: #66788e; }
+.workspace-decision-link { display: grid; justify-items: start; gap: 6px; margin: 12px 0; padding: 14px; border-radius: 10px; background: #f3f7fc; color: #26394f; }
+.workspace-decision-link span { color: #5f7188; }
+@media (max-width: 700px) {
+  .project-journey { padding: 13px; }
+  .project-journey-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .project-journey-steps a { justify-content: center; padding: 8px 4px; font-size: 14px; }
+  .report-library-filters { grid-template-columns: 1fr; }
+  .tracking-project-list article { align-items: flex-start; flex-direction: column; }
+  .tracking-actions { align-items: stretch; flex-direction: column; width: 100%; }
+  .tracking-actions a { justify-content: center; }
+  .project-context-actions { align-items: stretch; flex-direction: column; }
+}
+
 /* M5-A: compact, evidence-backed PO decision workspace. */
 .opportunity-page { display: grid; gap: 16px; max-width: 1500px; margin: 0 auto; padding: 18px clamp(14px, 2vw, 28px) 36px; color: #172b45; }
 .opportunity-header { display: flex; align-items: end; justify-content: space-between; gap: 18px; }

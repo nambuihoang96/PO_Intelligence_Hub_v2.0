@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { ApiError, researchApi } from './api';
 import type { ResearchPlan, ResearchPlanPayload, ResearchProject, ResearchRun } from './api';
 import { DataFirstWorkspace } from './DataFirstWorkspace';
+import { ProjectJourneyNav } from './ProjectJourneyNav';
 
 type PlanForm = {
   question: string;
@@ -253,10 +254,12 @@ function PlanEditor({ projectId }: { projectId: string }) {
   return (
     <div className="research-layout">
       <div className="research-main-column">
+        <ProjectJourneyNav projectId={projectId} active="research" />
         <form className="research-panel research-form" onSubmit={save}>
           <div className="panel-heading"><div><span className="state-label">{latestPlan ? `PLAN VERSION ${activePlan?.version ?? latestPlan.version}` : 'INITIAL PLAN'}</span><h2>{project.name}</h2></div>
-            <div><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>Open workspace data</a> <a className="text-button" href="/research">All projects</a></div>
+            <div><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>Open data workspace</a> <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>CSV data</a> <a className="secondary-action" href={`/research/runs?projectId=${encodeURIComponent(projectId)}`}>Research sessions</a> <a className="secondary-action" href="/explorer">App Store listings explorer</a></div>
           </div>
+          <div className="project-context-actions"><a className="secondary-action" href={`/?projectId=${encodeURIComponent(projectId)}`}>Import ChatGPT report</a><a className="secondary-action" href={`/reports?projectId=${encodeURIComponent(projectId)}`}>View project reports</a><a className="secondary-action" href={`/tracking?projectId=${encodeURIComponent(projectId)}`}>Tracking status</a></div>
           {readOnly && <div className="read-only-note" role="status">This saved plan version is read-only. Editing the latest version will create a new version.</div>}
           {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
           {notice && <div className="research-success" role="status">{notice}</div>}
