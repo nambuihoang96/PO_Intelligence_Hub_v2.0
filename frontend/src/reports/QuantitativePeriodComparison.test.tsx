@@ -73,6 +73,7 @@ describe('QuantitativePeriodComparison', () => {
     fireEvent.click(screen.getByRole('button', { name: /Inspect evidence for Example App/ }));
     expect(screen.getByText('Example App · original observations')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Open original source' })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'Open source report' })).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
     expect(screen.getByText('Source-only app')).toBeTruthy();
     expect(screen.getByText('Name-only app')).toBeTruthy();
@@ -205,6 +206,13 @@ describe('QuantitativePeriodComparison', () => {
       })),
     };
     render(<QuantitativeComparisonCharts result={csvOnlyPreview} />);
+    fireEvent.click(screen.getByRole('button', { name: /Inspect evidence for Example App/ }));
+    expect(screen.getByText('Example App · original observations')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Open source report' })).toBeNull();
+    expect(screen.getAllByText(/October export/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/row 2/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/unverified/).length).toBeGreaterThan(0);
+
     fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
     expect(screen.queryByRole('link', { name: 'Open report' })).toBeNull();
     expect(screen.getAllByText(/October export · row 2 · unverified/).length).toBeGreaterThan(0);

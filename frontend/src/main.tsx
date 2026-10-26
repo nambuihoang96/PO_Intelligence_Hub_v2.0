@@ -7,6 +7,7 @@ import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import { ReportHistory, ReportViewer, ResearchIntake } from './reports/ResearchIntake';
 import { QuantitativePeriodComparison } from './reports/QuantitativePeriodComparison';
 import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
+import { AppNavigation } from './AppNavigation';
 import './style.css';
 
 type Page = {
@@ -73,7 +74,7 @@ const pages: Page[] = [
   },
   {
     path: '/compare-periods',
-    label: 'Period comparison',
+    label: 'Compare periods',
     icon: 'comparison',
     eyebrow: 'QUANTITATIVE WORKSPACE',
     title: 'Compare CSV periods',
@@ -153,41 +154,7 @@ function App() {
 
   return (
     <div className={`app-shell${researchPage ? ' research-page' : ''}`}>
-      <aside className="sidebar">
-        <a className="brand" href="/" aria-label="PO Intelligence Hub home">
-          <span className="brand-mark">PO</span>
-          <span className="brand-copy"><strong>PO Intelligence</strong><small>HUB · V2</small></span>
-        </a>
-
-        <div className="nav-label">WORKSPACE</div>
-        <nav aria-label="Main navigation" className="primary-nav">
-          {pages.map((item) => {
-            const active = item.path === '/' ? page.path === '/' : page.path === item.path || (item.path === '/research' && researchPage);
-            return (
-              <a className={`nav-item${active ? ' active' : ''}`} href={item.path} key={item.path} aria-current={page.path === item.path ? 'page' : undefined}>
-                <span className="nav-icon"><ResultsIcon name={item.icon} /></span>
-                <span>{item.label}</span>
-              </a>
-            );
-          })}
-        </nav>
-
-        {researchPage && (
-          <div className="subnav-wrap">
-            <div className="nav-label">RESEARCH</div>
-            <nav aria-label="Research navigation" className="secondary-nav">
-              {secondaryPages.map((item) => (
-                <a className={`nav-item subnav-item${page.path === item.path ? ' active' : ''}`} href={item.path} key={item.path} aria-current={page.path === item.path ? 'page' : undefined}>
-                  <span className="nav-icon"><ResultsIcon name={item.icon} /></span>
-                  <span>{item.label}</span>
-                </a>
-              ))}
-            </nav>
-          </div>
-        )}
-
-        <div className="sidebar-footer"><span className="footer-dot" />LOCAL WORKSPACE</div>
-      </aside>
+      <AppNavigation pages={pages} secondaryPages={secondaryPages} currentPath={page.path} currentLabel={page.label} researchPage={researchPage} />
 
       <main className="main-panel">
         <header className="topbar">

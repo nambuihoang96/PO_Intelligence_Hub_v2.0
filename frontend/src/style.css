@@ -1259,6 +1259,39 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 /* UI-01 visual fidelity: consistent semantic SVG icons and compact relationship nodes. */
 .nav-icon { display: grid; width: 20px; height: 20px; place-items: center; flex: 0 0 20px; font-size: 0; }
 .nav-icon svg { width: 18px; height: 18px; stroke-width: 1.8; }
+
+/* Keep the full desktop sidebar while making every destination explicit on small screens. */
+.sidebar-menu { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.mobile-research-links:not(.is-current-section) { display: none; }
+.mobile-nav-toggle { display: none; }
+@media (max-width: 560px) {
+  .mobile-nav-toggle {
+    width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 11px; border: 1px solid #37504e; border-radius: 9px; background: #203736; color: #f3f6f4; text-align: left; cursor: pointer;
+  }
+  .mobile-nav-toggle:focus-visible { outline: 3px solid #d9f077; outline-offset: 2px; }
+  .mobile-nav-current, .mobile-nav-action { display: flex; flex-direction: column; gap: 2px; }
+  .mobile-nav-current strong { font-size: 14px; line-height: 1.3; }
+  .mobile-nav-caption { color: #b7c7c3; font-size: 11px; }
+  .mobile-nav-action { flex-direction: row; align-items: center; gap: 8px; color: #e5eedf; font-size: 13px; white-space: nowrap; }
+  .mobile-nav-chevron { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #52706c; border-radius: 6px; font-size: 16px; line-height: 1; }
+  .sidebar-menu { display: none; margin-top: 10px; padding: 10px; border: 1px solid #304947; border-radius: 10px; background: #1b3030; }
+  .sidebar-menu.is-open { display: flex; }
+  .sidebar-menu .nav-label { display: block; margin: 3px 0 8px; color: #bdcbc7; font-size: 11px; letter-spacing: .08em; }
+  .sidebar-menu .primary-nav, .sidebar-menu .secondary-nav {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; overflow: visible;
+  }
+  .sidebar-menu .nav-item {
+    width: 100%; min-width: 0; min-height: 46px; padding: 8px 9px; gap: 8px; border: 1px solid transparent;
+    font-size: 14px; line-height: 1.3; white-space: normal; overflow-wrap: anywhere;
+  }
+  .sidebar-menu .nav-item.active { border-color: #708884; background: #2b4947; color: #fff; }
+  .sidebar-menu .nav-icon { width: 20px; flex-basis: 20px; color: #c8dba0; }
+  .sidebar-menu .nav-icon svg { width: 18px; height: 18px; }
+  .sidebar-menu .subnav-wrap, .sidebar-menu .mobile-research-links:not(.is-current-section) { display: block; margin-top: 10px; padding: 10px 0 0; border-top: 1px solid #38514e; }
+  .sidebar-menu .subnav-item { padding-left: 9px; font-size: 13px; }
+  .sidebar-menu .sidebar-footer { display: none; }
+}
 .report-viewer .report-tabs > button { display: inline-flex; align-items: center; gap: 7px; }
 .report-viewer .report-tabs > button svg { width: 16px; height: 16px; color: #637895; }
 .report-viewer .report-tabs > button.active svg { color: #2563c7; }
