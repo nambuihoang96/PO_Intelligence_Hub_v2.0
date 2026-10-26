@@ -4,7 +4,7 @@
 
 - Branch: `feat/ux-recovery-01-research-results`
 - Starting HEAD: `5f57e848b8b9ae6ed5ed012664a6a8f6e55a4aa2`
-- Implementation commit: recorded below after commit
+- Implementation commit: `0f371d7` (`feat: unify research project experience`)
 - Scope: frontend information architecture and presentation only; no backend, API, schema, migration, or production database changes.
 
 ## Current information architecture
@@ -82,4 +82,4 @@ Browser checks used a separate local frontend/backend on ports `15201`/`15200`, 
 
 ## Commit
 
-- SHA: pending
+- Implementation SHA: `0f371d7`
