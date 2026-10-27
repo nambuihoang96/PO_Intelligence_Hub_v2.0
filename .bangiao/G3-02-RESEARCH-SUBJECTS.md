@@ -1,8 +1,8 @@
 # G3-02 — Persistent Research Subject Identity
 
-**Status:** DONE (scoped); owner acceptance pending  
-**Branch:** `feat/ux-recovery-01-research-results`  
-**Starting HEAD:** `165bc5f1d8a21ddfe09e33a7aaed4fc7f14fe500`  
+**Status:** DONE (scoped); owner acceptance pending
+**Branch:** `feat/ux-recovery-01-research-results`
+**Starting HEAD:** `165bc5f1d8a21ddfe09e33a7aaed4fc7f14fe500`
 **Production database:** not accessed or modified
 
 ## Outcome
