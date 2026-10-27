@@ -181,6 +181,7 @@ These are historical recorded results, not a fresh full-suite run against every 
 - **Data safety:** App backend used isolated `.ux-project-home-uat-data`; no production SQLite database was touched. No migration or schema change.
 - **Remaining:** Project Home final visual/product review; responsive screenshot files; genuine owner report UAT remains open under G2-04. Existing project category/owner fields remain optional at project creation. Do not call this product accepted.
 - **Implementation reference:** `frontend/src/research/ProjectHome.tsx`, `frontend/src/research/ProjectHome.css`, related React routing/workflow changes, tests, and `.bangiao/PROJECT-HOME-UX-PROTOTYPE.md`.
+- **Commit:** `8be9500` (`feat(research): add product-first project home`), pushed to `feat/ux-recovery-01-research-results` for owner review; no merge.
 - **Current status:** `READY_FOR_OWNER` for this bounded workflow review; final product acceptance and merge are pending.
 
 **Last updated:** 2026-10-27 — Project Home prototype direction approved for bounded app implementation; integrated flow is `READY_FOR_OWNER`. G1/G2 rework remains open; no milestone is Owner Accepted.

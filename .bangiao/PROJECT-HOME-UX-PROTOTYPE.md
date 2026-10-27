@@ -132,4 +132,4 @@ The Product Owner replied “ok” while the Project Home prototype was open. Th
 - Focused Research Workspace, Trend Update, and report intake tests
 - `docs/RECOVERY_BOARD.md`
 
-The implementation commit and push outcome are recorded in the task branch history and the final handoff message. No merge was performed.
+**Implementation commit:** `8be9500` (`feat(research): add product-first project home`), pushed to `feat/ux-recovery-01-research-results` for review. No merge was performed.
