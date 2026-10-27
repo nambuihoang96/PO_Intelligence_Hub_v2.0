@@ -31,7 +31,7 @@
 | G1-03 | G1 / P1 | Peachy Studio design tokens, reusable screen primitives and cross-screen visual consistency | G1-02 data contracts stable | READY after P0-A | Skill exists and was searched; proposal is in unified plan. Tokens have not been screenshot-approved or fully contrast-audited. |
 | G2-01 | G2 / P0 | One-paste `po_research_v1` import; original report retained; structured/text-only states | Existing | DONE (scoped) | B-001.3 and related handoffs; live genuine report journey remains NOT VERIFIED in latest release audit. |
 | G2-02 | G2 / P0 | Project/Report shared identity, explicit legacy linking, project filter and context navigation | G2-01 | DONE (scoped) | Focused backend/frontend tests pass; isolated Chrome/Playwright UAT linked a report, verified project filter, same report ID, reload/back link and preservation of report/benchmark data. Screenshots committed in `.bangiao/screenshots/p0-project-report-unification/`. Independent review found no P0/P1 defect. Owner acceptance pending. |
-| G2-03 | G2 / P0 | Contextual PO Decision reachable from report finding/subject/project; one authoritative decision with safe legacy handling | G2-02, stable subject/finding target | NOT STARTED | Audit defect REC-P1-02; report notes JSON and Project `POOpportunityDecision` are separate. Keep old notes, no silent migration. |
+| G2-03 | G2 / P0 | Contextual PO Decision reachable from report finding/subject/project; one authoritative decision with safe legacy handling | G2-02, stable subject/finding target | READY | Audit defect REC-P1-02; report notes JSON and Project `POOpportunityDecision` are separate. Keep old notes, no silent migration. This is the next unblocked P0 slice. |
 | G2-04 | G2 / P0 | Complete genuine long-form ChatGPT report → results → evidence → decision → refresh/reopen UAT | G2-02/03, owner report | BLOCKED for genuine-data pass | Existing reports were viewed; no new genuine owner-provided structured report was imported in latest audit. Continue fixture/browser tests but do not claim product PASS. |
 | G3-01 | G3 / P0 | Preserve/reuse CSV import, readiness, chart and compatible period comparison in Project/Report workflow | Existing; G2-02 | DONE (implementation scoped; owner data acceptance blocked) | UI-02/M1–M6 handoffs and browser evidence. Owner Sensor Tower export lacks explicit GEO/date semantics; comparisons correctly withheld. |
 | G3-02 | G3 / P0 | Persistent reusable Research Subject identity with explicit ambiguous mapping | G2-02 | DONE (scoped) | Commit `9f92a24`; additive `20261027_0010` subject/reference schema; explicit project-scoped links from report and CSV source keys; no auto-merge/backfill. 21 targeted backend tests, 170 frontend tests, typecheck/build pass; isolated Chrome UAT verified link + refresh. Full backend suite NOT VERIFIED (collection stall). Handoff `.bangiao/G3-02-RESEARCH-SUBJECTS.md`. Owner acceptance pending. |
@@ -40,7 +40,7 @@
 | G3-05 | G3 / P0 | Local Image Evidence upload/attachment, hash, source context and reopen | G3-04 | READY_FOR_OWNER | Commit `100c994`; additive SQLite BLOB table `20261027_0013`; 31 targeted backend tests, 176 frontend tests, TypeScript/build PASS. Browser UAT and genuine owner image NOT VERIFIED. Handoff `.bangiao/G3-05-IMAGE-EVIDENCE.md`. |
 | G3-06 | G3 / P0 | Subject Profile and extensible analysis sections; Core Loop / Level Design / Ad Placement starter blocks | G3-02 | READY_FOR_OWNER | Commit `bd69a72`; additive optional PO-authored analysis sections, extensible labels, existing subject identity/provenance and contextual links retained. Migration `20261027_0014`. 33 focused backend tests, 177 frontend tests, TypeScript and production build PASS. Browser UAT NOT VERIFIED. Handoff `.bangiao/G3-06-SUBJECT-PROFILES.md`. |
 | G3-07 | G3 / P0 | Monthly Benchmark Tracking for explicit collection snapshots/updates, with unknown/incompatible states | G3-03/04, G4 | NOT STARTED | Do not infer growth from a headline/ranking or incompatible measurements. |
-| G4-01 | G4 / P0 | Research input/report/dataset/decision history and snapshots with evidence-backed comparison | G2-02, G3-04/05 | NOT STARTED | Tracking is currently a truthful setup-pending placeholder; no longitudinal timeline/comparison. |
+| G4-01 | G4 / P0 | Research input/report/dataset/decision history and snapshots with evidence-backed comparison | G2-02, G2-03, G3-04/05 | BLOCKED | Tracking is currently a truthful setup-pending placeholder; no longitudinal timeline/comparison. The approved Master Plan also requires P0-D (contextual decision continuity) before P0-G; see dependency reconciliation below. |
 | G4-02 | G4 / P0 | PO Action Tracking, status history and contextual reopen | G2-03, G4-01 | NOT STARTED | Existing next-action text/decision is not a managed tracking lifecycle. Reuse existing persistence where possible; no auto-completion. |
 | G4-03 | G4 / P0 | Cross-milestone end-to-end owner acceptance, backup/restore and regression gate | G1–G4 slices | NOT STARTED | Requires genuine owner report/trend source and isolated database copy; no production data writes. |
 | REL-01 | Cross-cutting / P1 | Review 86-commit / 158-path branch delta; full regression and isolated migration/restore | Before release | NOT STARTED | Broad shared CSS/navigation/models/migrations. Do not merge master without explicit approval. |
@@ -91,10 +91,21 @@ These are historical recorded results, not a fresh full-suite run against every 
 - **Verification:** Process/documentation change reviewed in the active session. No automated tests apply. Existing board and G3-03 working changes were preserved.
 - **Current status:** Applied; used to re-read/sync the board before each selection, preserve existing dirty work, reopen G3-03 under the same task after the source dependency arrived, and update G3-04/next cursor. No owner acceptance implied for any product task.
 
+## Backlog dependency reconciliation
+
+### G4-01 prerequisite alignment — 2026-10-27
+
+- **Finding:** The board row previously listed G4-01 dependencies as G2-02 and G3-04/05, while the approved Master Plan §4 identifies P0-G History & Tracking dependencies as P0-C/D/F. P0-D is represented by G2-03, which is still unimplemented; the plan also defines decision revisions as timeline events.
+- **Classification:** Dependency correction; no product scope added.
+- **Impact:** G4-01 cannot safely establish a PO decision history/timeline before G2-03 provides a stable contextual decision target and revision semantics. G3-07 remains gated on G4. G2-03 itself depends on completed G2-02 and is now the next unblocked P0 task.
+- **Updated acceptance:** G4-01 remains blocked until G2-03 is complete and report/update/dataset provenance dependencies are reconfirmed. Preserve saved decisions and legacy report notes; no inferred migration.
+- **Verification:** Compared current board rows against `.bangiao/UNIFIED-PRODUCT-RECOVERY-OCT-2026.md` §4 items P0-D/P0-G and §3 source-of-truth rule 7. No code or database changes.
+- **Current status:** Applied to this board; G2-03 is READY, G4-01 is BLOCKED, and G3-07 remains NOT STARTED.
+
 ## Current execution cursor
 
 **Active task:** G3-06 / P0 Subject Profile and extensible analysis sections. Implementation and automated verification are complete and ready for owner review; browser UAT is not verified. G3-05 is independently ready for owner review; neither status implies owner acceptance.
 
-**Next selection:** Re-read the board and approved plan. G3-07 remains dependency-gated on G4; G4-01 is eligible only after confirming G3-04/G3-05 evidence and scope from the current board.
+**Next selection:** G2-03 / P0 contextual PO Decision continuity is READY because G2-02 is complete. G4-01 is BLOCKED until G2-03 is complete, in line with the approved Master Plan's P0-D dependency; G3-07 remains gated on G4.
 
 **Last updated:** 2026-10-27 — G3-06 subject profile implementation is ready for owner review with isolated migration and automated test evidence; browser UAT remains unverified. No milestone is Owner Accepted.
