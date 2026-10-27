@@ -9,6 +9,9 @@ export function TrendUpdatesPanel({ projectId }: { projectId: string }) {
   const [updates, setUpdates] = useState<ProjectTrendUpdate[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [subjectId, setSubjectId] = useState('');
+  const [subjectMode, setSubjectMode] = useState<'new' | 'existing'>('new');
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectType, setNewSubjectType] = useState('');
   const [collectionId, setCollectionId] = useState('');
   const [exactClaim, setExactClaim] = useState('');
   const [sourceNote, setSourceNote] = useState('');
@@ -45,20 +48,33 @@ export function TrendUpdatesPanel({ projectId }: { projectId: string }) {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true); setError(''); setNotice('');
+    let targetSubjectId = subjectId;
+    let createdSubjectName = '';
     try {
+      if (subjectMode === 'new') {
+        const createdSubject = await researchApi.createSubject(projectId, {
+          name: newSubjectName.trim(), subject_type: newSubjectType.trim() || null,
+          aliases: [], external_ids: [], provenance: { created_via: 'trend_update' },
+        });
+        targetSubjectId = createdSubject.id;
+        createdSubjectName = createdSubject.name;
+        setSubjects((current) => [createdSubject, ...current.filter((item) => item.id !== createdSubject.id)]);
+        setSubjectId(createdSubject.id);
+        setSubjectMode('existing');
+      }
       await researchApi.createTrendUpdate(projectId, {
-        subject_id: subjectId,
+        subject_id: targetSubjectId,
         ...(collectionId ? { collection_id: collectionId } : {}),
         exact_claim: exactClaim.trim(), source_note: sourceNote.trim(),
         ...(sourceTitle.trim() ? { source_title: sourceTitle.trim() } : {}),
         ...(sourceUrl.trim() ? { source_url: sourceUrl.trim() } : {}),
         published_on: publishedOn,
       });
-      setExactClaim(''); setSourceNote(''); setSourceTitle(''); setSourceUrl(''); setPublishedOn('');
+      setExactClaim(''); setSourceNote(''); setSourceTitle(''); setSourceUrl(''); setPublishedOn(''); setNewSubjectName(''); setNewSubjectType('');
       setNotice('Update saved as source-reported and unverified. A later correction can be added as a new update.');
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save this update. Your draft is still here.');
+      setError(`${createdSubjectName ? `“${createdSubjectName}” is saved as a subject. ` : ''}${cause instanceof Error ? cause.message : 'Could not save this update. Your draft is still here.'}`);
     } finally { savingRef.current = false; setSaving(false); }
   }
 
@@ -68,21 +84,32 @@ export function TrendUpdatesPanel({ projectId }: { projectId: string }) {
     {error && <div role="alert" className="research-alert">{error}</div>}
     {notice && <div role="status" className="research-success">{notice}</div>}
     <form className="trend-update-form" onSubmit={(event) => void saveUpdate(event)}>
-      <div className="trend-update-form-grid">
-        <label>Confirmed subject <select required value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
-          <option value="">Choose a saved subject…</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+      <div className="trend-update-subject-choice" role="group" aria-label="Product or topic for this update">
+        <label className={`trend-update-subject-option${subjectMode === 'new' ? ' selected' : ''}`}><input type="radio" name="trend-subject-mode" checked={subjectMode === 'new'} onChange={() => setSubjectMode('new')} /><span><strong>Create a new product or topic</strong><small>Use this when the subject is not in the list yet.</small></span></label>
+        <label className={`trend-update-subject-option${subjectMode === 'existing' ? ' selected' : ''}`}><input type="radio" name="trend-subject-mode" checked={subjectMode === 'existing'} disabled={subjects.length === 0} onChange={() => setSubjectMode('existing')} /><span><strong>Use a saved product or topic</strong><small>{subjects.length ? 'Keep this update with an existing subject.' : 'Available after a subject has been created.'}</small></span></label>
+      </div>
+      {subjectMode === 'new' ? <div className="trend-update-form-grid trend-update-new-subject">
+        <label>Product or topic name <input required maxLength={500} value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="For example, a game, app, or market topic" /></label>
+        <label>Type <span className="optional-label">Optional</span><input maxLength={120} value={newSubjectType} onChange={(event) => setNewSubjectType(event.target.value)} placeholder="Use your own words" /></label>
+      </div> : <div className="trend-update-form-grid">
+        <label>Product or topic <select required value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
+          <option value="">Choose a saved product or topic…</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
         </select></label>
+      </div>}
+      <div className="trend-update-form-grid">
         <label>Benchmark collection <span className="optional-label">Optional</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
-          <option value="">Not linked to a collection</option>{collections.filter((collection) => collection.members.some((member) => member.subject_id === subjectId)).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+          <option value="">Not linked to a collection</option>{collections.filter((collection) => collection.members.some((member) => member.subject_id === (subjectMode === 'existing' ? subjectId : ''))).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
         </select></label>
         <label>Source publication date <input type="date" required value={publishedOn} onChange={(event) => setPublishedOn(event.target.value)} /></label>
+      </div>
+      <label>What did you observe? <textarea required maxLength={20000} rows={3} value={exactClaim} onChange={(event) => setExactClaim(event.target.value)} placeholder="Record the observation as supplied. Do not add an interpretation." /></label>
+      <label>Where did you see it? <textarea required maxLength={10000} rows={2} value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Add context about where this information came from." /></label>
+      <details className="trend-update-source-details"><summary>More source details</summary><div className="trend-update-source-detail-grid">
         <label>Source title <span className="optional-label">Optional</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label>
         <label>Source link <span className="optional-label">Optional</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
-      </div>
-      <label>Exact research claim <textarea required maxLength={20000} rows={3} value={exactClaim} onChange={(event) => setExactClaim(event.target.value)} placeholder="Copy the claim as supplied. Do not add an interpretation." /></label>
-      <label>Source note <textarea required maxLength={10000} rows={2} value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Where did this claim come from? Add the context supplied by the source or owner." /></label>
+      </div></details>
       <div className="trend-update-form-actions"><small>Saved updates are append-only and remain unverified until independently checked.</small>
-        <button type="submit" className="primary-action" disabled={saving || !subjects.length}>{saving ? 'Saving update…' : 'Save trend update'}</button>
+        <button type="submit" className="primary-action" disabled={saving || (subjectMode === 'existing' && !subjects.length)}>{saving ? 'Saving update…' : 'Save trend update'}</button>
       </div>
     </form>
     <div className="trend-update-history"><h4>Saved updates</h4>

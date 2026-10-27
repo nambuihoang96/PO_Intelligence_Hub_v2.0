@@ -117,14 +117,15 @@ function App() {
   const projectSelected = Boolean(projectId);
   const opportunityReviewView = params.get('view') === 'opportunities';
   const dataWorkspace = projectSelected && ['data', 'opportunities'].includes(params.get('view') ?? '');
-  const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : pathname === '/' && projectId ? 'Import research report' : pathname === '/reports' ? 'Saved research reports' : pathname === '/tracking' ? 'Tracking' : pathname === '/explorer' ? 'App Store listings explorer' : pathname === '/compare-periods' ? 'Compare periods' : pathname === '/sources' ? runId ? 'Run evidence' : 'Research sources' : page.path === '/research/new' ? 'Create a research project'
+  const projectView = params.get('view');
+  const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : pathname === '/' && projectId ? 'Import research report' : pathname === '/reports' ? 'Saved research reports' : pathname === '/tracking' ? 'Tracking' : pathname === '/explorer' ? 'App Store listings explorer' : pathname === '/compare-periods' ? 'Compare periods' : pathname === '/sources' ? runId ? 'Run evidence' : 'Research sources' : page.path === '/research/new' ? 'Create a project'
     : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
-      : page.path === '/sources' && runId ? 'Run evidence' : dataWorkspace ? 'Research workspace' : projectSelected ? 'Research plan' : page.title;
+      : page.path === '/sources' && runId ? 'Run evidence' : projectSelected && projectView === 'plan' ? 'Start Deep Research' : dataWorkspace ? 'Project workspace' : projectSelected ? 'Project Home' : page.title;
   const pageIntro = pathname === '/' && projectId ? 'Add a ChatGPT research report to this project workspace.' : pathname === '/reports' ? 'Search and reopen saved research outputs, or follow them back to their project decisions.' : pathname === '/tracking' ? 'Project follow-up and tracking setup status.' : pathname === '/explorer' ? 'Search listings by app name, platform, and country.' : pathname === '/compare-periods' ? 'Compare only CSV measurements with compatible metric and scope.' : pathname === '/sources' ? runId ? 'Review evidence connected to the selected research run.' : 'Review source records used by research projects.' : page.path === '/research/new'
-    ? 'Set up a project, then draft its first research plan.'
+    ? 'Create a project; you can choose what to do next from its home.'
     : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Browse saved research sessions and their selected plan versions.'
       : page.path === '/sources' && runId ? 'Add and review manual evidence linked to this research run.'
-        : dataWorkspace ? 'Explore saved CSV data, compare periods, and bring ChatGPT findings into this same workspace.' : projectSelected ? 'Review the current plan or save an edit as a new version.' : page.intro;
+        : projectSelected && projectView === 'plan' ? 'Shape the research question and scope for this project.' : dataWorkspace ? 'Bring reports, updates, and data together for this project.' : projectSelected ? 'Reports, research, and next steps in one place.' : page.intro;
 
   return (
     <div className={`app-shell${researchPage ? ' research-page' : ''}`}>

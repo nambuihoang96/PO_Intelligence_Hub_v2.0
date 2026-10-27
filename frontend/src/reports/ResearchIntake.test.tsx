@@ -149,6 +149,46 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByText(/Prompt đã được sao chép/)).toBeTruthy();
   });
 
+  it('continues a saved project brief into report import and preserves project context', async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (url === '/api/v1/reports' && init.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        expect(body).toMatchObject({
+          project_id: 'project-from-brief',
+          question: 'How do players use creative tools?',
+          geo: 'US',
+          os: 'Android',
+          research_period: '2026',
+          content: report.content,
+        });
+        return { ...report, project_id: 'project-from-brief' };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    window.history.replaceState({}, '', '/?projectId=project-from-brief&question=How%20do%20players%20use%20creative%20tools%3F&geo=US&environment=Android&period=2026');
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    expect((screen.getByLabelText('Bạn muốn nghiên cứu gì?') as HTMLTextAreaElement).value).toBe('How do players use creative tools?');
+    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST')).toBe(true);
+  });
+
+  it('uses safe default scope when a saved brief has empty GEO and environment', async () => {
+    mockFetch((url) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    window.history.replaceState({}, '', '/?projectId=project-1&question=New%20research&geo=&environment=&period=');
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    expect(screen.getByRole('button', { name: 'GEO' }).textContent).toContain('Global / not specified');
+    expect(screen.getByRole('button', { name: 'Environment' }).textContent).toContain('Unknown');
+  });
+
   it('accepts a Markdown file and fills the import preview', async () => {
     mockFetch((url, init) => {
       if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };

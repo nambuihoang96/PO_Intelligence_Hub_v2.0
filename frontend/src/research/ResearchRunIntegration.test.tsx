@@ -56,15 +56,56 @@ describe('research run UI integration', () => {
       throw new Error(`Unexpected request: ${url} ${init.method ?? 'GET'}`);
     });
 
-    window.history.replaceState({}, '', '/research?projectId=project-1');
+    window.history.replaceState({}, '', '/research?projectId=project-1&view=plan');
     render(<ResearchWorkspace mode="list" />);
-    await screen.findByText('Puzzle Market');
+    await screen.findByRole('heading', { name: 'Prepare your research' });
     fireEvent.change(screen.getByLabelText('Plan version for new run'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create run' }));
 
     expect(await screen.findByRole('status')).toBeTruthy();
     expect(await screen.findByText('queued')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/projects/project-1/runs') && init?.method === 'POST')).toBe(true);
+  });
+
+  it('opens a product-first Project Home with the three contextual actions by default', async () => {
+    installApi((url) => {
+      if (url.endsWith('/projects/project-1')) return project;
+      if (url.includes('/projects/project-1/reports?')) return page([]);
+      if (url.includes('/projects/project-1/benchmark-collections?')) return page([]);
+      if (url.includes('/projects/project-1/subjects?')) return page([]);
+      if (url.includes('/projects/project-1/trend-updates?')) return page([]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    window.history.replaceState({}, '', '/research?projectId=project-1');
+    render(<ResearchWorkspace mode="list" />);
+    expect(await screen.findByRole('heading', { name: 'Move this research forward' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Start Deep Research Shape a research question/ }).getAttribute('href')).toContain('view=plan');
+    expect(screen.getByRole('link', { name: /Capture Trend Update/ }).getAttribute('href')).toContain('#project-trend-updates');
+    expect(screen.getByRole('link', { name: /Import \/ Analyze CSV/ }).getAttribute('href')).toContain('action=import-csv');
+  });
+
+  it('keeps a saved report, benchmark collection, and subject visible in the same Project Home', async () => {
+    const report = { id: 'report-1', project_id: project.id, question: 'What keeps puzzle players engaged?', geo: 'US', os: 'Android', research_period: '2026', content_sha256: 'a'.repeat(64), origin: 'chatgpt_user_import', imported_at: '2026-10-24T12:00:00Z', verification_status: 'unverified' };
+    const collection = { id: 'collection-1', project_id: project.id, name: 'Puzzle October', description: null, members: [{ subject_id: 'subject-1', name: 'Puzzle One', subject_type: 'game', source_count: 1, report_source_count: 1, csv_source_count: 0, trend_update_count: 0, observations: [] }], dimensions: [], created_at: '2026-10-22T12:00:00Z', updated_at: '2026-10-22T12:00:00Z' };
+    const subject = { id: 'subject-1', project_id: project.id, name: 'Puzzle One', subject_type: 'game', aliases: [], external_ids: [], provenance: {}, created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-20T12:00:00Z' };
+    installApi((url) => {
+      if (url.endsWith('/projects/project-1')) return project;
+      if (url.includes('/projects/project-1/reports?')) return page([report]);
+      if (url.includes('/projects/project-1/benchmark-collections?')) return page([collection]);
+      if (url.includes('/projects/project-1/subjects?')) return page([subject]);
+      if (url.includes('/projects/project-1/trend-updates?')) return page([]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    window.history.replaceState({}, '', '/research?projectId=project-1');
+    render(<ResearchWorkspace mode="list" />);
+    const savedReport = (await screen.findAllByRole('link', { name: /What keeps puzzle players engaged/ })).find((link) => link.getAttribute('href') === '/reports/report-1');
+    expect(savedReport).toBeTruthy();
+    expect(savedReport?.getAttribute('href')).toBe('/reports/report-1');
+    expect(screen.getByText('Puzzle October')).toBeTruthy();
+    expect(screen.getByText('Puzzle One')).toBeTruthy();
+    expect(screen.getByText('Research report added')).toBeTruthy();
   });
 
   it('shows a run detail pinned to the exact saved plan version and exposes evidence navigation', async () => {

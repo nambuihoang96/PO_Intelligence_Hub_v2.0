@@ -109,7 +109,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   const selectedContextRef = useRef<ShortlistContext | null>(null);
   const selectionRevision = useRef(0);
   const [rankingKey, setRankingKey] = useState('');
-  const [showImport, setShowImport] = useState(false);
+  const [showImport, setShowImport] = useState(() => new URLSearchParams(window.location.search).get('action') === 'import-csv');
   const [linkReportId, setLinkReportId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [notice, setNotice] = useState('');
@@ -153,6 +153,12 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, [projectId]);
+
+  useEffect(() => {
+    if (loading || !window.location.hash) return;
+    const frame = window.requestAnimationFrame(() => document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView({ block: 'start' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading]);
 
   async function loadMoreReports() {
     if (loadingMoreReports) return;
@@ -295,13 +301,13 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
 
   return <div className="data-first-workspace">
     <ProjectJourneyNav projectId={projectId} active="research" />
-    <section className="research-panel data-workspace-heading"><div><span className="state-label">RESEARCH WORKSPACE</span><h2>{project.name}</h2><p>Bắt đầu từ dữ liệu thị trường, bổ sung nghiên cứu ChatGPT sau. CSV gốc và từng phạm vi đo được giữ nguyên.</p></div><div className="data-workspace-actions"><a className="primary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=project&decisionTargetId=${encodeURIComponent(projectId)}`}>Review PO decision</a><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Research plan</a><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>Compare periods</a><a className="secondary-action" href={`/?projectId=${encodeURIComponent(projectId)}`}>Import ChatGPT research</a></div></section>
+    <section className="research-panel data-workspace-heading"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Back to project</a><span className="state-label">PROJECT RESEARCH</span><h2>{project.name}</h2><p>Saved reports, research updates, and project data stay together here.</p></div></section>
     <ResearchSubjectsPanel projectId={projectId} />
     <TrendUpdatesPanel projectId={projectId} />
     <ImageEvidencePanel projectId={projectId} />
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     <div className="workspace-source-grid">
-      <section className="research-panel"><div className="panel-heading"><div><span className="state-label">MARKET DATA</span><h3>CSV datasets</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Close import' : 'Import CSV'}</button></div><p>{datasets.length ? `${datasets.length} dataset${datasets.length === 1 ? '' : 's'} saved` : 'Chưa cần có báo cáo ChatGPT để bắt đầu khám phá dữ liệu.'}</p>
+      <section className="research-panel" id="project-csv-data"><div className="panel-heading"><div><span className="state-label">MARKET DATA</span><h3>CSV datasets</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Close import' : 'Import CSV'}</button></div><p>{datasets.length ? `${datasets.length} dataset${datasets.length === 1 ? '' : 's'} saved` : 'You can add a dataset before or after importing a research report.'}</p>
         {datasets.length > 0 && <label className="field-label">Dataset to explore<select value={selectedDatasetId} onChange={(event) => { setSelectedDatasetId(event.target.value); setVisibleApps(50); setPrompt(''); }}><option value="">Select a dataset</option>{datasets.map((item) => <option value={item.id} key={item.id}>{item.filename} · {item.source_apps ?? 0} apps</option>)}</select></label>}
         {showImport && <QuantitativeDatasetImport projectId={projectId} onImported={(item) => { setSelectedDatasetId(item.id); setDataset(item); setShowImport(false); setVisibleApps(50); void (async () => { const all: ComparisonDataset[] = []; let cursor: string | undefined; do { const page = await reportApi.listComparisonDatasets(cursor, projectId); all.push(...page.items.filter((row) => !all.some((existing) => existing.id === row.id))); cursor = page.next_cursor ?? undefined; } while (cursor); setDatasets(all); })().catch((cause) => setError(cause instanceof Error ? cause.message : 'CSV đã lưu nhưng danh sách chưa làm mới. Hãy bấm Refresh.')); }} />}
       </section>

@@ -108,12 +108,15 @@ function MultiChoiceDropdown({ label, values, options, onChange, exclusiveValues
 }
 
 export function ResearchIntake() {
-  const workspaceProjectId = new URLSearchParams(window.location.search).get('projectId');
-  const [question, setQuestion] = useState('');
-  const [geos, setGeos] = useState<string[]>(['Global / not specified']);
-  const [environments, setEnvironments] = useState<string[]>(['Unknown']);
+  const intakeParams = new URLSearchParams(window.location.search);
+  const workspaceProjectId = intakeParams.get('projectId');
+  const initialGeos = intakeParams.get('geo')?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+  const initialEnvironments = intakeParams.get('environment')?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+  const [question, setQuestion] = useState(() => intakeParams.get('question') ?? '');
+  const [geos, setGeos] = useState<string[]>(() => initialGeos.length ? initialGeos : ['Global / not specified']);
+  const [environments, setEnvironments] = useState<string[]>(() => initialEnvironments.length ? initialEnvironments : ['Unknown']);
   const [researchFocus, setResearchFocus] = useState('');
-  const [researchPeriod, setResearchPeriod] = useState('');
+  const [researchPeriod, setResearchPeriod] = useState(() => intakeParams.get('period') ?? '');
   const [showImport, setShowImport] = useState(false);
   const [reportContent, setReportContent] = useState('');
   const [history, setHistory] = useState<ReportSummary[]>([]);

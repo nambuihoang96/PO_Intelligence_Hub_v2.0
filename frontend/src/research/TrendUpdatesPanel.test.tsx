@@ -24,13 +24,15 @@ describe('TrendUpdatesPanel', () => {
     const create = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(saved);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([saved]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.change(await screen.findByLabelText('Confirmed subject'), { target: { value: subject.id } });
+    fireEvent.click(await screen.findByText('Use a saved product or topic'));
+    fireEvent.change(screen.getByLabelText('Product or topic'), { target: { value: subject.id } });
     fireEvent.change(screen.getByLabelText(/Benchmark collection/), { target: { value: collection.id } });
     fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: '2026-10-21' } });
+    fireEvent.click(screen.getByText('More source details'));
     fireEvent.change(screen.getByLabelText(/Source title/), { target: { value: 'Source report' } });
     fireEvent.change(screen.getByLabelText(/Source link/), { target: { value: 'https://example.org/source' } });
-    fireEvent.change(screen.getByLabelText('Exact research claim'), { target: { value: saved.exact_claim } });
-    fireEvent.change(screen.getByLabelText('Source note'), { target: { value: saved.source_note } });
+    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
     fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
     await waitFor(() => expect(create).toHaveBeenCalledWith(projectId, {
       subject_id: subject.id, collection_id: collection.id, exact_claim: saved.exact_claim, source_note: saved.source_note,
@@ -48,14 +50,15 @@ describe('TrendUpdatesPanel', () => {
     mockReads();
     vi.spyOn(researchApi, 'createTrendUpdate').mockRejectedValue(new Error('Could not save update.'));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.change(await screen.findByLabelText('Confirmed subject'), { target: { value: subject.id } });
+    fireEvent.click(await screen.findByText('Use a saved product or topic'));
+    fireEvent.change(screen.getByLabelText('Product or topic'), { target: { value: subject.id } });
     fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: '2026-10-21' } });
-    fireEvent.change(screen.getByLabelText('Exact research claim'), { target: { value: 'Keep this exact draft.' } });
-    fireEvent.change(screen.getByLabelText('Source note'), { target: { value: 'Keep this attribution.' } });
+    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: 'Keep this exact draft.' } });
+    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: 'Keep this attribution.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Could not save update.');
-    expect((screen.getByLabelText('Exact research claim') as HTMLTextAreaElement).value).toBe('Keep this exact draft.');
-    expect((screen.getByLabelText('Source note') as HTMLTextAreaElement).value).toBe('Keep this attribution.');
+    expect((screen.getByLabelText('What did you observe?') as HTMLTextAreaElement).value).toBe('Keep this exact draft.');
+    expect((screen.getByLabelText('Where did you see it?') as HTMLTextAreaElement).value).toBe('Keep this attribution.');
   });
 
   it('does not submit duplicate trend updates on rapid repeated clicks', async () => {
@@ -63,13 +66,55 @@ describe('TrendUpdatesPanel', () => {
     const create = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(saved);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([saved]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.change(await screen.findByLabelText('Confirmed subject'), { target: { value: subject.id } });
+    fireEvent.click(await screen.findByText('Use a saved product or topic'));
+    fireEvent.change(screen.getByLabelText('Product or topic'), { target: { value: subject.id } });
     fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: saved.published_on } });
-    fireEvent.change(screen.getByLabelText('Exact research claim'), { target: { value: saved.exact_claim } });
-    fireEvent.change(screen.getByLabelText('Source note'), { target: { value: saved.source_note } });
+    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
     const save = screen.getByRole('button', { name: 'Save trend update' });
     fireEvent.click(save);
     fireEvent.click(save);
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  });
+
+  it('creates a new subject within the same Trend Update flow before saving the update', async () => {
+    mockReads();
+    const createdSubject: ResearchSubject = { ...subject, id: 'subject-new', name: 'New Research Topic' };
+    const updateForNewSubject: ProjectTrendUpdate = { ...saved, id: 'update-new', subject_id: createdSubject.id, subject_name: createdSubject.name };
+    const createSubject = vi.spyOn(researchApi, 'createSubject').mockResolvedValue(createdSubject);
+    const createUpdate = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(updateForNewSubject);
+    vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([updateForNewSubject]));
+    render(<TrendUpdatesPanel projectId={projectId} />);
+    fireEvent.change(await screen.findByLabelText('Product or topic name'), { target: { value: createdSubject.name } });
+    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: saved.published_on } });
+    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    await waitFor(() => expect(createSubject).toHaveBeenCalledWith(projectId, {
+      name: createdSubject.name, subject_type: null, aliases: [], external_ids: [], provenance: { created_via: 'trend_update' },
+    }));
+    await waitFor(() => expect(createUpdate).toHaveBeenCalledWith(projectId, expect.objectContaining({ subject_id: createdSubject.id })));
+    expect(await screen.findByText(saved.exact_claim)).toBeTruthy();
+    expect(screen.getByText('Source-reported · unverified')).toBeTruthy();
+  });
+
+  it('does not create a duplicate subject when an update save fails and is retried', async () => {
+    mockReads();
+    const createdSubject: ResearchSubject = { ...subject, id: 'subject-new', name: 'Retry Topic' };
+    const updateForNewSubject: ProjectTrendUpdate = { ...saved, id: 'update-retry', subject_id: createdSubject.id, subject_name: createdSubject.name };
+    const createSubject = vi.spyOn(researchApi, 'createSubject').mockResolvedValue(createdSubject);
+    const createUpdate = vi.spyOn(researchApi, 'createTrendUpdate').mockRejectedValueOnce(new Error('Temporary network issue.')).mockResolvedValue(updateForNewSubject);
+    vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([updateForNewSubject]));
+    render(<TrendUpdatesPanel projectId={projectId} />);
+    fireEvent.change(await screen.findByLabelText('Product or topic name'), { target: { value: createdSubject.name } });
+    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: saved.published_on } });
+    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('“Retry Topic” is saved as a subject. Temporary network issue.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    await waitFor(() => expect(createUpdate).toHaveBeenCalledTimes(2));
+    expect(createSubject).toHaveBeenCalledTimes(1);
+    expect(createUpdate.mock.calls[1][1].subject_id).toBe(createdSubject.id);
   });
 });

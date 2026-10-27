@@ -1,7 +1,7 @@
 # Project Home UX Rework — Owner Preview
 
 **Date:** 2026-10-27
-**Status:** `READY_FOR_OWNER` — prototype only; Product Acceptance pending
+**Status:** Prototype direction reviewed with owner (“ok”); bounded application integration is implemented and `READY_FOR_OWNER`. Final Product Acceptance pending.
 **Preview:** [Project Home prototype](http://127.0.0.1:15190/prototypes/project-home/)
 **Board:** [Recovery Board](../docs/RECOVERY_BOARD.md)
 
@@ -83,3 +83,53 @@ No backend, React production route, database schema, migration, SQLite file, exi
 ## Commit
 
 Implementation commit: `6df240b` (`Prototype product-first Project Home UX`). The commit is on `feat/ux-recovery-01-research-results`; push status is reported after synchronization completes.
+
+## Owner response and application implementation — 2026-10-27
+
+The Product Owner replied “ok” while the Project Home prototype was open. This was treated as approval to apply that direction to the Project workflow, not as acceptance of the finished application.
+
+### What changed in the application
+
+- Opening an existing Project now leads to a Project Home with three clear actions: Start Deep Research, Capture Trend Update, and Import / Analyze CSV.
+- Creating a new Project now lands on the same Project Home rather than the plan form.
+- The research brief opens only after choosing Deep Research. Advanced scope and saved run/session details are collapsed by default.
+- A saved brief can continue to report intake; the report retains the Project ID and pre-fills the saved question and scope.
+- Trend Update lets the PO create a new product/topic in the same flow, then saves the update against that subject. A retry after update failure reuses the already-created subject.
+- Project Home reads and presents saved reports, benchmark collections, subjects, and recent research activity using existing APIs.
+- No backend, schema, migration, or production SQLite changes were made.
+
+### Verification
+
+- Frontend suite: **21 test files / 185 tests passed**.
+- TypeScript check: **passed**.
+- Production build: **passed**; Vite still reports the existing large JavaScript chunk advisory (>500 kB).
+- Browser UAT used an isolated local backend and database at `http://127.0.0.1:15191` / `http://127.0.0.1:15192` with data under `.ux-project-home-uat-data`.
+- Actual browser path checked: create project → Project Home → save Deep Research brief → continue to report intake → confirm blank GEO/environment defaults → import explicitly labeled UAT report → open it → return through project Reports Library → see the same report on Project Home → create/save Trend Update for a new topic → refresh → confirm project topic and activity persist.
+- The report and update were test fixtures, not genuine research. No research claims were treated as verified.
+- A real application screenshot was captured and inspected in the Codex in-app browser. Screenshot export to a repository file and exact application viewports at 1440, 1024, 768, and 390 pixels are **NOT VERIFIED**. The earlier standalone prototype had a separate 390px visual inspection; that does not prove production app responsiveness.
+- The UAT project is `UX Review Project` in the isolated database. The saved test report ID is `9ce54597-e44d-4998-a180-1093a063fc11`; the saved test topic is `UAT Sample Topic Oct 2026`.
+
+### Product Acceptance
+
+- **PO goal:** Organize research under a Project and make its next useful action obvious without requiring knowledge of runs, schemas, or workspace internals.
+- **User journey:** Project Home → Deep Research / Trend Update / CSV → save a brief or source report/update → reopen reports and recent work from the same Project.
+- **Automated work:** Project Home gathers existing project resources; the app preserves project context when a saved brief continues to import; Trend Update creates and reuses a subject safely.
+- **Expected result:** One project landing with clear actions and persistent research context; actual local UAT verified report and trend-update persistence after refresh.
+- **Remaining friction:** No genuine research report was available for UAT. Responsive production viewports and exported screenshot artifacts remain unverified. Benchmark collection cards link to the existing data workspace; they do not create collections from Project Home.
+- **Verification:** 185 frontend tests, TypeScript, build, and actual in-browser UAT on isolated local data as described above.
+- **Decision:** `TECHNICAL PASS`; `PRODUCT PASS` is **not claimed**. Application result is `READY_FOR_OWNER`.
+
+### Implementation files
+
+- `frontend/src/research/ProjectHome.tsx`
+- `frontend/src/research/ProjectHome.css`
+- `frontend/src/research/ResearchWorkspace.tsx`
+- `frontend/src/research/DataFirstWorkspace.tsx`
+- `frontend/src/research/TrendUpdatesPanel.tsx`
+- `frontend/src/reports/ResearchIntake.tsx`
+- `frontend/src/main.tsx`
+- `frontend/src/style.css`
+- Focused Research Workspace, Trend Update, and report intake tests
+- `docs/RECOVERY_BOARD.md`
+
+The implementation commit and push outcome are recorded in the task branch history and the final handoff message. No merge was performed.

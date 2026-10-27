@@ -4,6 +4,7 @@ import { ApiError, researchApi } from './api';
 import type { ResearchPlan, ResearchPlanPayload, ResearchProject, ResearchRun } from './api';
 import { DataFirstWorkspace } from './DataFirstWorkspace';
 import { ProjectJourneyNav } from './ProjectJourneyNav';
+import { ProjectHome } from './ProjectHome';
 
 type PlanForm = {
   question: string;
@@ -101,7 +102,7 @@ function ProjectList({
         </div>
         {error && <ErrorNotice error={error} onRetry={onRetry} />}
         {loading ? <p className="state-message" role="status">Loading projects…</p> : projects.length === 0 && !error ? (
-          <div className="research-empty"><span aria-hidden="true">⌕</span><strong>No projects yet</strong><p>Create a project to begin drafting a research plan.</p><a className="secondary-action" href="/research/new">Set up a project</a></div>
+          <div className="research-empty"><span aria-hidden="true">⌕</span><strong>No projects yet</strong><p>Create a project to keep reports and research work together.</p><a className="secondary-action" href="/research/new">Create a project</a></div>
         ) : (
           <div className="project-list">
             {projects.map((project) => (
@@ -109,13 +110,12 @@ function ProjectList({
                 <span className="project-mark" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span>
                 <span className="project-row-copy"><strong>{project.name}</strong><small>{project.category || 'Uncategorized'}{project.owner ? ` · ${project.owner}` : ''}</small></span>
                 <span className="row-arrow" aria-hidden="true">→</span>
-              </a><a className="secondary-action project-data-link" href={`/research?projectId=${encodeURIComponent(project.id)}&view=data`}>Open workspace</a></div>
+              </a></div>
             ))}
             {nextCursor && <button className="secondary-action load-more" type="button" onClick={onLoadMore}>Load more projects</button>}
           </div>
         )}
       </section>
-      <aside className="research-side-note"><strong>Plans stay versioned</strong><p>Saving an edit creates a new plan version. Existing runs keep their original plan reference.</p><span>Comparison periods are optional.</span></aside>
     </div>
   );
 }
@@ -124,7 +124,6 @@ function NewProjectForm() {
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
   const [category, setCategory] = useState('');
-  const [startWithCsv, setStartWithCsv] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -136,7 +135,7 @@ function NewProjectForm() {
       const project = await researchApi.createProject({
         name: name.trim(), owner: owner.trim() || null, category: category.trim() || null,
       });
-      window.location.assign(`/research?projectId=${encodeURIComponent(project.id)}${startWithCsv ? '&view=data' : ''}`);
+      window.location.assign(`/research?projectId=${encodeURIComponent(project.id)}`);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : new ApiError('The project could not be created.', 0, 'REQUEST_FAILED', {}));
     } finally {
@@ -147,19 +146,17 @@ function NewProjectForm() {
   return (
     <div className="research-layout">
       <form className="research-panel research-form" onSubmit={submit}>
-        <div className="panel-heading"><div><span className="state-label">NEW RESEARCH WORKSPACE</span><h2>Start with the material you have</h2></div></div>
-        <p className="form-intro">Name the workspace. You can start from a question or explore CSV data first. No research starts automatically.</p>
+        <div className="panel-heading"><div><span className="state-label">NEW PROJECT</span><h2>Create a place for this research</h2></div></div>
+        <p className="form-intro">Reports, updates, and comparisons you add later will stay together here.</p>
         {error && <ErrorNotice error={error} />}
         <label className="field-label" htmlFor="project-name">Project name <span>Required</span></label>
         <input id="project-name" autoComplete="off" maxLength={200} required value={name} onChange={(event) => setName(event.target.value)} placeholder="For example, Cozy puzzle market scan" />
-        <fieldset className="workspace-start-choice"><legend>How would you like to begin?</legend><label><input type="radio" name="workspace-start" checked={!startWithCsv} onChange={() => setStartWithCsv(false)} />Start with a research question</label><label><input type="radio" name="workspace-start" checked={startWithCsv} onChange={() => setStartWithCsv(true)} />Start with CSV market data</label><small>Both paths open the same workspace. You can combine reports and datasets later.</small></fieldset>
         <div className="field-grid">
           <div><label className="field-label" htmlFor="project-owner">Owner <span>Optional</span></label><input id="project-owner" maxLength={200} value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="Person or team" /></div>
           <div><label className="field-label" htmlFor="project-category">Category <span>Optional</span></label><input id="project-category" maxLength={120} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Games, productivity…" /></div>
         </div>
-        <div className="form-actions"><a className="secondary-action" href="/research">Cancel</a><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Creating…' : startWithCsv ? 'Create workspace and import CSV' : 'Create workspace and continue'}</button></div>
+        <div className="form-actions"><a className="secondary-action" href="/research">Cancel</a><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create project'}</button></div>
       </form>
-      <aside className="research-side-note"><strong>No research starts automatically</strong><p>Creating a project does not start a research run or connect a source.</p><span>Project and plan setup only.</span></aside>
     </div>
   );
 }
@@ -256,48 +253,50 @@ function PlanEditor({ projectId }: { projectId: string }) {
       <div className="research-main-column">
         <ProjectJourneyNav projectId={projectId} active="research" />
         <form className="research-panel research-form" onSubmit={save}>
-          <div className="panel-heading"><div><span className="state-label">{latestPlan ? `PLAN VERSION ${activePlan?.version ?? latestPlan.version}` : 'INITIAL PLAN'}</span><h2>{project.name}</h2></div>
-            <div><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>Open data workspace</a> <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>CSV data</a> <a className="secondary-action" href={`/research/runs?projectId=${encodeURIComponent(projectId)}`}>Research sessions</a> <a className="secondary-action" href="/explorer">App Store listings explorer</a></div>
+          <div className="panel-heading"><div><span className="state-label">DEEP RESEARCH · {latestPlan ? `BRIEF VERSION ${activePlan?.version ?? latestPlan.version}` : 'NEW BRIEF'}</span><h2>Prepare your research</h2><p>Shape the question and scope. Research happens in ChatGPT; no source is contacted from here.</p></div>
+            <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Back to project</a>
           </div>
-          <div className="project-context-actions"><a className="secondary-action" href={`/?projectId=${encodeURIComponent(projectId)}`}>Import ChatGPT report</a><a className="secondary-action" href={`/reports?projectId=${encodeURIComponent(projectId)}`}>View project reports</a><a className="secondary-action" href={`/tracking?projectId=${encodeURIComponent(projectId)}`}>Tracking status</a></div>
+          {latestPlan && <div className="project-context-actions"><a className="primary-action" href={`/?projectId=${encodeURIComponent(projectId)}&question=${encodeURIComponent(latestPlan.question)}&geo=${encodeURIComponent(latestPlan.geos.join(', '))}&environment=${encodeURIComponent(latestPlan.platforms.join(', '))}&period=${encodeURIComponent([latestPlan.period_start, latestPlan.period_end].filter(Boolean).join(' – '))}`}>Continue to ChatGPT report</a><a className="secondary-action" href={`/research/runs?projectId=${encodeURIComponent(projectId)}`}>View saved research history</a></div>}
           {readOnly && <div className="read-only-note" role="status">This saved plan version is read-only. Editing the latest version will create a new version.</div>}
           {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
           {notice && <div className="research-success" role="status">{notice}</div>}
           <label className="field-label" htmlFor="research-question">Research question <span>Required</span></label>
           <textarea id="research-question" rows={3} maxLength={5000} required disabled={readOnly} value={form.question} onChange={(event) => update('question', event.target.value)} placeholder="What do you need to understand about this market or product?" />
-          <div className="field-grid">
-            <div><label className="field-label" htmlFor="plan-geos">Geographies <span>Optional</span></label><input id="plan-geos" disabled={readOnly} value={form.geos} onChange={(event) => update('geos', event.target.value)} placeholder="US, GB, JP" /><small className="field-help">Comma-separated country codes or names.</small></div>
-            <div><label className="field-label" htmlFor="plan-platforms">Platforms <span>Optional</span></label><input id="plan-platforms" disabled={readOnly} value={form.platforms} onChange={(event) => update('platforms', event.target.value)} placeholder="ios, android" /><small className="field-help">Comma-separated platform identifiers.</small></div>
-          </div>
-          <fieldset className="period-fieldset">
-            <legend>Primary period <span>Optional</span></legend>
+          <details className="deep-research-scope"><summary>Optional scope and research preferences</summary>
             <div className="field-grid">
-              <div><label className="field-label" htmlFor="period-start">Start date</label><input id="period-start" type="date" disabled={readOnly} value={form.periodStart} onChange={(event) => update('periodStart', event.target.value)} /></div>
-              <div><label className="field-label" htmlFor="period-end">End date</label><input id="period-end" type="date" disabled={readOnly} value={form.periodEnd} onChange={(event) => update('periodEnd', event.target.value)} /></div>
+              <div><label className="field-label" htmlFor="plan-geos">Markets <span>Optional</span></label><input id="plan-geos" disabled={readOnly} value={form.geos} onChange={(event) => update('geos', event.target.value)} placeholder="For example, United States, Japan" /></div>
+              <div><label className="field-label" htmlFor="plan-platforms">Platforms or environments <span>Optional</span></label><input id="plan-platforms" disabled={readOnly} value={form.platforms} onChange={(event) => update('platforms', event.target.value)} placeholder="For example, iOS, Android, Web" /></div>
             </div>
-          </fieldset>
-          <fieldset className="period-fieldset comparison-fieldset">
-            <legend>Comparison period <span>Optional</span></legend>
-            <p className="field-help">Leave both dates blank if you do not need a comparison.</p>
+            <fieldset className="period-fieldset">
+              <legend>Research period <span>Optional</span></legend>
+              <div className="field-grid">
+                <div><label className="field-label" htmlFor="period-start">Start date</label><input id="period-start" type="date" disabled={readOnly} value={form.periodStart} onChange={(event) => update('periodStart', event.target.value)} /></div>
+                <div><label className="field-label" htmlFor="period-end">End date</label><input id="period-end" type="date" disabled={readOnly} value={form.periodEnd} onChange={(event) => update('periodEnd', event.target.value)} /></div>
+              </div>
+            </fieldset>
+            <fieldset className="period-fieldset comparison-fieldset">
+              <legend>Compare with another period <span>Optional</span></legend>
+              <p className="field-help">Leave these blank if you do not need a comparison.</p>
+              <div className="field-grid">
+                <div><label className="field-label" htmlFor="comparison-start">Start date</label><input id="comparison-start" type="date" disabled={readOnly} value={form.comparisonStart} onChange={(event) => update('comparisonStart', event.target.value)} /></div>
+                <div><label className="field-label" htmlFor="comparison-end">End date</label><input id="comparison-end" type="date" disabled={readOnly} value={form.comparisonEnd} onChange={(event) => update('comparisonEnd', event.target.value)} /></div>
+              </div>
+            </fieldset>
             <div className="field-grid">
-              <div><label className="field-label" htmlFor="comparison-start">Start date</label><input id="comparison-start" type="date" disabled={readOnly} value={form.comparisonStart} onChange={(event) => update('comparisonStart', event.target.value)} /></div>
-              <div><label className="field-label" htmlFor="comparison-end">End date</label><input id="comparison-end" type="date" disabled={readOnly} value={form.comparisonEnd} onChange={(event) => update('comparisonEnd', event.target.value)} /></div>
+              <div><label className="field-label" htmlFor="plan-goals">What should the research help you decide? <span>Optional</span></label><textarea id="plan-goals" rows={2} disabled={readOnly} value={form.goals} onChange={(event) => update('goals', event.target.value)} placeholder="For example, understand positioning or unmet needs" /></div>
+              <div><label className="field-label" htmlFor="plan-keywords">Topics to include <span>Optional</span></label><textarea id="plan-keywords" rows={2} disabled={readOnly} value={form.keywords} onChange={(event) => update('keywords', event.target.value)} placeholder="Separate topics with commas" /></div>
             </div>
-          </fieldset>
-          <div className="field-grid">
-            <div><label className="field-label" htmlFor="plan-goals">Goals <span>Optional</span></label><textarea id="plan-goals" rows={2} disabled={readOnly} value={form.goals} onChange={(event) => update('goals', event.target.value)} placeholder="Understand positioning, identify unmet needs" /><small className="field-help">Separate entries with commas.</small></div>
-            <div><label className="field-label" htmlFor="plan-keywords">Keywords <span>Optional</span></label><textarea id="plan-keywords" rows={2} disabled={readOnly} value={form.keywords} onChange={(event) => update('keywords', event.target.value)} placeholder="cozy puzzle, merge game" /><small className="field-help">Separate entries with commas.</small></div>
-          </div>
-          <div><label className="field-label" htmlFor="plan-sources">Sources to consider <span>Optional</span></label><textarea id="plan-sources" rows={2} disabled={readOnly} value={form.sources} onChange={(event) => update('sources', event.target.value)} placeholder="Apple App Store, Google Play" /><small className="field-help">Preferences only. No sources are connected or collected from this screen.</small></div>
-          <div className="form-actions"><a className="secondary-action" href="/research">Back</a>{readOnly ? <button className="primary-action" type="button" onClick={() => setViewVersion(latestPlan?.version ?? null)}>Edit latest version</button> : <button className="primary-action" type="submit" disabled={busy}>{busy ? 'Saving…' : latestPlan ? 'Save as new version' : 'Save research plan'}</button>}</div>
+            <div><label className="field-label" htmlFor="plan-sources">Sources to consider <span>Optional</span></label><textarea id="plan-sources" rows={2} disabled={readOnly} value={form.sources} onChange={(event) => update('sources', event.target.value)} placeholder="Specific sources you want to consult" /><small className="field-help">Preferences only; the app will not access sources from this screen.</small></div>
+          </details>
+          <div className="form-actions"><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Back to project</a>{readOnly ? <button className="primary-action" type="button" onClick={() => setViewVersion(latestPlan?.version ?? null)}>Edit latest brief</button> : <button className="primary-action" type="submit" disabled={busy}>{busy ? 'Saving…' : latestPlan ? 'Save brief changes' : 'Save research brief'}</button>}</div>
         </form>
       </div>
-      <aside className="research-side-note"><strong>Version history</strong>
+      <details className="research-side-note"><summary><strong>Saved brief versions</strong></summary>
         {plans.length === 0 ? <p>No plan has been saved yet.</p> : <div className="version-list">{[...plans].reverse().map((plan) => <button className={`version-item${plan.version === activePlan?.version ? ' selected' : ''}`} type="button" key={plan.id} onClick={() => setViewVersion(plan.version)}><span>Version {plan.version}</span><small>{new Date(plan.created_at).toLocaleDateString()}</small></button>)}</div>}
         <span>Saved versions remain available to research runs.</span>
-      </aside>
-      <section className="research-panel research-run-section" aria-labelledby="project-runs-title">
-        <div className="panel-heading"><div><span className="state-label">RESEARCH SESSIONS</span><h2 id="project-runs-title">Runs for this project</h2></div><span className="manual-chip">MANUAL WORKFLOW</span></div>
+      </details>
+      <details className="research-panel research-run-section" aria-labelledby="project-runs-title">
+        <summary className="panel-heading"><div><span className="state-label">ADVANCED</span><h2 id="project-runs-title">Saved research sessions</h2></div></summary>
         {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
         {runNotice && <div className="research-success" role="status">{runNotice}</div>}
         <div className="run-create-controls">
@@ -314,7 +313,7 @@ function PlanEditor({ projectId }: { projectId: string }) {
             <a className="text-button" href={`/research/runs?runId=${encodeURIComponent(run.id)}&projectId=${encodeURIComponent(projectId)}`}>View run →</a>
           </article>)}
         </div>}
-      </section>
+      </details>
     </div>
   );
 }
@@ -344,7 +343,8 @@ export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' | 'data' }) {
   useEffect(() => { if (!projectId && mode === 'list') void loadProjects(); }, [projectId, mode]);
 
   if (projectId && (mode === 'data' || view === 'data')) return <DataFirstWorkspace projectId={projectId} />;
-  if (projectId) return <PlanEditor projectId={projectId} />;
+  if (projectId && view === 'plan') return <PlanEditor projectId={projectId} />;
+  if (projectId) return <ProjectHome projectId={projectId} />;
   if (mode === 'new') return <NewProjectForm />;
   return <ProjectList projects={projects} nextCursor={nextCursor} onLoadMore={() => void loadProjects(nextCursor ?? undefined)} loading={loading} error={error} onRetry={() => void loadProjects()} />;
 }
