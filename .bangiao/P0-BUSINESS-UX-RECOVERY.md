@@ -81,5 +81,5 @@ The screenshot was captured and visually inspected in the Codex browser session.
 
 ## Git reference
 
-Implementation commit: pending commit.  
-Push: pending commit.
+Implementation commit: `bd5700c` (`feat(research): save project information before subject mapping`).  
+Push: pending.
