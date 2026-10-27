@@ -90,6 +90,11 @@ The Product Owner has explicitly selected **Mode B: autonomous implementation wi
 
 - Continue through safe, approved, unblocked tasks in the active Codex session; do not ask the PO to transfer a new task prompt after each bounded slice.
 - Update `docs/RECOVERY_BOARD.md` after each task with implementation status, reviewer findings, exact test evidence, known defects, milestone progress and the next executable task.
+- Treat new Product Owner feedback as authoritative even when it reopens a task previously marked done. Before choosing work, reread the latest recovery board and feedback log, check dependencies and priority changes, and reconcile remote/local board edits without overwriting either side.
+- Record each material feedback round under its existing task (or a board-level Mode B process entry when it changes workflow rules): original feedback, change classification, impact, revised acceptance, implementation and verification. Rework the existing task; do not create duplicates or impose a round limit.
+- Support the status loop `READY_FOR_OWNER → REWORK → IN_PROGRESS → DEV_DONE → READY_FOR_OWNER`. Silence is not acceptance. A reworked feature remains unaccepted until the owner explicitly accepts it.
+- For major visual changes, prototype the smallest working journey and capture real running-app screenshots before broad rollout; use the agreed design system and the UI UX Pro Max skill. Preserve existing behavior unless feedback explicitly changes workflow.
+- Pause only work affected by a changed direction; continue independent approved work where safe. Reassess downstream dependencies before implementing them.
 - After a meaningful verified milestone, write its `.bangiao/milestones/G*-REVIEW.md` report and report the result in the active session. Milestone reporting is non-blocking; it does not imply Owner Acceptance.
 - Use a separate independent reviewer context/agent for implementation review where available and explicitly requested by the active autonomous task. Do not create or configure a general Planner/Coder/Tester/Reviewer orchestration system.
 - Stop for major unapproved product direction changes, destructive/data-loss risk, material scope expansion, external costs, merge/release, or a blocker requiring a business decision. Never merge or release automatically.

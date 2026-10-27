@@ -13,10 +13,14 @@
 - Preserve the current dirty worktree and production SQLite. Task commits must stage only files for that slice; exclude launcher/setup changes and scratch folders unless they become an explicitly approved task.
 - Push completed reviewable commits under the owner's standing authorization; never merge master or release automatically. Milestone reports do not imply Owner Acceptance.
 - Report exact tests, browser actions, screenshots and reviewers. Use `NOT VERIFIED` when evidence is missing.
+- Re-read this board and its owner-feedback history before every task selection. New PO feedback overrides earlier assumptions, including on scoped-done work; rework the original task instead of duplicating it.
+- Record each material revision with original feedback, classification, impact/dependencies, updated acceptance, implementation and evidence. Preserve both local and remote board edits during sync; never resolve conflicts by replacing one version wholesale.
+- Use `READY_FOR_OWNER → REWORK → IN_PROGRESS → DEV_DONE → READY_FOR_OWNER` for review iterations. No arbitrary iteration cap; silence is not acceptance. `DONE (scoped)` is technical evidence only and never means owner acceptance.
+- For major visual rework, show a small working prototype and real browser screenshots early. Pause only dependent work when direction changes; continue independent approved work safely.
 
 ## Status legend
 
-`DONE (scoped)` = verified only to recorded evidence; `IN PROGRESS` = active task; `READY` = next unblocked task; `BLOCKED` = requires external/business input; `NOT STARTED` = approved backlog; `DEFERRED` = intentionally outside current recovery.
+`READY_FOR_OWNER`, `REWORK`, `IN_PROGRESS`, `DEV_DONE` describe review iterations. `DONE (scoped)` = verified only to recorded evidence; owner acceptance remains separate. `READY` = next unblocked task; `BLOCKED` = requires external/business input; `NOT STARTED` = approved backlog; `DEFERRED` = intentionally outside current recovery.
 
 ## Unified backlog and dependencies
 
@@ -31,8 +35,8 @@
 | G2-04 | G2 / P0 | Complete genuine long-form ChatGPT report → results → evidence → decision → refresh/reopen UAT | G2-02/03, owner report | BLOCKED for genuine-data pass | Existing reports were viewed; no new genuine owner-provided structured report was imported in latest audit. Continue fixture/browser tests but do not claim product PASS. |
 | G3-01 | G3 / P0 | Preserve/reuse CSV import, readiness, chart and compatible period comparison in Project/Report workflow | Existing; G2-02 | DONE (implementation scoped; owner data acceptance blocked) | UI-02/M1–M6 handoffs and browser evidence. Owner Sensor Tower export lacks explicit GEO/date semantics; comparisons correctly withheld. |
 | G3-02 | G3 / P0 | Persistent reusable Research Subject identity with explicit ambiguous mapping | G2-02 | DONE (scoped) | Commit `9f92a24`; additive `20261027_0010` subject/reference schema; explicit project-scoped links from report and CSV source keys; no auto-merge/backfill. 21 targeted backend tests, 170 frontend tests, typecheck/build pass; isolated Chrome UAT verified link + refresh. Full backend suite NOT VERIFIED (collection stall). Handoff `.bangiao/G3-02-RESEARCH-SUBJECTS.md`. Owner acceptance pending. |
-| G3-03 | G3 / P0 | Project Benchmark Collections across report, trend and CSV observations | G3-02 | IN PROGRESS | Begin bounded implementation from the approved recovery plan. Preserve G3-02 subject links, report-local selections and legacy notes; only add storage where required. |
-| G3-04 | G3 / P0 | Trend Update capture with source note, publication date, exact claim, subject and collection | G3-02/03 | NOT STARTED | TW-01 scenario only; genuine Rotate Rings source link/file not supplied. Report claim as source-reported/unverified. |
+| G3-03 | G3 / P0 | Project Benchmark Collections across report and CSV observations, with trend-source extension after G3-04 | G3-02 | DONE (partial; trend integration pending G3-04) | Commit `e1728be`; additive migration `20261027_0011`; project-owned collections; explicit subject membership; report/CSV source-backed matrix. 23 backend and 171 frontend tests pass; TypeScript/build pass; isolated Chrome QA UAT and screenshots. Post-disclosure browser screenshot, full migration backup/restore suite and mobile UAT NOT VERIFIED. Handoff `.bangiao/G3-03-BENCHMARK-COLLECTIONS.md`. |
+| G3-04 | G3 / P0 | Trend Update capture with source note, publication date, exact claim, subject and collection | G3-02/03 | IN PROGRESS | Begin generic attributed update capture with source note, exact claim, date and confirmed subject/collection. Genuine Rotate Rings source link/file not supplied; use structural QA only and mark genuine-source acceptance BLOCKED. Revisit G3-03 for trend observation integration only after the source contract exists. |
 | G3-05 | G3 / P0 | Local Image Evidence upload/attachment, hash, source context and reopen | G3-04 | NOT STARTED | Existing Evidence is Run-bound; requires compatible additive reference without changing immutable manifests. No OCR/fetch/AI. |
 | G3-06 | G3 / P0 | Subject Profile and extensible analysis sections; Core Loop / Level Design / Ad Placement starter blocks | G3-02 | NOT STARTED | Keep these as optional UI blocks/extension keys, not hardcoded global domain taxonomy. |
 | G3-07 | G3 / P0 | Monthly Benchmark Tracking for explicit collection snapshots/updates, with unknown/incompatible states | G3-03/04, G4 | NOT STARTED | Do not infer growth from a headline/ranking or incompatible measurements. |
@@ -60,22 +64,35 @@ These are historical recorded results, not a fresh full-suite run against every 
 - SQLite QA copy: integrity `ok`, revision `20261024_0009`; production SQLite was not written.
 - Browser: screenshots in `.bangiao/screenshots/product-recovery-audit/` captured from the running localhost app using an isolated SQLite copy. The rendered current audit views do not prove all interactions or genuine-data acceptance.
 - G3-02 subject identity: 21 targeted backend tests PASS; 170 frontend tests PASS; TypeScript and production build PASS; isolated Chrome/SQLite explicit report + CSV subject mapping survived refresh. Screenshot: `.bangiao/screenshots/g3-02-subject-identity/subject-report-csv-links-after-refresh.png`. Full backend suite collection NOT VERIFIED in this Windows environment.
+- G3-03 benchmark collections: commit `e1728be`; 23 focused backend tests PASS (`test_benchmark_collections`, `test_subjects`, `test_workspace_data_first`); 171 frontend tests PASS; TypeScript and production build PASS (524.46 kB bundle advisory); `git diff --check` PASS. Isolated Chrome UAT verified explicit report+CSV subject links, collection add/remove/restore, reload/reopen, source-backed matrix and raw source preservation. Screenshots in `.bangiao/screenshots/g3-03-benchmark-collection/`; matrix screenshot predates final validation-reason disclosure adjustment, which is covered by interaction test. Post-adjustment screenshot, broad `DatabaseMigrationTest` and mobile UAT NOT VERIFIED. Trend-source observations await G3-04. Handoff `.bangiao/G3-03-BENCHMARK-COLLECTIONS.md`.
 - G2-02 current candidate: 38 focused frontend tests PASS; 15 backend workspace tests PASS; TypeScript and production build PASS; isolated SQLite/Chrome UAT PASS at 1440×900. Screenshot evidence: `.bangiao/screenshots/p0-project-report-unification/`. Independent read-only review: no P0/P1 finding; browser-history back behavior remains untested.
 
 ## Defects / external inputs
 
 1. Report-level PO notes and Project decisions are separate; current UX can route to legacy notes instead of authoritative decision.
-2. Persistent Subject and reusable Benchmark Collection do not exist.
+2. Project collections now support explicit report/CSV subject observations; trend update records are not yet a source type and are pending G3-04 integration.
 3. Trend Update, image evidence management and useful Tracking history do not exist.
 4. Sensor Tower export is missing explicit GEO and date semantics; do not fill them by inference.
 5. Actual Rotate Rings source note/link/image is not in current evidence; user input required for genuine source verification/UAT.
 6. Full backend regression and production-history backup/restore are NOT VERIFIED.
 7. Feature branch has 86 commits/158 paths relative to master; integration review is a release blocker, not permission to merge.
 
+## Product Owner feedback history
+
+### MODE-B-R1 — 2026-10-27 — Continuous Product Owner feedback
+
+- **Original feedback:** “Upgrade the existing autonomous Mode B workflow to support continuous Product Owner feedback, repeated design iterations and dynamic backlog changes. Do not restart the project, recreate the Recovery Board or interrupt unrelated approved work unnecessarily.”
+- **Classification:** Workflow change to the recovery operating model; no product architecture direction changed.
+- **Impact:** Applies to every open or previously scoped-done task. Re-read this board before task selection; reopen the original task when owner feedback affects it; preserve dependencies, valid behavior and local/remote board edits. The active G3-03 slice is unaffected and continues.
+- **Updated acceptance:** Use `READY_FOR_OWNER → REWORK → IN_PROGRESS → DEV_DONE → READY_FOR_OWNER`; allow unbounded owner review rounds; keep feedback/change/impact/criteria/implementation/evidence linked under the original task; silence never means acceptance; major UI rework starts with a real working preview and screenshots.
+- **Implementation reference:** This entry and the Mode B rules in repository `AGENTS.md`.
+- **Verification:** Process/documentation change reviewed in the active session. No automated tests apply. Existing board and G3-03 working changes were preserved.
+- **Current status:** Applied; no owner acceptance implied for any product task.
+
 ## Current execution cursor
 
-**Active task:** G3-03 / P0-B Project Benchmark Collections across report, trend and CSV observations. Reuse the new G3-02 subject identities where available, preserve source provenance and legacy report-local data, and do not create inferred memberships or comparisons.
+**Active task:** G3-04 / P0 Trend Update capture with exact claim, date, provenance, and explicit confirmed subject/collection association. Genuine Rotate Rings source material is not available; continue structural QA only and do not claim genuine-source acceptance. After the source contract exists, reopen G3-03 only for the bounded trend-matrix extension.
 
-**Next after G3-02:** G3-03 reusable Project Benchmark Collections, only after persistent subject identity and explicit mapping are verified. If genuine-source input is needed, continue safe structural tests and mark only that acceptance scenario BLOCKED; do not invent evidence.
+**Next after G3-03:** G3-04 Trend Update capture using an attributed, unverified source note; avoid scraping, AI, and inferred measurements. Reconcile source-model impact with collections after G3-04 is implemented.
 
-**Last updated:** 2026-10-27 — G2-02 and G3-02 verified and closed as scoped slices; G3-03 active. No milestone is Owner Accepted.
+**Last updated:** 2026-10-27 — G2-02/G3-02 verified as scoped; G3-03 report/CSV slice delivered with trend integration pending; G3-04 active. No milestone is Owner Accepted.
