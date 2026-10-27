@@ -84,6 +84,17 @@ For future user-facing tasks, include a short **Product Acceptance** section in 
 
 Do not declare `PRODUCT PASS` if a core business workflow remains incomplete.
 
+## Explicitly Authorized Autonomous Product Recovery
+
+The Product Owner has explicitly selected **Mode B: autonomous implementation with milestone reporting** for the Unified Product Recovery scope recorded in `docs/RECOVERY_BOARD.md` and linked approved plans.
+
+- Continue through safe, approved, unblocked tasks in the active Codex session; do not ask the PO to transfer a new task prompt after each bounded slice.
+- Update `docs/RECOVERY_BOARD.md` after each task with implementation status, reviewer findings, exact test evidence, known defects, milestone progress and the next executable task.
+- After a meaningful verified milestone, write its `.bangiao/milestones/G*-REVIEW.md` report and report the result in the active session. Milestone reporting is non-blocking; it does not imply Owner Acceptance.
+- Use a separate independent reviewer context/agent for implementation review where available and explicitly requested by the active autonomous task. Do not create or configure a general Planner/Coder/Tester/Reviewer orchestration system.
+- Stop for major unapproved product direction changes, destructive/data-loss risk, material scope expansion, external costs, merge/release, or a blocker requiring a business decision. Never merge or release automatically.
+- Do not claim tests, browser UAT, independent review, genuine data verification or Owner Acceptance that did not occur. Preserve local and uncommitted user work; isolate task commits and never include unrelated setup/scratch changes.
+
 ## Scope control
 
-Follow the user's explicit task boundaries. Do not create, modify, configure, or invoke a Planner/Coder/Tester/Reviewer multi-agent system unless the user explicitly requests it in a future task.
+Follow the user's explicit task boundaries. Do not create, modify, configure, or invoke a Planner/Coder/Tester/Reviewer multi-agent system. The autonomous recovery authorization above permits only a scoped independent reviewer context where requested; it does not authorize a general multi-agent workflow.
