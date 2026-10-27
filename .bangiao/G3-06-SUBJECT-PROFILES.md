@@ -1,9 +1,9 @@
 # G3-06 — Subject Profile & Extensible Analysis Sections
 
-**Status:** `READY_FOR_OWNER` — automated verification complete; Browser UAT `NOT VERIFIED`  
-**Branch:** `feat/ux-recovery-01-research-results`  
-**Starting HEAD:** `127980bac588fde4beaf04cc5b19d513a9d3cb80`  
-**Implementation commit:** `bd69a72b617cf194c4e067fabacf1f27731fc1e2`  
+**Status:** `READY_FOR_OWNER` — automated verification complete; Browser UAT `NOT VERIFIED`
+**Branch:** `feat/ux-recovery-01-research-results`
+**Starting HEAD:** `127980bac588fde4beaf04cc5b19d513a9d3cb80`
+**Implementation commit:** `bd69a72b617cf194c4e067fabacf1f27731fc1e2`
 **Production SQLite:** not accessed or modified.
 
 ## Outcome
