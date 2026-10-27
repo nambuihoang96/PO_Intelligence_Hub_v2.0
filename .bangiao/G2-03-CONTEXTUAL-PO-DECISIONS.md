@@ -45,6 +45,8 @@ No migration was added. Decisions use the existing project-scoped decision table
 - Frontend TypeScript check and production build: **passed** (`npm run build`). Vite reports the existing large-chunk advisory (546.55 kB).
 - `git diff --check`: **passed**.
 - Browser navigation, save, refresh and reopen: **NOT VERIFIED**. No browser UAT was performed in this pass.
+- An isolated FastAPI `TestClient` route test was attempted but never reached the endpoint: Starlette/AnyIO stalled creating the Windows `socket.socketpair` during TestClient startup. The temporary test was removed; this is not counted as a pass or an application failure.
+- Local browser automation check: no Playwright/Selenium runtime or browser driver was available. Codex app UI automation was not used to avoid taking over the owner's desktop session.
 - Genuine owner report: **NOT VERIFIED**. Automated tests use isolated fixtures; no user production SQLite data was accessed or changed.
 
 ## Product Acceptance
@@ -54,7 +56,7 @@ No migration was added. Decisions use the existing project-scoped decision table
 - **Automated work:** The workspace supplies project-owned targets, validates target identity and report version, preserves CSV candidate IDs, resolves attached evidence, and stores decision revisions.
 - **Expected result:** A contextual decision is saved in the existing project decision store and can be reopened without changing the source report or its legacy notes.
 - **Remaining friction:** The decision workspace is a shared list of targets; browser save/refresh/reopen behavior and usability with a genuine owner report remain to be checked.
-- **Verification:** Focused backend tests and all frontend tests/build passed. Browser UAT was not run.
+- **Verification:** Focused backend tests and all frontend tests/build passed. Browser UAT and an HTTP-level route assertion were not run to completion.
 - **Decision:** **NEEDS FIX** until browser UAT and owner review confirm the workflow. This is not PRODUCT_ACCEPTED.
 
 ## Known limitations and next action
