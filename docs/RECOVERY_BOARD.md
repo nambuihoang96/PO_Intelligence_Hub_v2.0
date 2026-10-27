@@ -31,7 +31,7 @@
 | G1-03 | G1 / P1 | Peachy Studio design tokens, reusable screen primitives and cross-screen visual consistency | G1-02 data contracts stable | READY after P0-A | Skill exists and was searched; proposal is in unified plan. Tokens have not been screenshot-approved or fully contrast-audited. |
 | G2-01 | G2 / P0 | One-paste `po_research_v1` import; original report retained; structured/text-only states | Existing | DONE (scoped) | B-001.3 and related handoffs; live genuine report journey remains NOT VERIFIED in latest release audit. |
 | G2-02 | G2 / P0 | Project/Report shared identity, explicit legacy linking, project filter and context navigation | G2-01 | DONE (scoped) | Focused backend/frontend tests pass; isolated Chrome/Playwright UAT linked a report, verified project filter, same report ID, reload/back link and preservation of report/benchmark data. Screenshots committed in `.bangiao/screenshots/p0-project-report-unification/`. Independent review found no P0/P1 defect. Owner acceptance pending. |
-| G2-03 | G2 / P0 | Contextual PO Decision reachable from report finding/subject/project; one authoritative decision with safe legacy handling | G2-02, stable subject/finding target | READY | Audit defect REC-P1-02; report notes JSON and Project `POOpportunityDecision` are separate. Keep old notes, no silent migration. This is the next unblocked P0 slice. |
+| G2-03 | G2 / P0 | Contextual PO Decision reachable from report finding/subject/project; one authoritative decision with safe legacy handling | G2-02, stable subject/finding target | IN_PROGRESS | Existing project decision editor persists CSV-shortlist candidates; report findings can be attached as evidence but are not themselves decision targets. Report notes remain separate legacy data. Scope stays within the approved source-of-truth rule 7. |
 | G2-04 | G2 / P0 | Complete genuine long-form ChatGPT report → results → evidence → decision → refresh/reopen UAT | G2-02/03, owner report | BLOCKED for genuine-data pass | Existing reports were viewed; no new genuine owner-provided structured report was imported in latest audit. Continue fixture/browser tests but do not claim product PASS. |
 | G3-01 | G3 / P0 | Preserve/reuse CSV import, readiness, chart and compatible period comparison in Project/Report workflow | Existing; G2-02 | DONE (implementation scoped; owner data acceptance blocked) | UI-02/M1–M6 handoffs and browser evidence. Owner Sensor Tower export lacks explicit GEO/date semantics; comparisons correctly withheld. |
 | G3-02 | G3 / P0 | Persistent reusable Research Subject identity with explicit ambiguous mapping | G2-02 | DONE (scoped) | Commit `9f92a24`; additive `20261027_0010` subject/reference schema; explicit project-scoped links from report and CSV source keys; no auto-merge/backfill. 21 targeted backend tests, 170 frontend tests, typecheck/build pass; isolated Chrome UAT verified link + refresh. Full backend suite NOT VERIFIED (collection stall). Handoff `.bangiao/G3-02-RESEARCH-SUBJECTS.md`. Owner acceptance pending. |
@@ -102,10 +102,20 @@ These are historical recorded results, not a fresh full-suite run against every 
 - **Verification:** Compared current board rows against `.bangiao/UNIFIED-PRODUCT-RECOVERY-OCT-2026.md` §4 items P0-D/P0-G and §3 source-of-truth rule 7. No code or database changes.
 - **Current status:** Applied to this board; G2-03 is READY, G4-01 is BLOCKED, and G3-07 remains NOT STARTED.
 
+### G2-03 task selection and impact — 2026-10-27
+
+- **Selection basis:** G2-03 is the highest-priority unblocked recovery slice after re-reading this board. G2-02 is complete; current code already has PO decision validation, optimistic revisions and evidence resolution that can be reused.
+- **Directly affected components:** `backend/app/opportunities.py`, `backend/app/schemas.py`, `POOpportunityDecision` persistence only if stable target identity requires an additive field, `frontend/src/research/OpportunityReview.tsx`, contextual entry points in Research Results / Subject / Trend Update, and their existing tests.
+- **Dependent tasks:** G4-01 decision revision timeline and G4-02 PO action lifecycle. Keep both blocked on stable contextual decision targets.
+- **Data implications:** Preserve every existing `candidate_id`, decision JSON and report-local legacy note. Do not auto-map historical candidate decisions or rewrite immutable source records.
+- **Regression risks:** Existing CSV shortlist filtering, evidence reference integrity, revision conflicts, refresh/reopen drafts and legacy report notes.
+- **Updated acceptance:** A PO can open the existing decision workspace from an explicit finding, subject or update; save and reopen one authoritative project decision with separate source recommendation, assessment, notes, next action, status and evidence; old records remain accessible without guessed remapping.
+- **Current status:** G2-03 entered `IN_PROGRESS`; code audit found no need to change the approved overall architecture. Browser proof remains to be evaluated after implementation.
+
 ## Current execution cursor
 
-**Active task:** G3-06 / P0 Subject Profile and extensible analysis sections. Implementation and automated verification are complete and ready for owner review; browser UAT is not verified. G3-05 is independently ready for owner review; neither status implies owner acceptance.
+**Active task:** G2-03 / P0 Contextual PO Decision continuity. Existing CSV candidate decision persistence is being reused; explicit finding/subject/update decision targets and safe legacy handling are under implementation. G3-06 and G3-05 are independently ready for owner review; neither status implies owner acceptance.
 
-**Next selection:** G2-03 / P0 contextual PO Decision continuity is READY because G2-02 is complete. G4-01 is BLOCKED until G2-03 is complete, in line with the approved Master Plan's P0-D dependency; G3-07 remains gated on G4.
+**Next selection:** After G2-03, re-read the board and revalidate G4-01/G4-02 prerequisites. G4-01 is BLOCKED until G2-03 is complete, in line with the approved Master Plan's P0-D dependency; G3-07 remains gated on G4.
 
-**Last updated:** 2026-10-27 — G3-06 subject profile implementation is ready for owner review with isolated migration and automated test evidence; browser UAT remains unverified. No milestone is Owner Accepted.
+**Last updated:** 2026-10-27 — G3-06 is ready for owner review; G2-03 selected as the next unblocked P0 task, with impacts and dependencies recorded above. No milestone is Owner Accepted.
