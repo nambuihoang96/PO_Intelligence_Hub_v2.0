@@ -30,8 +30,8 @@
 | G2-03 | G2 / P0 | Contextual PO Decision reachable from report finding/subject/project; one authoritative decision with safe legacy handling | G2-02, stable subject/finding target | NOT STARTED | Audit defect REC-P1-02; report notes JSON and Project `POOpportunityDecision` are separate. Keep old notes, no silent migration. |
 | G2-04 | G2 / P0 | Complete genuine long-form ChatGPT report → results → evidence → decision → refresh/reopen UAT | G2-02/03, owner report | BLOCKED for genuine-data pass | Existing reports were viewed; no new genuine owner-provided structured report was imported in latest audit. Continue fixture/browser tests but do not claim product PASS. |
 | G3-01 | G3 / P0 | Preserve/reuse CSV import, readiness, chart and compatible period comparison in Project/Report workflow | Existing; G2-02 | DONE (implementation scoped; owner data acceptance blocked) | UI-02/M1–M6 handoffs and browser evidence. Owner Sensor Tower export lacks explicit GEO/date semantics; comparisons correctly withheld. |
-| G3-02 | G3 / P0 | Persistent reusable Research Subject identity with explicit ambiguous mapping | G2-02 | IN PROGRESS | Start with contract/schema audit. No persistent subject model in inspected code. Preserve source-local keys and never auto-merge by fuzzy title; additive migration only after confirming necessity. |
-| G3-03 | G3 / P0 | Project Benchmark Collections across report, trend and CSV observations | G3-02 | NOT STARTED | Existing report-local benchmark JSON is not a cross-input collection. Additive migration only if required; preserve memberships/legacy dimensions. |
+| G3-02 | G3 / P0 | Persistent reusable Research Subject identity with explicit ambiguous mapping | G2-02 | DONE (scoped) | Commit `9f92a24`; additive `20261027_0010` subject/reference schema; explicit project-scoped links from report and CSV source keys; no auto-merge/backfill. 21 targeted backend tests, 170 frontend tests, typecheck/build pass; isolated Chrome UAT verified link + refresh. Full backend suite NOT VERIFIED (collection stall). Handoff `.bangiao/G3-02-RESEARCH-SUBJECTS.md`. Owner acceptance pending. |
+| G3-03 | G3 / P0 | Project Benchmark Collections across report, trend and CSV observations | G3-02 | IN PROGRESS | Begin bounded implementation from the approved recovery plan. Preserve G3-02 subject links, report-local selections and legacy notes; only add storage where required. |
 | G3-04 | G3 / P0 | Trend Update capture with source note, publication date, exact claim, subject and collection | G3-02/03 | NOT STARTED | TW-01 scenario only; genuine Rotate Rings source link/file not supplied. Report claim as source-reported/unverified. |
 | G3-05 | G3 / P0 | Local Image Evidence upload/attachment, hash, source context and reopen | G3-04 | NOT STARTED | Existing Evidence is Run-bound; requires compatible additive reference without changing immutable manifests. No OCR/fetch/AI. |
 | G3-06 | G3 / P0 | Subject Profile and extensible analysis sections; Core Loop / Level Design / Ad Placement starter blocks | G3-02 | NOT STARTED | Keep these as optional UI blocks/extension keys, not hardcoded global domain taxonomy. |
@@ -59,7 +59,7 @@ These are historical recorded results, not a fresh full-suite run against every 
 - Backend latest audit: **15 workspace tests PASS**; full backend and report-focused suites **NOT VERIFIED** after environment hangs.
 - SQLite QA copy: integrity `ok`, revision `20261024_0009`; production SQLite was not written.
 - Browser: screenshots in `.bangiao/screenshots/product-recovery-audit/` captured from the running localhost app using an isolated SQLite copy. The rendered current audit views do not prove all interactions or genuine-data acceptance.
-- Project/Report handoff records prior targeted tests (38 frontend, 1 backend, migration), but current uncommitted changes must be rerun before DONE.
+- G3-02 subject identity: 21 targeted backend tests PASS; 170 frontend tests PASS; TypeScript and production build PASS; isolated Chrome/SQLite explicit report + CSV subject mapping survived refresh. Screenshot: `.bangiao/screenshots/g3-02-subject-identity/subject-report-csv-links-after-refresh.png`. Full backend suite collection NOT VERIFIED in this Windows environment.
 - G2-02 current candidate: 38 focused frontend tests PASS; 15 backend workspace tests PASS; TypeScript and production build PASS; isolated SQLite/Chrome UAT PASS at 1440×900. Screenshot evidence: `.bangiao/screenshots/p0-project-report-unification/`. Independent read-only review: no P0/P1 finding; browser-history back behavior remains untested.
 
 ## Defects / external inputs
@@ -74,8 +74,8 @@ These are historical recorded results, not a fresh full-suite run against every 
 
 ## Current execution cursor
 
-**Active task:** G3-02 / P0-B Persistent Research Subject identity. Audit existing contracts and source identity semantics first; propose the smallest additive schema and user flow, preserve existing keys/notes/memberships, and use migration tests on isolated SQLite only. Do not auto-merge fuzzy names.
+**Active task:** G3-03 / P0-B Project Benchmark Collections across report, trend and CSV observations. Reuse the new G3-02 subject identities where available, preserve source provenance and legacy report-local data, and do not create inferred memberships or comparisons.
 
 **Next after G3-02:** G3-03 reusable Project Benchmark Collections, only after persistent subject identity and explicit mapping are verified. If genuine-source input is needed, continue safe structural tests and mark only that acceptance scenario BLOCKED; do not invent evidence.
 
-**Last updated:** 2026-10-27 — G2-02 verified and closed as a scoped slice; G3-02 active. No milestone is Owner Accepted.
+**Last updated:** 2026-10-27 — G2-02 and G3-02 verified and closed as scoped slices; G3-03 active. No milestone is Owner Accepted.
