@@ -58,4 +58,4 @@ These are selected text-color pairs, not a complete automated accessibility audi
 
 Restore a supported in-Codex local browser preview path, then capture actual screenshots and request PO visual review. Only after that review should the tokens be applied to shared application screens.
 
-**Implementation commit:** pending.
+**Implementation commit:** `80c16ec2903f057d5b0e0091e1b98a592de480ee` (pushed to the existing review branch; no merge).
