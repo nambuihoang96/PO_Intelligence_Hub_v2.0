@@ -35,6 +35,43 @@ export type ResearchSubjectSource = {
   source_state: 'available' | 'stale';
 };
 
+export type ResearchBenchmarkCollectionMember = {
+  subject_id: string;
+  name: string;
+  subject_type: string | null;
+  source_count: number;
+  report_source_count: number;
+  csv_source_count: number;
+  observations: ResearchBenchmarkCollectionObservation[];
+};
+
+export type ResearchBenchmarkCollectionObservation = {
+  dimension_key: string;
+  dimension_name: string;
+  source_kind: ResearchSubjectSource['source_kind'];
+  source_name: string;
+  value: unknown;
+  unit: string | null;
+  scope: Record<string, unknown>;
+  verification_status: 'unverified' | 'needs_review' | 'verified';
+  evidence_status: string | null;
+  uncertainty: string | null;
+  evidence_references: string[];
+  source_locations: string[];
+  validation_reasons: string[];
+};
+
+export type ResearchBenchmarkCollection = {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  members: ResearchBenchmarkCollectionMember[];
+  dimensions: { key: string; name: string; source_kind: ResearchSubjectSource['source_kind'] }[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type ShortlistContext = {
   dataset_id: string;
   dataset_filename: string;
@@ -253,6 +290,18 @@ export const researchApi = {
   },
   mapSubjectSource(projectId: string, payload: { source_kind: ResearchSubjectSource['source_kind']; source_id: string; source_key: string; subject_id?: string; create_subject_from_source?: boolean; expected_subject_id?: string }): Promise<ResearchSubjectSource> {
     return request(`/projects/${encodeURIComponent(projectId)}/subject-sources`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  listBenchmarkCollections(projectId: string): Promise<Page<ResearchBenchmarkCollection>> {
+    return request(`/projects/${encodeURIComponent(projectId)}/benchmark-collections?limit=100`);
+  },
+  createBenchmarkCollection(projectId: string, payload: { name: string; description?: string | null }): Promise<ResearchBenchmarkCollection> {
+    return request(`/projects/${encodeURIComponent(projectId)}/benchmark-collections`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  addBenchmarkCollectionSubject(projectId: string, collectionId: string, subjectId: string): Promise<ResearchBenchmarkCollection> {
+    return request(`/projects/${encodeURIComponent(projectId)}/benchmark-collections/${encodeURIComponent(collectionId)}/subjects/${encodeURIComponent(subjectId)}`, { method: 'PUT', body: JSON.stringify({ subject_id: subjectId }) });
+  },
+  removeBenchmarkCollectionSubject(projectId: string, collectionId: string, subjectId: string): Promise<void> {
+    return request(`/projects/${encodeURIComponent(projectId)}/benchmark-collections/${encodeURIComponent(collectionId)}/subjects/${encodeURIComponent(subjectId)}`, { method: 'DELETE' });
   },
   async getPlans(projectId: string): Promise<ResearchPlan[]> {
     const plans: ResearchPlan[] = [];

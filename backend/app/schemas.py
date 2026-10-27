@@ -160,6 +160,80 @@ class ResearchSubjectSourceMap(APIModel):
         return self
 
 
+class ResearchBenchmarkCollectionCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("name", "description")
+    @classmethod
+    def strip_collection_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("name")
+    @classmethod
+    def collection_name_not_blank(cls, value: str) -> str:
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
+
+class ResearchBenchmarkCollectionMemberAdd(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject_id: str = Field(min_length=1, max_length=36)
+
+
+class ResearchBenchmarkCollectionMemberRead(APIModel):
+    subject_id: str
+    name: str
+    subject_type: str | None
+    source_count: int
+    report_source_count: int
+    csv_source_count: int
+    observations: list["ResearchBenchmarkCollectionObservationRead"] = Field(default_factory=list)
+
+
+class ResearchBenchmarkCollectionObservationRead(APIModel):
+    dimension_key: str
+    dimension_name: str
+    source_kind: Literal["report_entity", "csv_entity"]
+    source_name: str
+    value: Any = None
+    unit: str | None = None
+    scope: dict[str, Any] = Field(default_factory=dict)
+    verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
+    evidence_status: str | None = None
+    uncertainty: str | None = None
+    evidence_references: list[str] = Field(default_factory=list)
+    source_locations: list[str] = Field(default_factory=list)
+    validation_reasons: list[str] = Field(default_factory=list)
+
+
+class ResearchBenchmarkCollectionDimensionRead(APIModel):
+    key: str
+    name: str
+    source_kind: Literal["report_entity", "csv_entity"]
+
+
+class ResearchBenchmarkCollectionRead(APIModel):
+    id: str
+    project_id: str
+    name: str
+    description: str | None
+    members: list[ResearchBenchmarkCollectionMemberRead] = Field(default_factory=list)
+    dimensions: list[ResearchBenchmarkCollectionDimensionRead] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResearchBenchmarkCollectionPage(APIModel):
+    items: list[ResearchBenchmarkCollectionRead]
+    next_cursor: str | None = None
+    limit: int
+
+
 class ResearchWorkspaceStateUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     selected_app_ids: list[str] = Field(default_factory=list, max_length=500)

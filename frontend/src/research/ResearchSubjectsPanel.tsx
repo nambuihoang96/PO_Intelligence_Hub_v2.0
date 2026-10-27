@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { researchApi, type ResearchSubject, type ResearchSubjectSource } from './api';
+import { researchApi, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectSource } from './api';
 
 function sourceKey(source: ResearchSubjectSource): string {
   return [source.source_kind, source.source_id, source.source_key].join('|');
@@ -8,11 +8,14 @@ function sourceKey(source: ResearchSubjectSource): string {
 export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   const [subjects, setSubjects] = useState<ResearchSubject[]>([]);
   const [sources, setSources] = useState<ResearchSubjectSource[]>([]);
+  const [collections, setCollections] = useState<ResearchBenchmarkCollection[]>([]);
   const [sourceCursor, setSourceCursor] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [collectionName, setCollectionName] = useState('');
+  const [collectionSubjectDrafts, setCollectionSubjectDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,11 +23,13 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   async function load(append = false) {
     setLoading(true); setError('');
     try {
-      const [subjectPage, sourcePage] = await Promise.all([
+      const [subjectPage, sourcePage, collectionPage] = await Promise.all([
         researchApi.listSubjects(projectId),
         researchApi.listSubjectSources(projectId, append ? sourceCursor ?? undefined : undefined),
+        researchApi.listBenchmarkCollections(projectId),
       ]);
       setSubjects(subjectPage.items);
+      setCollections(collectionPage.items);
       setSources((current) => append ? [...current, ...sourcePage.items] : sourcePage.items);
       setSourceCursor(sourcePage.next_cursor);
       setDrafts((current) => {
@@ -67,6 +72,29 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     finally { setBusy(null); }
   }
 
+  async function createCollection() {
+    if (!collectionName.trim()) return;
+    setBusy('new-collection'); setError(''); setNotice('');
+    try {
+      await researchApi.createBenchmarkCollection(projectId, { name: collectionName.trim() });
+      setCollectionName(''); setNotice('Benchmark collection created. Add only the subjects you want to compare.'); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create this collection.'); }
+    finally { setBusy(null); }
+  }
+
+  async function updateCollectionMember(collection: ResearchBenchmarkCollection, subjectId: string, add: boolean) {
+    const key = `${collection.id}:${subjectId}`;
+    setBusy(key); setError(''); setNotice('');
+    try {
+      if (add) await researchApi.addBenchmarkCollectionSubject(projectId, collection.id, subjectId);
+      else await researchApi.removeBenchmarkCollectionSubject(projectId, collection.id, subjectId);
+      setNotice(add ? `Subject added to ${collection.name}.` : `Subject removed from ${collection.name}. Its saved identity and source links remain.`);
+      setCollectionSubjectDrafts((current) => ({ ...current, [collection.id]: '' }));
+      await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update this collection.'); }
+    finally { setBusy(null); }
+  }
+
   return <details className="research-subjects-panel">
     <summary><span>Research subjects</span><small>{subjects.length} saved · reusable identities across this project</small></summary>
     <div className="research-subjects-content">
@@ -83,6 +111,51 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
               : <><div><strong>{subject.name}</strong><small>{subject.subject_type || 'Type not specified'}{subject.aliases.length ? ` · ${subject.aliases.join(', ')}` : ''}</small></div>
                 <button type="button" className="text-button" onClick={() => { setEditingId(subject.id); setEditName(subject.name); }}>Edit name</button></>}
           </div>) : <p>No reusable subjects saved yet.</p>}
+        </section>
+        <section aria-label="Project benchmark collections" className="research-benchmark-collections">
+          <div className="research-collections-heading"><div><h3>Benchmark collections</h3><p>Group confirmed subjects for reuse. Source reports and CSV data remain unchanged.</p></div></div>
+          <form className="research-collection-create" onSubmit={(event) => { event.preventDefault(); void createCollection(); }}>
+            <label htmlFor="new-benchmark-collection">Collection name</label>
+            <input id="new-benchmark-collection" value={collectionName} onChange={(event) => setCollectionName(event.target.value)} placeholder="e.g. Products to compare" maxLength={200} />
+            <button type="submit" className="secondary-action" disabled={!collectionName.trim() || busy === 'new-collection'}>{busy === 'new-collection' ? 'Creating…' : 'Create collection'}</button>
+          </form>
+          {!collections.length ? <p>No collections yet. Create one, then add project subjects when ready.</p> : collections.map((collection) => {
+            const memberIds = new Set(collection.members.map((member) => member.subject_id));
+            const availableSubjects = subjects.filter((subject) => !memberIds.has(subject.id));
+            const selectedSubject = collectionSubjectDrafts[collection.id] ?? '';
+            return <article className="research-benchmark-collection" key={collection.id}>
+              <header><div><strong>{collection.name}</strong><small>{collection.members.length} subject{collection.members.length === 1 ? '' : 's'} · project collection</small>{collection.description && <p>{collection.description}</p>}</div></header>
+              {collection.members.length ? <ul>{collection.members.map((member) => <li key={member.subject_id}>
+                <div><strong>{member.name}</strong><small>{member.subject_type || 'Type not specified'} · {member.source_count} linked source{member.source_count === 1 ? '' : 's'} ({member.report_source_count} reports, {member.csv_source_count} CSVs)</small></div>
+                <button type="button" className="text-button" disabled={busy === `${collection.id}:${member.subject_id}`} onClick={() => void updateCollectionMember(collection, member.subject_id, false)}>Remove from collection</button>
+              </li>)}</ul> : <p>This collection is empty. Add confirmed subjects to start organizing a comparison.</p>}
+              {collection.members.length > 0 && <details className="research-collection-matrix">
+                <summary>View source-backed comparison{collection.dimensions.length ? ` · ${collection.dimensions.length} supplied dimension${collection.dimensions.length === 1 ? '' : 's'}` : ''}</summary>
+                {collection.dimensions.length ? <div className="research-collection-matrix-scroll"><table><thead><tr><th scope="col">Subject</th>{collection.dimensions.map((dimension) => <th scope="col" key={dimension.key}>{dimension.name}<small>{dimension.source_kind === 'report_entity' ? 'Report-supplied' : 'CSV imported'}</small></th>)}</tr></thead>
+                  <tbody>{collection.members.map((member) => <tr key={member.subject_id}><th scope="row">{member.name}</th>{collection.dimensions.map((dimension) => {
+                    const values = member.observations.filter((observation) => observation.dimension_key === dimension.key);
+                    return <td key={dimension.key}>{values.length ? values.map((observation, index) => <div className="research-collection-observation" key={`${observation.source_name}:${index}`}>
+                      <strong>{observation.value === null || observation.value === undefined || observation.value === '' ? 'Unknown / Not provided' : String(observation.value)}{observation.unit ? ` ${observation.unit}` : ''}</strong>
+                      <small>{observation.source_name} · {observation.verification_status}</small>
+                      {Object.entries(observation.scope).filter(([, value]) => value !== null && value !== undefined && value !== '').map(([label, value]) => <small key={label}>{label}: {String(value)}</small>)}
+                      {observation.evidence_status && <small>Evidence: {observation.evidence_status}</small>}
+                      {observation.uncertainty && <small>Uncertainty: {observation.uncertainty}</small>}
+                      {observation.validation_reasons.length > 0 && <details className="research-collection-validation"><summary>Validation details · {observation.validation_reasons.length}</summary><ul>{observation.validation_reasons.map((reason, reasonIndex) => <li key={`${reasonIndex}:${reason}`}>{reason}</li>)}</ul></details>}
+                      {observation.evidence_references.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer">Open source</a>)}
+                      {observation.source_locations.map((location, locationIndex) => <small key={`${locationIndex}:${location}`}>{location}</small>)}
+                    </div>) : <span className="research-collection-unknown">Unknown / Not provided</span>}</td>;
+                  })}</tr>)}</tbody></table></div> : <p>No explicit report dimensions or mapped CSV observations are available yet. Missing information stays unknown.</p>}
+              </details>}
+              <div className="research-collection-add">
+                <label className="sr-only" htmlFor={`collection-subject-${collection.id}`}>Choose a project subject to add to {collection.name}</label>
+                <select id={`collection-subject-${collection.id}`} value={selectedSubject} onChange={(event) => setCollectionSubjectDrafts((current) => ({ ...current, [collection.id]: event.target.value }))} disabled={!availableSubjects.length}>
+                  <option value="">{availableSubjects.length ? 'Choose a confirmed subject…' : 'All saved subjects are already members'}</option>
+                  {availableSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+                </select>
+                <button type="button" className="secondary-action" disabled={!selectedSubject || busy === `${collection.id}:${selectedSubject}`} onClick={() => void updateCollectionMember(collection, selectedSubject, true)}>Add subject</button>
+              </div>
+            </article>;
+          })}
         </section>
         <section aria-label="Report and CSV identities" className="research-subject-sources">
           <h3>Names found in this project’s sources</h3>

@@ -15,6 +15,7 @@ from backend.app.sources import router as sources_router
 from backend.app.workspace_data import router as workspace_data_router
 from backend.app.opportunities import router as opportunities_router
 from backend.app.subjects import router as subjects_router
+from backend.app.benchmark_collections import router as benchmark_collections_router
 
 
 @asynccontextmanager
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     application.include_router(workspace_data_router)
     application.include_router(opportunities_router)
     application.include_router(subjects_router)
+    application.include_router(benchmark_collections_router)
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(HTTPException, http_error_handler)
 

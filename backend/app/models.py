@@ -90,6 +90,47 @@ class ResearchSubjectReference(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class ResearchBenchmarkCollection(Base):
+    """Project-owned, reusable grouping of explicitly selected research subjects."""
+
+    __tablename__ = "research_benchmark_collections"
+    __table_args__ = (
+        UniqueConstraint("project_id", "id", name="uq_research_benchmark_collections_project_id"),
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_research_benchmark_collections_project"),
+        Index("ix_research_benchmark_collections_project_name", "project_id", "name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class ResearchBenchmarkCollectionMember(Base):
+    """Explicit subject membership; underlying report/CSV inputs stay canonical."""
+
+    __tablename__ = "research_benchmark_collection_members"
+    __table_args__ = (
+        UniqueConstraint("collection_id", "subject_id", name="uq_research_benchmark_collection_member"),
+        ForeignKeyConstraint(["project_id", "collection_id"],
+                             ["research_benchmark_collections.project_id", "research_benchmark_collections.id"],
+                             ondelete="RESTRICT", name="fk_research_benchmark_collection_member_collection"),
+        ForeignKeyConstraint(["project_id", "subject_id"],
+                             ["research_subjects.project_id", "research_subjects.id"],
+                             ondelete="RESTRICT", name="fk_research_benchmark_collection_member_subject"),
+        Index("ix_research_benchmark_collection_members_project", "project_id", "collection_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    collection_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class POOpportunityDecision(Base):
     """PO-owned candidate decisions with optimistic concurrency, separate from imported research."""
 
