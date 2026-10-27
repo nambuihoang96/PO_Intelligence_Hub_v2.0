@@ -28,7 +28,7 @@
 |---|---|---|---|---|---|
 | G1-01 | G1 / P0 | Product shell and three-area navigation: Research, Reports, Tracking | Existing implementation | DONE (scoped) | UX-IA-01 and M6-B R1 handoffs; focused navigation tests pass. Full current branch integration still unverified. |
 | G1-02 | G1 / P0 | Editorial Research Report Reader, findings/evidence/unknowns, responsive UX and screenshot review | G1-01 | DONE (partial; product NEEDS FIX) | UI-01/UI-RECOVERY handoffs and real screenshot sets exist. Latest audit finds text/readiness density and mobile tab/matrix affordance issues. |
-| G1-03 | G1 / P1 | Peachy Studio design tokens, reusable screen primitives and cross-screen visual consistency | G1-02 data contracts stable | READY after P0-A | Skill exists and was searched; proposal is in unified plan. Tokens have not been screenshot-approved or fully contrast-audited. |
+| G1-03 | G1 / P1 | Peachy Studio design tokens, reusable screen primitives and cross-screen visual consistency | G1-02 data contracts stable | BLOCKED (prototype ready; browser review not verified) | Isolated preview at `frontend/prototypes/g1-03/`; contrast pairs checked, production screens untouched. Codex browser timed out on localhost and rejected `file://`; no real screenshot. Handoff `.bangiao/G1-03-DESIGN-PROTOTYPE.md`. |
 | G2-01 | G2 / P0 | One-paste `po_research_v1` import; original report retained; structured/text-only states | Existing | DONE (scoped) | B-001.3 and related handoffs; live genuine report journey remains NOT VERIFIED in latest release audit. |
 | G2-02 | G2 / P0 | Project/Report shared identity, explicit legacy linking, project filter and context navigation | G2-01 | DONE (scoped) | Focused backend/frontend tests pass; isolated Chrome/Playwright UAT linked a report, verified project filter, same report ID, reload/back link and preservation of report/benchmark data. Screenshots committed in `.bangiao/screenshots/p0-project-report-unification/`. Independent review found no P0/P1 defect. Owner acceptance pending. |
 | G2-03 | G2 / P0 | Contextual PO Decision reachable from report finding/subject/project; one authoritative decision with safe legacy handling | G2-02, stable subject/finding target | READY_FOR_OWNER | Existing decision workspace now accepts explicit project, report finding/entity, subject, collection and trend-update targets; CSV candidate IDs remain stable; prior decision revisions and legacy report notes are retained. 37 focused backend tests, 179 frontend tests, typecheck/build PASS. Browser UAT NOT VERIFIED; owner review pending. Handoff `.bangiao/G2-03-CONTEXTUAL-PO-DECISIONS.md`. |
@@ -125,8 +125,27 @@ These are historical recorded results, not a fresh full-suite run against every 
 
 ## Current execution cursor
 
-**Active task:** No implementation task is currently in progress. G2-03 is `READY_FOR_OWNER`; await PO review/UAT before opening dependent G2-04 or G4-01 work. G3-06 and G3-05 remain independently ready for owner review; neither status implies owner acceptance.
+**Active task:** No implementation task is currently in progress. G1-03 has an isolated prototype but is blocked pending a browser preview/owner review; no shared application styling is rolled out. G2-03 remains `READY_FOR_OWNER`; await PO review/UAT before opening dependent G2-04 or G4-01 work. G3-06 and G3-05 remain independently ready for owner review; neither status implies owner acceptance.
 
-**Next selection:** G2-03 awaits owner review; G2-04 remains blocked on a genuine owner report and browser-capable isolated UAT. Re-read dependencies after owner feedback. G4-01 is BLOCKED until G2-03 is reviewed and the approved Master Plan's P0-D prerequisite is reconfirmed; G3-07 remains gated on G4.
+**Next selection:** Resume G1-03 when the browser preview can be rendered in Codex or the owner reviews the standalone prototype. G2-03 awaits owner review; G2-04 remains blocked on a genuine owner report and browser-capable isolated UAT. Re-read dependencies after owner feedback. G4-01 is BLOCKED until G2-03 is reviewed and the approved Master Plan's P0-D prerequisite is reconfirmed; G3-07 remains gated on G4.
 
-**Last updated:** 2026-10-27 — G2-03 implementation is ready for owner review; G2-04 browser/genuine-data acceptance remains blocked as noted above. No milestone is Owner Accepted.
+### G1-03 task selection — 2026-10-27
+
+- **Selection basis:** G1-03 is the next approved P1 slice independent of G2-03. P0-A (shared Project/Report context) is complete as G2-02; G1-02's research data contract remains stable even though report-reader product review still has open UX findings.
+- **Classification:** Bounded visual prototype; no architecture or product workflow change.
+- **Direct impact:** New isolated prototype artifact only. Existing Research Results, navigation, saved reports, PO notes, benchmark selections and shared CSS are not changed during the owner-preview phase.
+- **Dependent tasks:** Cross-screen token rollout remains blocked on PO preview approval. G1-02 visual rework remains tracked on G1-02 and is not duplicated here.
+- **Updated acceptance:** Show Peachy Studio semantic token candidates and reusable Results primitives in a real browser preview; check text contrast and responsive layout; capture actual browser evidence. Stop for PO direction before applying styles to production screens.
+- **Current status:** `BLOCKED` — the static prototype is ready, but Codex Browser Use timed out connecting to the local Vite preview and rejected the `file://` URL under its security policy. No alternate browser/control route was attempted; real browser screenshot and visual UAT remain `NOT VERIFIED`.
+
+### G1-03 prototype pass — 2026-10-27
+
+- **Feedback round:** Initial prototype pass; no new PO visual direction or acceptance received.
+- **Classification:** Bounded UI/UX prototype, not a workflow or architecture change.
+- **Changes requested:** Show semantic Peachy Studio tokens and reusable report primitives before applying a shared style rollout.
+- **Impact:** New isolated HTML/CSS preview and handoff only. No app component, shared CSS, database, report, PO note, benchmark or navigation behavior changed.
+- **Implementation reference:** `frontend/prototypes/g1-03/index.html` and `tokens.css`; placeholder labels are explicitly marked as non-report data.
+- **Verification:** Frontend TypeScript/production build PASS (546.55 kB JS chunk advisory). Full Vitest run FAILED before executing tests: 21 suites could not rename Vite/Vitest temporary cache files (`EPERM`) under sandbox temp; single-thread retry stalled before test output and was stopped. Key foreground/background text pairs checked at ≥4.65:1. Browser preview NOT VERIFIED; localhost timed out and `file://` was refused by browser security policy. No screenshot captured.
+- **Current status:** `BLOCKED` pending in-Codex browser rendering or owner review of the standalone prototype. No application styles are rolled out; no Owner Acceptance implied.
+
+**Last updated:** 2026-10-27 — G1-03 isolated prototype is blocked at browser preview; G2-03 remains ready for owner review. No milestone is Owner Accepted.

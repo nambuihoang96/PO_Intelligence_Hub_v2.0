@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="PO Hub G1-03 design system prototype" />
+    <title>PO Hub · Peachy Studio preview</title>
+    <link rel="stylesheet" href="./tokens.css" />
+  </head>
+  <body>
+    <div class="prototype-banner">
+      <strong>Design preview · G1-03</strong>
+      <span>Layout and sample labels only. No report or product data is shown.</span>
+    </div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="#overview" aria-label="PO Hub home">
+          <span class="brand-mark">PO</span>
+          <span><strong>PO Intelligence Hub</strong><small>Research workspace</small></span>
+        </a>
+        <div class="nav-caption">WORKSPACE</div>
+        <nav class="primary-nav">
+          <a href="#research"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5v11h5v-6h3v6h5v-11"/></svg><span>Research</span></a>
+          <a class="active" href="#reports" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v5h4M10 13h5M10 16h5"/></svg><span>Reports</span></a>
+          <a href="#tracking"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18.5V5.5M4 18.5h16"/><path d="m7 15 4-4 3 2 5-6"/></svg><span>Tracking</span></a>
+        </nav>
+        <div class="sidebar-foot"><span class="avatar">PO</span><span><strong>Product Owner</strong><small>Local workspace</small></span></div>
+      </aside>
+
+      <main id="overview" class="main-panel">
+        <header class="topbar"><div class="breadcrumbs"><span>Workspace</span><span aria-hidden="true">/</span><span>Reports</span><span aria-hidden="true">/</span><strong>Research report</strong></div><button class="icon-button" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.3 4.3"/></svg></button></header>
+        <div class="page-content">
+          <a class="back-link" href="#reports">← Back to Reports</a>
+          <header class="report-header">
+            <div>
+              <div class="eyebrow">RESEARCH REPORT <span>·</span> IMPORT STATUS</div>
+              <h1>Research title from the report</h1>
+              <p class="report-meta"><span>GEO from report</span><span>Environment from report</span><span>Period from report</span><span class="status-chip"><span class="status-dot"></span>Structured results</span></p>
+            </div>
+            <button class="button button-secondary">Open original report <span aria-hidden="true">↗</span></button>
+          </header>
+
+          <div class="overview-top-grid">
+            <section class="surface summary-card" aria-labelledby="summary-title">
+              <div class="section-heading"><span class="icon-tile icon-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v5h4M9 13h6M9 16h6"/></svg></span><div><span class="eyebrow">RESEARCH CONCLUSION</span><h2 id="summary-title">Research conclusion</h2></div></div>
+              <p class="summary-copy">Report-supplied executive summary appears here. The preview keeps the conclusion readable while preserving the full original wording for review.</p>
+              <details class="disclosure"><summary>Read full summary</summary><p>The complete report-supplied summary is available in this expanded state. The interface does not generate a conclusion when the source report has none.</p></details>
+            </section>
+            <section class="surface takeaways-card" aria-labelledby="takeaways-title">
+              <div class="section-heading"><span class="icon-tile icon-peach"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M8.2 14.8a7 7 0 1 1 7.6 0c-.8.5-1.2 1.2-1.3 2.2h-5c-.1-1-.5-1.7-1.3-2.2Z"/></svg></span><div><span class="eyebrow">REPORT-SUPPLIED</span><h2 id="takeaways-title">Key takeaways</h2></div></div>
+              <ol class="takeaway-list"><li><span>1</span><p>Report-supplied takeaway appears here.</p></li><li><span>2</span><p>A second supplied takeaway appears here.</p></li><li><span>3</span><p>Unknowns remain explicit rather than inferred.</p></li></ol>
+            </section>
+          </div>
+
+          <div class="content-grid">
+            <section class="surface findings-section" aria-labelledby="findings-title">
+              <div class="section-heading section-heading-spread"><div class="section-heading"><span class="icon-tile icon-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5L10 13l-5.5-2L10 9z"/><path d="m18 16 1 2.5 2.5 1-2.5 1L18 23l-1-2.5-2.5-1 2.5-1z"/></svg></span><div><span class="eyebrow">REPORT-SUPPLIED CONCLUSIONS</span><h2 id="findings-title">Key findings</h2></div></div><button class="text-action">View all findings <span aria-hidden="true">→</span></button></div>
+              <div class="finding-grid">
+                <article class="finding-card">
+                  <div class="finding-main"><span class="icon-tile icon-peach"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 15 5l4 3-10 14z"/><path d="m13.8 6.7 4 3M4 21l5-1"/></svg></span><div><span class="finding-type">Finding type supplied by report</span><h3>Finding title from the report</h3></div></div>
+                  <p class="finding-copy">A concise preview of the source-supplied finding, with longer detail available on demand.</p>
+                  <div class="finding-footer"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5a4 4 0 0 0 5.7 0l3.1-3.1a4 4 0 0 0-5.7-5.7l-1.8 1.8"/><path d="M14 10.5a4 4 0 0 0-5.7 0l-3.1 3.1a4 4 0 0 0 5.7 5.7l1.8-1.8"/></svg> Evidence status shown from report</span><button class="card-link">View insight <span aria-hidden="true">→</span></button></div>
+                  <details class="secondary-details"><summary>Related entities, evidence and PO implication</summary><div class="detail-content"><p><strong>Related entities</strong><br />Only explicit report links are listed.</p><p><strong>PO implication</strong><br />Report-supplied implication appears here when available.</p><p><strong>Sources</strong><br />Source references retain their unverified status unless independently checked.</p></div></details>
+                </article>
+                <article class="finding-card">
+                  <div class="finding-main"><span class="icon-tile icon-lilac"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><div><span class="finding-type">Finding type supplied by report</span><h3>Another report-supplied finding</h3></div></div>
+                  <p class="finding-copy">Missing values are shown as Unknown. This layout does not add unsupported relationships or metrics.</p>
+                  <div class="finding-footer"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5a4 4 0 0 0 5.7 0l3.1-3.1a4 4 0 0 0-5.7-5.7l-1.8 1.8"/><path d="M14 10.5a4 4 0 0 0-5.7 0l-3.1 3.1a4 4 0 0 0 5.7 5.7l1.8-1.8"/></svg> Evidence status shown from report</span><button class="card-link">View insight <span aria-hidden="true">→</span></button></div>
+                </article>
+              </div>
+            </section>
+            <aside class="secondary-rail">
+              <section class="surface snapshot-card" aria-labelledby="snapshot-title"><div class="section-heading"><span class="icon-tile icon-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16M6.5 16V9m5 7V4.5m5 11.5v-5"/></svg></span><div><span class="eyebrow">AT A GLANCE</span><h2 id="snapshot-title">Research snapshot</h2></div></div><dl class="snapshot-list"><div><dt>Findings</dt><dd>Report count</dd></div><div><dt>Entities</dt><dd>Report count</dd></div><div><dt>Source references</dt><dd>Report count</dd></div></dl></section>
+              <section class="surface gaps-card" aria-labelledby="gaps-title"><div class="section-heading"><span class="icon-tile icon-rose"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9a2.4 2.4 0 1 1 4.5 1.2c-.8 1.1-2.2 1.4-2.2 3M12 16.5v.1"/></svg></span><div><span class="eyebrow">WHAT REMAINS UNKNOWN</span><h2 id="gaps-title">Research gaps</h2></div></div><ul class="gap-list"><li>Open question supplied by the report.</li><li>Evidence gap supplied by the report.</li></ul><button class="text-action">View all gaps <span aria-hidden="true">→</span></button></section>
+              <section class="decision-card" aria-labelledby="decision-title"><div class="decision-heading"><span class="icon-tile icon-green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12.5 4 4 8-9"/></svg></span><div><span class="eyebrow">YOUR PRODUCT DECISION</span><h2 id="decision-title">PO next steps</h2></div></div><p>Keep the report recommendation separate from the PO's own assessment.</p><button class="button button-primary">Review PO assessment <span aria-hidden="true">→</span></button></section>
+            </aside>
+          </div>
+          <footer class="preview-footer">Prototype only · No existing report, benchmark or PO decision is modified.</footer>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
