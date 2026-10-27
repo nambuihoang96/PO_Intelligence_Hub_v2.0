@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { reportApi, type BenchmarkSelection, type BenchmarkWorkspace, type BenchmarkWorkspaceEntry, type ImportedReport, type ResearchData } from './api';
 import { extractHeadings, MarkdownReport } from './MarkdownReport';
+import { extractReadableReport } from './readableReport';
 import { buildStructuringPrompt } from './researchPrompt';
 import { findingIcon, ResultsIcon, type ResultsIconName } from '../ui/ResultsIcon';
 import { ResearchTextHighlighter } from './ResearchTextHighlighter';
@@ -112,7 +113,8 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const mutationSequenceRef = useRef(0);
   const latestItemMutationRef = useRef<Record<string, number>>({});
   const reportLoadSequenceRef = useRef(0);
-  const headings = useMemo(() => report ? extractHeadings(report.content) : [], [report]);
+  const readableReport = useMemo(() => extractReadableReport(report?.content ?? ''), [report?.content]);
+  const headings = useMemo(() => extractHeadings(readableReport.markdown), [readableReport.markdown]);
   const imported = new URLSearchParams(window.location.search).has('imported');
 
   useEffect(() => {
@@ -605,7 +607,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
       })}</section>}
       {quantitativeDatasets.length > 0 && <details className="quantitative-evidence-records" open={csvEvidenceExpanded} onToggle={(event) => setCsvEvidenceExpanded(event.currentTarget.open)}><summary>Advanced: inspect individual CSV measurements ({quantitativeDatasets.reduce((count, dataset) => count + dataset.observations.length, 0)})</summary><h4>CSV observations linked to this report</h4><p>Imported values retain their dataset provenance and remain unverified unless independently checked. Use Data Sources for the app-by-metric explorer.</p>{quantitativeDatasets.flatMap((dataset) => dataset.observations.map((row, index) => <article id={`quant-dataset-summary-observation-${dataset.id}-${index}`} key={`${dataset.id}:${index}`}><strong>{row.metric_definition || row.metric_id || 'Metric not identified'}</strong><span>{row.source_entity_name || row.entity_name || row.source_entity_id || row.entity_id || 'Entity not resolved'} · {row.value ?? 'Unknown'} {row.unit ?? ''}</span><span>{[row.geo || 'GEO not provided', row.platform || 'Platform not provided', row.period_start && row.period_end ? `${row.period_start} – ${row.period_end}` : 'Period not provided', row.granularity || 'Granularity not provided'].join(' · ')}</span><span>{dataset.filename} · CSV imported · {row.verification_status === 'verified' ? 'Independently verified' : 'Unverified'}</span>{row.validation_reasons.length > 0 && <ul>{row.validation_reasons.map((reason, reasonIndex) => <li key={reasonIndex}>{reason}</li>)}</ul>}{row.evidence_reference && <a href={row.evidence_reference} target="_blank" rel="noreferrer">Open evidence reference</a>}{row.source_reference && row.source_reference !== row.evidence_reference && <a href={row.source_reference} target="_blank" rel="noreferrer">Open data source</a>}<button className="text-button" onClick={() => setTab('report')}>Open original report</button></article>))}</details>}
     </section>}
-    {tab === 'report' && <section className="research-panel report-body full-report"><div className="panel-heading"><div><span className="field-label">ORIGINAL REPORT</span><h3>Full Report</h3></div><span className="unverified-chip">Verbatim</span></div>{headings.length > 0 && <nav className="report-toc" aria-label="Mục lục"><strong>Contents</strong><ol>{headings.map((heading, index) => <li key={`${heading.id}-${index}`} style={{ marginLeft: `${Math.max(0, heading.level - 1) * 8}px` }}><a href={`#${heading.id}`}>{heading.text}</a></li>)}</ol></nav>}<MarkdownReport markdown={report.content} /></section>}
+    {tab === 'report' && <section className="research-panel report-body full-report"><div className="panel-heading"><div><span className="field-label">BÁO CÁO GỐC</span><h3>Nội dung nghiên cứu</h3></div><span className="unverified-chip">Lưu nguyên văn</span></div>{headings.length > 0 && <nav className="report-toc" aria-label="Mục lục"><strong>Mục lục</strong><ol>{headings.map((heading, index) => <li key={`${heading.id}-${index}`} style={{ marginLeft: `${Math.max(0, heading.level - 1) * 8}px` }}><a href={`#${heading.id}`}>{heading.text}</a></li>)}</ol></nav>}<MarkdownReport markdown={readableReport.markdown} />{readableReport.technicalAppendix && <details className="report-technical-source"><summary>Xem dữ liệu JSON gốc (dành cho kỹ thuật)</summary><p>Báo cáo gốc được giữ nguyên để đối chiếu.</p><pre><code>{readableReport.technicalAppendix}</code></pre></details>}</section>}
     {report.structured_update_available && <div role="status" className="research-alert">This duplicate contains different structured results. They were not applied automatically; the saved report and PO workspace are unchanged.</div>}
   </article>;
 }
