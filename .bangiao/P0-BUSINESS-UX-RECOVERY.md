@@ -82,4 +82,4 @@ The screenshot was captured and visually inspected in the Codex browser session.
 ## Git reference
 
 Implementation commit: `bd5700c` (`feat(research): save project information before subject mapping`).  
-Push: pending.
+Verification/Recovery Board commit: `b55e66a`. Both commits were pushed to `origin/feat/ux-recovery-01-research-results` for review.
