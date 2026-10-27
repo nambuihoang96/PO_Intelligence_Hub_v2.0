@@ -42,6 +42,54 @@ class ResearchProject(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
 
+class ResearchSubject(Base):
+    """Project-owned reusable identity; source names are never merged implicitly."""
+
+    __tablename__ = "research_subjects"
+    __table_args__ = (
+        UniqueConstraint("project_id", "id", name="uq_research_subjects_project_id"),
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_research_subjects_project"),
+        Index("ix_research_subjects_project_name", "project_id", "name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    subject_type: Mapped[str | None] = mapped_column(String(120))
+    aliases_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    external_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    provenance_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class ResearchSubjectReference(Base):
+    """An explicit association between a source-local identity and a project subject."""
+
+    __tablename__ = "research_subject_references"
+    __table_args__ = (
+        UniqueConstraint("project_id", "source_kind", "source_id", "source_key",
+                         name="uq_research_subject_refs_source_identity"),
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_research_subject_refs_project"),
+        ForeignKeyConstraint(["project_id", "subject_id"], ["research_subjects.project_id", "research_subjects.id"],
+                             ondelete="RESTRICT", name="fk_research_subject_refs_subject"),
+        CheckConstraint("source_kind IN ('report_entity','csv_entity')", name="ck_research_subject_refs_source_kind"),
+        Index("ix_research_subject_refs_subject", "project_id", "subject_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    provenance_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class POOpportunityDecision(Base):
     """PO-owned candidate decisions with optimistic concurrency, separate from imported research."""
 

@@ -61,6 +61,105 @@ class ResearchProjectRead(APIModel):
     updated_at: datetime
 
 
+class ResearchSubjectCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=500)
+    subject_type: str | None = Field(default=None, max_length=120)
+    aliases: list[str] = Field(default_factory=list, max_length=100)
+    external_ids: list[dict[str, str]] = Field(default_factory=list, max_length=100)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("name", "subject_type")
+    @classmethod
+    def clean_subject_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("name")
+    @classmethod
+    def subject_name_not_blank(cls, value: str) -> str:
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
+    @field_validator("aliases")
+    @classmethod
+    def clean_aliases(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values]
+        if any(not value for value in cleaned):
+            raise ValueError("aliases must not contain blank values")
+        return list(dict.fromkeys(cleaned))
+
+
+class ResearchSubjectUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=500)
+    subject_type: str | None = Field(default=None, max_length=120)
+    aliases: list[str] | None = Field(default=None, max_length=100)
+    external_ids: list[dict[str, str]] | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def require_change(self) -> "ResearchSubjectUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field must be supplied")
+        if self.name is not None:
+            self.name = self.name.strip()
+            if not self.name:
+                raise ValueError("name must not be blank")
+        if self.subject_type is not None:
+            self.subject_type = self.subject_type.strip() or None
+        if self.aliases is not None:
+            self.aliases = list(dict.fromkeys(value.strip() for value in self.aliases))
+            if any(not value for value in self.aliases):
+                raise ValueError("aliases must not contain blank values")
+        return self
+
+
+class ResearchSubjectRead(APIModel):
+    id: str
+    project_id: str
+    name: str
+    subject_type: str | None
+    aliases: list[str]
+    external_ids: list[dict[str, str]]
+    provenance: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResearchSubjectSourceRead(APIModel):
+    project_id: str
+    source_kind: Literal["report_entity", "csv_entity"]
+    source_id: str
+    source_key: str
+    source_name: str
+    source_type: str | None = None
+    context_name: str
+    mapped_subject_id: str | None = None
+    mapped_subject_name: str | None = None
+    source_state: Literal["available", "stale"] = "available"
+
+
+class ResearchSubjectSourceMap(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["report_entity", "csv_entity"]
+    source_id: str = Field(min_length=1, max_length=36)
+    source_key: str = Field(min_length=1, max_length=500)
+    subject_id: str | None = None
+    create_subject_from_source: bool = False
+    expected_subject_id: str | None = None
+
+    @model_validator(mode="after")
+    def select_one_mapping_action(self) -> "ResearchSubjectSourceMap":
+        if bool(self.subject_id) == self.create_subject_from_source:
+            raise ValueError("Choose one saved subject or explicitly create a subject from this source.")
+        if self.expected_subject_id and self.create_subject_from_source:
+            raise ValueError("A new subject cannot replace an existing source mapping implicitly.")
+        return self
+
+
 class ResearchWorkspaceStateUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     selected_app_ids: list[str] = Field(default_factory=list, max_length=500)

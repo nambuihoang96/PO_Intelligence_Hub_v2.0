@@ -4,6 +4,7 @@ import { QuantitativeDatasetImport } from '../reports/QuantitativeDatasetImport'
 import { researchApi, type ResearchProject, type ShortlistContext } from './api';
 import { OpportunityReview } from './OpportunityReview';
 import { ProjectJourneyNav } from './ProjectJourneyNav';
+import { ResearchSubjectsPanel } from './ResearchSubjectsPanel';
 
 type AppObservation = QuantitativeDataset['observations'][number];
 type AppGroup = { id: string; name: string; rows: AppObservation[] };
@@ -293,6 +294,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   return <div className="data-first-workspace">
     <ProjectJourneyNav projectId={projectId} active="research" />
     <section className="research-panel data-workspace-heading"><div><span className="state-label">RESEARCH WORKSPACE</span><h2>{project.name}</h2><p>Bắt đầu từ dữ liệu thị trường, bổ sung nghiên cứu ChatGPT sau. CSV gốc và từng phạm vi đo được giữ nguyên.</p></div><div className="data-workspace-actions"><a className="primary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities`}>Review opportunities</a><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Research plan</a><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>Compare periods</a><a className="secondary-action" href={`/?projectId=${encodeURIComponent(projectId)}`}>Import ChatGPT research</a></div></section>
+    <ResearchSubjectsPanel projectId={projectId} />
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     <div className="workspace-source-grid">
       <section className="research-panel"><div className="panel-heading"><div><span className="state-label">MARKET DATA</span><h3>CSV datasets</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Close import' : 'Import CSV'}</button></div><p>{datasets.length ? `${datasets.length} dataset${datasets.length === 1 ? '' : 's'} saved` : 'Chưa cần có báo cáo ChatGPT để bắt đầu khám phá dữ liệu.'}</p>

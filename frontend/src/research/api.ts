@@ -10,6 +10,31 @@ export type ResearchProject = {
   updated_at: string;
 };
 
+export type ResearchSubject = {
+  id: string;
+  project_id: string;
+  name: string;
+  subject_type: string | null;
+  aliases: string[];
+  external_ids: { provider: string; value: string }[];
+  provenance: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ResearchSubjectSource = {
+  project_id: string;
+  source_kind: 'report_entity' | 'csv_entity';
+  source_id: string;
+  source_key: string;
+  source_name: string;
+  source_type: string | null;
+  context_name: string;
+  mapped_subject_id: string | null;
+  mapped_subject_name: string | null;
+  source_state: 'available' | 'stale';
+};
+
 export type ShortlistContext = {
   dataset_id: string;
   dataset_filename: string;
@@ -209,6 +234,25 @@ export const researchApi = {
   },
   getProject(projectId: string): Promise<ResearchProject> {
     return request(`/projects/${encodeURIComponent(projectId)}`);
+  },
+  listSubjects(projectId: string, cursor?: string): Promise<Page<ResearchSubject>> {
+    const params = new URLSearchParams({ limit: '100' });
+    if (cursor) params.set('cursor', cursor);
+    return request(`/projects/${encodeURIComponent(projectId)}/subjects?${params.toString()}`);
+  },
+  listSubjectSources(projectId: string, cursor?: string): Promise<Page<ResearchSubjectSource>> {
+    const params = new URLSearchParams({ limit: '50' });
+    if (cursor) params.set('cursor', cursor);
+    return request(`/projects/${encodeURIComponent(projectId)}/subject-sources?${params.toString()}`);
+  },
+  createSubject(projectId: string, payload: Pick<ResearchSubject, 'name' | 'subject_type' | 'aliases' | 'external_ids' | 'provenance'>): Promise<ResearchSubject> {
+    return request(`/projects/${encodeURIComponent(projectId)}/subjects`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  updateSubject(projectId: string, subjectId: string, payload: Partial<Pick<ResearchSubject, 'name' | 'subject_type' | 'aliases' | 'external_ids'>>): Promise<ResearchSubject> {
+    return request(`/projects/${encodeURIComponent(projectId)}/subjects/${encodeURIComponent(subjectId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  mapSubjectSource(projectId: string, payload: { source_kind: ResearchSubjectSource['source_kind']; source_id: string; source_key: string; subject_id?: string; create_subject_from_source?: boolean; expected_subject_id?: string }): Promise<ResearchSubjectSource> {
+    return request(`/projects/${encodeURIComponent(projectId)}/subject-sources`, { method: 'PUT', body: JSON.stringify(payload) });
   },
   async getPlans(projectId: string): Promise<ResearchPlan[]> {
     const plans: ResearchPlan[] = [];
