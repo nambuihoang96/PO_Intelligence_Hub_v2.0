@@ -14,9 +14,11 @@
 - Push completed reviewable commits under the owner's standing authorization; never merge master or release automatically. Milestone reports do not imply Owner Acceptance.
 - Report exact tests, browser actions, screenshots and reviewers. Use `NOT VERIFIED` when evidence is missing.
 - Re-read this board and its owner-feedback history before every task selection. New PO feedback overrides earlier assumptions, including on scoped-done work; rework the original task instead of duplicating it.
-- Record each material revision with original feedback, classification, impact/dependencies, updated acceptance, implementation and evidence. Preserve both local and remote board edits during sync; never resolve conflicts by replacing one version wholesale.
+- Natural-language feedback from the PO in the active Codex session starts a change request directly; a separate generated task prompt is not required. Resolve affected tasks against this board and ask only if scope cannot be determined safely.
+- Record each material revision under the existing task with round/date, original feedback, classification, affected/dependent tasks, impact, updated acceptance, implementation reference, review/test evidence and status. Preserve previous rounds when direction changes. Preserve both local and remote board edits during sync; never resolve conflicts by replacing one version wholesale.
 - Use `READY_FOR_OWNER → REWORK → IN_PROGRESS → DEV_DONE → READY_FOR_OWNER` for review iterations. No arbitrary iteration cap; silence is not acceptance. `DONE (scoped)` is technical evidence only and never means owner acceptance.
 - For major visual rework, show a small working prototype and real browser screenshots early. Pause only dependent work when direction changes; continue independent approved work safely.
+- After a revision, run relevant verification, update this board, present the result, and continue independent approved work. Stop at explicit owner-approval gates or genuine blockers; do not infer acceptance from silence.
 
 ## Status legend
 
