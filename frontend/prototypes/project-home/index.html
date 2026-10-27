@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="PO Hub Project Home interaction prototype" />
+    <title>PO Hub · Project Home preview</title>
+    <link rel="stylesheet" href="./project-home.css" />
+  </head>
+  <body>
+    <div class="preview-banner"><strong>Project Home · UX review prototype</strong><span>Demo content only — no project, report, subject, or SQLite data is changed.</span></div>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#home" aria-label="PO Hub home"><span class="brand-icon">P</span><span><b>PO Hub</b><small>Product Intelligence</small></span></a>
+        <p class="nav-label">WORKSPACE</p>
+        <nav aria-label="Main navigation">
+          <a class="nav-item active" href="#project-home"><span class="nav-icon">⌂</span><span><b>Research</b><small>Projects & activity</small></span></a>
+          <a class="nav-item" href="#reports"><span class="nav-icon">▤</span><span><b>Reports</b><small>Saved research</small></span></a>
+          <a class="nav-item" href="#tracking"><span class="nav-icon">↗</span><span><b>Tracking</b><small>Changes over time</small></span></a>
+        </nav>
+        <div class="sidebar-bottom"><div class="avatar">NB</div><div><b>Product Owner</b><small>Local workspace</small></div><button class="dots" aria-label="Account options">•••</button></div>
+      </aside>
+
+      <main id="main" class="main">
+        <header class="topbar"><div class="crumb"><span>Research</span><span>›</span><strong id="crumb-project">Puzzle Discovery</strong></div><div class="top-actions"><button class="icon-btn" aria-label="Search">⌕</button><button class="avatar small" aria-label="Profile">N</button></div></header>
+        <div class="content">
+          <section id="home-view" class="view active" aria-labelledby="project-title">
+            <div class="project-head">
+              <div><a class="back" href="#projects">← All projects</a><div class="project-title-line"><span id="project-symbol" class="project-symbol">✦</span><div><p class="eyebrow">RESEARCH PROJECT</p><h1 id="project-title">Puzzle Discovery</h1><p id="project-description" class="subhead">Understand what keeps players coming back to creative puzzle games.</p></div></div></div>
+              <button class="button quiet" id="project-menu">Switch project <span>⌄</span></button>
+            </div>
+
+            <section id="project-empty" class="empty-project" hidden>
+              <p class="eyebrow">EMPTY PROJECT</p><h2>Nothing here yet</h2>
+              <p>Saved reports, updates and comparisons will appear here as you work.</p>
+            </section>
+
+            <section id="home-actions" class="action-section" aria-labelledby="actions-title">
+              <div class="section-head"><div><p class="eyebrow">WHAT WOULD YOU LIKE TO DO?</p><h2 id="actions-title">Move this research forward</h2></div></div>
+              <div class="action-grid">
+                <button class="action-card action-primary" data-open="deep"><span class="action-icon blue">⌕</span><span class="action-copy"><b>Start Deep Research</b><small>Prepare a question, then research with ChatGPT</small></span><span class="arrow">→</span></button>
+                <button class="action-card" data-open="trend"><span class="action-icon peach">↗</span><span class="action-copy"><b>Capture Trend Update</b><small>Save a new observation and its source</small></span><span class="arrow">→</span></button>
+                <button class="action-card" data-open="csv"><span class="action-icon lilac">▦</span><span class="action-copy"><b>Import / Analyze CSV</b><small>Add a dataset to this project</small></span><span class="arrow">→</span></button>
+              </div>
+            </section>
+
+            <div class="home-grid">
+              <section class="panel reports-panel" aria-labelledby="reports-title">
+                <div class="panel-head"><div><p class="eyebrow">SAVED RESEARCH</p><h2 id="reports-title">Research reports</h2></div><button class="text-button" id="all-reports">View all <span>→</span></button></div>
+                <div id="reports-list" class="report-list">
+                  <button class="report-row" data-open="report"><span class="report-mark">▤</span><span class="row-copy"><b>What keeps puzzle players engaged?</b><small>Research report · US · Android · 24 Oct 2026</small></span><span class="row-status">Structured</span><span class="chevron">›</span></button>
+                </div>
+                <div id="empty-reports-list" class="report-list" hidden></div>
+                <div id="reports-empty" class="panel-empty" hidden><span class="empty-mini">▤</span><b>No saved reports yet</b><small>Start Deep Research to add the first report to this project.</small></div>
+              </section>
+
+              <section class="panel activity-panel" aria-labelledby="activity-title">
+                <div class="panel-head"><div><p class="eyebrow">LATEST IN THIS PROJECT</p><h2 id="activity-title">Recent activity</h2></div></div>
+                <div id="activity-list" class="activity-list">
+                  <div class="activity-item"><span class="timeline-dot blue"></span><span><b>Research report saved</b><small>What keeps puzzle players engaged? · 24 Oct</small></span></div>
+                  <div class="activity-item"><span class="timeline-dot peach"></span><span><b>Benchmark collection updated</b><small>Puzzle October · 22 Oct</small></span></div>
+                  <div class="activity-item"><span class="timeline-dot lilac"></span><span><b>2 products added to compare</b><small>Puzzle October · 20 Oct</small></span></div>
+                </div>
+                <div id="empty-activity-list" class="activity-list" hidden></div>
+                <div id="activity-empty" class="panel-empty" hidden><span class="empty-mini">◷</span><b>Nothing here yet</b><small>Your saved research activity will show here.</small></div>
+              </section>
+
+              <section class="panel collections-panel" aria-labelledby="collections-title">
+                <div class="panel-head"><div><p class="eyebrow">COMPARE PRODUCTS</p><h2 id="collections-title">Benchmark collections</h2></div><button class="text-button" id="view-collections">View all <span>→</span></button></div>
+                <button class="collection-row" id="collection-open"><span class="collection-icon">◈</span><span class="row-copy"><b>Puzzle October</b><small>3 products · Updated 22 Oct</small></span><span class="chevron">›</span></button>
+                <div id="collections-empty" class="panel-empty" hidden><span class="empty-mini">◈</span><b>No collections yet</b><small>Collections appear when you save products to compare.</small></div>
+              </section>
+
+              <section class="panel subjects-panel" aria-labelledby="subjects-title">
+                <div class="panel-head"><div><p class="eyebrow">RESEARCH TOPICS</p><h2 id="subjects-title">Products & subjects</h2></div><button class="text-button" id="view-subjects">View all <span>→</span></button></div>
+                <div id="subject-list" class="subject-list"><span class="subject-pill"><i class="subject-avatar">S</i> Save the Forest</span><span class="subject-pill"><i class="subject-avatar peach-avatar">C</i> Cozy Tiles</span><span class="subject-pill"><i class="subject-avatar lilac-avatar">M</i> Merge Garden</span></div><div id="empty-subject-list" class="subject-list" hidden></div>
+                <div id="subjects-empty" class="panel-empty" hidden><span class="empty-mini">◎</span><b>No products or topics yet</b><small>They can be added during research or when capturing an update.</small></div>
+              </section>
+            </div>
+            <p class="privacy-note"><span>ⓘ</span> Project workspace · Saved reports and updates stay linked to this project.</p>
+          </section>
+
+          <section id="flow-view" class="view" aria-live="polite" aria-labelledby="flow-title">
+            <button class="back" id="flow-back">← Back to project</button>
+            <div class="flow-wrap"><div class="flow-progress" id="flow-progress"><span class="progress-step current" id="flow-step-1"><i>1</i> Your goal</span><span class="progress-line"></span><span class="progress-step" id="flow-step-2"><i>2</i> Review details</span><span class="progress-line" id="flow-line-2"></span><span class="progress-step" id="flow-step-3"><i>3</i> Add report</span></div><p id="flow-eyebrow" class="eyebrow">DEEP RESEARCH</p><h1 id="flow-title">What would you like to learn?</h1><p id="flow-intro" class="flow-intro">Start with your question. You can review the research scope before continuing.</p>
+              <div id="flow-fields" class="flow-fields"></div>
+              <div id="flow-feedback" class="flow-feedback" role="status" hidden></div>
+              <div class="flow-footer"><button class="button quiet" id="flow-cancel">Cancel</button><button class="button primary" id="flow-continue">Review next step <span>→</span></button></div>
+            </div>
+          </section>
+
+          <section id="report-view" class="view" aria-labelledby="report-view-title">
+            <button class="back" id="report-back">← Back to project</button>
+            <div class="report-page"><p class="eyebrow">RESEARCH REPORT <span class="dot-sep">·</span> SAVED IN <a href="#project-home" id="report-project-link">Puzzle Discovery</a></p><h1 id="report-view-title">What keeps puzzle players engaged?</h1><p class="report-deck">A qualitative look at the play patterns and product choices described in this report.</p><div class="report-meta"><span>US</span><span>Android</span><span>24 Oct 2026</span><span class="verified-label">Source status: unverified</span></div><div class="report-body"><h2>Research conclusion</h2><p>The report describes several ways puzzle experiences can encourage players to return, including clear progression, satisfying interactions and new goals. These observations are report-supplied and have not been independently verified by PO Hub.</p><h2>Findings</h2><article><h3>Progression gives players a reason to continue</h3><p>The report points to visible goals and a steady sense of progress. See the original report for supporting passages and sources.</p></article><article><h3>Fresh challenges help renew interest</h3><p>New level ideas and periodic content are described as ways to keep the experience feeling active.</p></article><h2>What remains unknown</h2><p>This report does not establish which specific feature has the greatest effect, or provide comparable retention measurements.</p><button class="button quiet" id="report-source">Open original report <span>↗</span></button></div></div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <script type="module" src="./project-home.js"></script>
+  </body>
+</html>
