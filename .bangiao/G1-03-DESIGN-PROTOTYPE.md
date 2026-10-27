@@ -37,8 +37,9 @@ These are selected text-color pairs, not a complete automated accessibility audi
 ## Verification
 
 - `npm run build`: **PASS** — TypeScript and Vite production build passed. Existing large-chunk advisory remains (546.55 kB JS).
-- `npm test`: **FAILED before test execution** — 21 suites failed while Vite/Vitest tried to rename temporary cache files (`EPERM`). No test assertions ran.
-- Single-thread retry: **NOT VERIFIED** — no test output appeared; stopped after repeated wait.
+- `npm test` under the restricted run: **FAILED before test execution** — 21 suites failed while Vite/Vitest tried to rename temporary cache files (`EPERM`). No test assertions ran in that attempt.
+- `npm test` with normal temp-cache access: **PASS** — 21 test files, 179 tests passed (2026-10-27). This is the authoritative frontend test result for the current branch.
+- Single-thread retry under the restricted run: **NOT VERIFIED** — no test output appeared; stopped after repeated wait.
 - Browser preview: **NOT VERIFIED** — Codex in-app browser timed out connecting to `http://127.0.0.1:15190/prototypes/g1-03/`; browser security policy rejected the local `file://` URL. The temporary Vite process was stopped. No alternate browser, CDP, or Windows UI route was used.
 - Screenshots: **None** — no running-browser screenshot was captured; no screenshot is represented as real evidence.
 - Backend tests: not run; backend and product code were not changed.

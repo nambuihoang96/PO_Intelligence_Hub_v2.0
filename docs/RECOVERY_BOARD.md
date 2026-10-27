@@ -147,7 +147,7 @@ These are historical recorded results, not a fresh full-suite run against every 
 - **Changes requested:** Show semantic Peachy Studio tokens and reusable report primitives before applying a shared style rollout.
 - **Impact:** New isolated HTML/CSS preview and handoff only. No app component, shared CSS, database, report, PO note, benchmark or navigation behavior changed.
 - **Implementation reference:** `frontend/prototypes/g1-03/index.html` and `tokens.css`; placeholder labels are explicitly marked as non-report data.
-- **Verification:** Frontend TypeScript/production build PASS (546.55 kB JS chunk advisory). Full Vitest run FAILED before executing tests: 21 suites could not rename Vite/Vitest temporary cache files (`EPERM`) under sandbox temp; single-thread retry stalled before test output and was stopped. Key foreground/background text pairs checked at ≥4.65:1. Browser preview NOT VERIFIED; localhost timed out and `file://` was refused by browser security policy. No screenshot captured.
+- **Verification:** Frontend TypeScript/production build PASS (546.55 kB JS chunk advisory); after the restricted attempt failed with temp-cache `EPERM`, the full Vitest suite passed with normal temp-cache access: 21 files / 179 tests. Key foreground/background text pairs checked at ≥4.65:1. Browser preview NOT VERIFIED; localhost timed out and `file://` was refused by browser security policy. No screenshot captured.
 - **Current status:** `BLOCKED` pending in-Codex browser rendering or owner review of the standalone prototype. No application styles are rolled out; no Owner Acceptance implied.
 
 **Last updated:** 2026-10-27 — G1-03 isolated prototype is blocked at browser preview; G2-03 remains ready for owner review. No milestone is Owner Accepted.
