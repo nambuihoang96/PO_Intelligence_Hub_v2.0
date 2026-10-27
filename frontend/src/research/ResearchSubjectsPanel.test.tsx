@@ -118,4 +118,33 @@ describe('ResearchSubjectsPanel', () => {
     expect(screen.getAllByText(saved.name).length).toBeGreaterThan(0);
     expect(collectionReads).toHaveBeenCalled();
   });
+
+  it('edits extensible subject analysis, saves it, refreshes and reopens the profile', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1);
+    const saved = { ...subject(), aliases: ['Alias A'], external_ids: [{ provider: 'Catalog', value: 'verified-by-owner' }], analysis_sections: [{ key: 'core-loop', label: 'Core Loop', content: 'Existing PO note.' }] };
+    const updated = { ...saved, analysis_sections: [
+      { key: 'core-loop', label: 'Core Loop', content: 'Updated PO note, still not source verified.' },
+      { key: 'accessibility-1', label: 'Accessibility', content: 'Check keyboard navigation.' },
+    ] };
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValueOnce(page([saved])).mockResolvedValue(page([updated]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    emptyCollections();
+    const update = vi.spyOn(researchApi, 'updateSubject').mockResolvedValue(updated);
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+    fireEvent.click(screen.getByText('Research subjects'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
+    expect(screen.getByText('Alias A')).toBeTruthy();
+    expect(screen.getByText('Available in source details')).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue('Existing PO note.'), { target: { value: 'Updated PO note, still not source verified.' } });
+    fireEvent.change(screen.getByLabelText('Custom section title'), { target: { value: 'Accessibility' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom section' }));
+    fireEvent.change(screen.getAllByLabelText('PO analysis')[1], { target: { value: 'Check keyboard navigation.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO analysis' }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith('project-1', saved.id, { analysis_sections: updated.analysis_sections }));
+    expect(await screen.findByText('Subject analysis saved. These are PO notes and are not independently verified.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close profile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open profile' }));
+    expect(screen.getByDisplayValue('Updated PO note, still not source verified.')).toBeTruthy();
+    expect(screen.getByDisplayValue('Check keyboard navigation.')).toBeTruthy();
+  });
 });

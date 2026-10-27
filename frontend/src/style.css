@@ -1129,6 +1129,29 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .research-subject-source-actions select { min-width: 180px; flex: 1 1 180px; min-height: 40px; padding: 8px 10px; border: 1px solid #d7e0eb; border-radius: 8px; background: #fff; color: #253a55; }
 .research-subject-item label { display: grid; flex: 1 1 240px; gap: 4px; color: #526782; font-size: 13px; }
 .research-subject-item input { min-height: 40px; padding: 8px 10px; border: 1px solid #d7e0eb; border-radius: 8px; color: #253a55; }
+.research-subject-profile-item { align-items: stretch; flex-direction: column; }
+.research-subject-profile-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.research-subject-profile { display: grid; gap: 14px; min-width: 0; padding: 14px; border-radius: 9px; background: #f8fafc; }
+.research-subject-profile-summary { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.research-subject-profile-summary h4, .research-subject-analysis h5 { margin: 0 0 4px; color: #263b54; font-size: 16px; }
+.research-subject-profile-summary p, .research-subject-analysis > div:first-child p { margin: 0; color: #64758b; line-height: 1.5; }
+.research-subject-profile-summary nav { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.research-subject-profile-summary nav a, .research-subject-profile-details summary { color: #145aa8; cursor: pointer; }
+.research-subject-profile-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; min-width: 0; color: #526782; font-size: 14px; }
+.research-subject-profile-details p { margin: 0; overflow-wrap: anywhere; }
+.research-subject-profile-details details { grid-column: 1 / -1; }
+.research-subject-profile-details ul { margin: 6px 0 0; padding-left: 18px; overflow-wrap: anywhere; }
+.research-subject-analysis { display: grid; gap: 12px; min-width: 0; padding-top: 12px; border-top: 1px solid #e2e9f0; }
+.research-subject-analysis-starters { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.research-subject-analysis-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.research-subject-analysis-custom label { grid-column: 1 / -1; }
+.research-subject-analysis-custom input, .research-subject-analysis-list textarea { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #d7e0eb; border-radius: 8px; background: #fff; color: #253a55; font: inherit; }
+.research-subject-analysis-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.research-subject-analysis-list article { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 12px; border-radius: 8px; background: #fff; }
+.research-subject-analysis-list textarea { resize: vertical; line-height: 1.5; }
+.research-subject-analysis-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.research-subject-analysis-actions > span { color: #985414; font-size: 13px; }
+.research-subject-analysis-actions .primary-action, .research-subject-profile-heading .secondary-action { min-height: 40px; }
 .research-benchmark-collections { display: grid; gap: 12px; padding-top: 4px; }
 .research-collections-heading h3 { margin: 0 0 4px; color: #233954; font-size: 16px; }
 .research-collections-heading p { margin: 0; color: #64758b; font-size: 14px; }
@@ -1201,7 +1224,7 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .image-evidence-copy code { display: block; max-width: 100%; overflow-wrap: anywhere; color: #64758b; }
 @media (max-width: 900px) { .trend-update-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .trend-update-form-grid { grid-template-columns: minmax(0, 1fr); } .trend-update-form-actions { align-items: stretch; flex-direction: column; } .trend-update-form-actions .primary-action { width: 100%; } .image-evidence-item { grid-template-columns: minmax(0, 1fr); } .image-evidence-thumb { width: 100%; height: 180px; } }
-@media (max-width: 700px) { .research-subjects-panel > summary { align-items: flex-start; flex-direction: column; gap: 4px; } .research-subject-item, .research-subject-source, .research-benchmark-collection li { align-items: stretch; flex-direction: column; } .research-subject-source-actions { min-width: 0; justify-content: stretch; } .research-subject-source-actions > *, .research-collection-create > *, .research-collection-add > * { flex: 1 1 100%; } }
+@media (max-width: 700px) { .research-subjects-panel > summary { align-items: flex-start; flex-direction: column; gap: 4px; } .research-subject-item, .research-subject-source, .research-benchmark-collection li { align-items: stretch; flex-direction: column; } .research-subject-profile-details, .research-subject-analysis-list { grid-template-columns: minmax(0, 1fr); } .research-subject-analysis-custom { grid-template-columns: minmax(0, 1fr); } .research-subject-analysis-custom label { grid-column: auto; } .research-subject-analysis-actions .primary-action { width: 100%; } .research-subject-source-actions { min-width: 0; justify-content: stretch; } .research-subject-source-actions > *, .research-collection-create > *, .research-collection-add > * { flex: 1 1 100%; } }
 @media (max-width: 900px) { .workspace-source-grid { grid-template-columns: minmax(0, 1fr); } .data-workspace-heading { align-items: flex-start; flex-direction: column; } .data-workspace-actions { justify-content: flex-start; } }
 @media (max-width: 600px) { .project-row-wrap { grid-template-columns: 1fr; } .project-data-link { justify-self: start; margin: 0 0 8px 54px; } .workspace-source-grid > .research-panel, .workspace-explorer { padding: 15px; } .workspace-link-report, .workspace-followup { align-items: stretch; flex-direction: column; } .workspace-app-table { min-width: 720px; } .workspace-app-table th, .workspace-app-table td { padding: 9px; } }
 .overview-main-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(245px, 290px); gap: 13px; align-items: start; }

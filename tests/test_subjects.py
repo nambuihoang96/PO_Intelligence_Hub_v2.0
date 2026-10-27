@@ -1,16 +1,18 @@
 """Persistent subject identity and explicit source mapping tests."""
 import tempfile
 import unittest
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
 from alembic import command
 from alembic.config import Config
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.app.db import create_database_engine, get_database_path
-from backend.app.models import ImportedResearchReport, QuantitativeDataset, ResearchProject
+from backend.app.models import ImportedResearchReport, QuantitativeDataset, ResearchProject, ResearchSubject
 from backend.app.main import create_app
 from backend.app.schemas import ResearchSubjectCreate, ResearchSubjectSourceMap, ResearchSubjectUpdate
 from backend.app.subjects import create_subject, list_subject_sources, list_subjects, map_subject_source, update_subject
@@ -24,7 +26,8 @@ class ResearchSubjectsTest(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory(dir=scratch)
         self.env = patch.dict("os.environ", {"APP_DATA_ROOT": str(Path(self.temp_dir.name) / "appdata")})
         self.env.start()
-        command.upgrade(Config(str(root / "alembic.ini")), "head")
+        self.config = Config(str(root / "alembic.ini"))
+        command.upgrade(self.config, "head")
         self.engine = create_database_engine(get_database_path())
         self.session = Session(self.engine, expire_on_commit=False)
         self.project = ResearchProject(name="Cross-report research")
@@ -122,6 +125,40 @@ class ResearchSubjectsTest(unittest.TestCase):
             map_subject_source(outside.id, ResearchSubjectSourceMap(source_kind=source.source_kind,
                                source_id=source.source_id, source_key=source.source_key, subject_id=subject.id), self.session)
         self.assertEqual(wrong_project.exception.status_code, 404)
+
+    def test_custom_subject_analysis_sections_save_reopen_and_reject_duplicate_keys(self) -> None:
+        subject = create_subject(self.project.id, ResearchSubjectCreate(name="Profile subject"), self.session)
+        sections = [{"key": "custom-loop", "label": "Custom user journey", "content": "Owner-authored analysis stays separate from sourced findings."}]
+        saved = update_subject(self.project.id, subject.id, ResearchSubjectUpdate(analysis_sections=sections), self.session)
+        self.assertEqual([item.model_dump() for item in saved.analysis_sections], sections)
+        self.session.expire_all()
+        reopened = list_subjects(self.project.id, self.session, cursor=None, limit=20).items[0]
+        self.assertEqual([item.model_dump() for item in reopened.analysis_sections], sections)
+        with self.assertRaises(ValidationError):
+            ResearchSubjectUpdate(analysis_sections=[
+                {"key": "same", "label": "First", "content": "First section."},
+                {"key": "same", "label": "Second", "content": "Second section."},
+            ])
+        with self.assertRaises(ValidationError):
+            ResearchSubjectUpdate(analysis_sections=[{"key": "empty", "label": "Empty", "content": "  "}])
+        self.assertEqual(self.session.get(ResearchSubject, subject.id).analysis_sections_json, sections)
+
+    def test_preexisting_subject_gets_an_empty_optional_analysis_list_on_upgrade(self) -> None:
+        self.session.close(); self.engine.dispose()
+        command.downgrade(self.config, "20261027_0013")
+        database_path = get_database_path()
+        connection = sqlite3.connect(database_path)
+        connection.execute(
+            "INSERT INTO research_subjects (id, project_id, name, subject_type, aliases_json, external_ids_json, provenance_json, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("legacy-subject", self.project.id, "Existing profile", None, "[]", "[]", "{}", "2026-10-27 00:00:00", "2026-10-27 00:00:00"),
+        )
+        connection.commit(); connection.close()
+        command.upgrade(self.config, "head")
+        self.engine = create_database_engine(get_database_path())
+        self.session = Session(self.engine, expire_on_commit=False)
+        legacy = self.session.get(ResearchSubject, "legacy-subject")
+        self.assertEqual(legacy.analysis_sections_json, [])
 
     def test_additive_migration_preserves_existing_reports_csv_and_po_notes(self) -> None:
         root = Path(__file__).resolve().parents[1]

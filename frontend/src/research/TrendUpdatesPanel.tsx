@@ -62,7 +62,7 @@ export function TrendUpdatesPanel({ projectId }: { projectId: string }) {
     } finally { savingRef.current = false; setSaving(false); }
   }
 
-  return <section className="research-panel trend-updates-panel" aria-label="Project trend updates">
+  return <section id="project-trend-updates" className="research-panel trend-updates-panel" aria-label="Project trend updates">
     <header className="trend-updates-heading"><div><span className="state-label">PROJECT INPUT</span><h3>Trend updates</h3>
       <p>Save an exact claim with its source context. The app does not fetch or verify links, infer measurements, or overwrite earlier updates.</p></div></header>
     {error && <div role="alert" className="research-alert">{error}</div>}

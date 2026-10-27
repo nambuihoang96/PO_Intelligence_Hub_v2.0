@@ -61,6 +61,7 @@ class ResearchSubject(Base):
     aliases_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     external_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     provenance_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    analysis_sections_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 

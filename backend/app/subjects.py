@@ -46,7 +46,8 @@ def _subject_read(subject: ResearchSubject) -> ResearchSubjectRead:
     return ResearchSubjectRead(
         id=subject.id, project_id=subject.project_id, name=subject.name, subject_type=subject.subject_type,
         aliases=subject.aliases_json or [], external_ids=subject.external_ids_json or [],
-        provenance=subject.provenance_json or {}, created_at=subject.created_at, updated_at=subject.updated_at,
+        provenance=subject.provenance_json or {}, analysis_sections=subject.analysis_sections_json or [],
+        created_at=subject.created_at, updated_at=subject.updated_at,
     )
 
 
@@ -176,7 +177,7 @@ def create_subject(project_id: str, payload: ResearchSubjectCreate, session: Ses
     _project_or_404(session, project_id)
     subject = ResearchSubject(project_id=project_id, name=payload.name, subject_type=payload.subject_type,
                               aliases_json=payload.aliases, external_ids_json=payload.external_ids,
-                              provenance_json=payload.provenance)
+                              provenance_json=payload.provenance, analysis_sections_json=[])
     session.add(subject)
     session.commit()
     session.refresh(subject)
@@ -189,7 +190,7 @@ def update_subject(project_id: str, subject_id: str, payload: ResearchSubjectUpd
     _project_or_404(session, project_id)
     subject = _subject_or_404(session, project_id, subject_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(subject, f"{field}_json" if field in {"aliases", "external_ids"} else field, value)
+        setattr(subject, f"{field}_json" if field in {"aliases", "external_ids", "analysis_sections"} else field, value)
     session.commit()
     session.refresh(subject)
     return _subject_read(subject)

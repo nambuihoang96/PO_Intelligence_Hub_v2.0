@@ -18,9 +18,12 @@ export type ResearchSubject = {
   aliases: string[];
   external_ids: { provider: string; value: string }[];
   provenance: Record<string, unknown>;
+  analysis_sections?: ResearchSubjectAnalysisSection[];
   created_at: string;
   updated_at: string;
 };
+
+export type ResearchSubjectAnalysisSection = { key: string; label: string; content: string };
 
 export type ResearchSubjectSource = {
   project_id: string;
@@ -333,7 +336,7 @@ export const researchApi = {
   createSubject(projectId: string, payload: Pick<ResearchSubject, 'name' | 'subject_type' | 'aliases' | 'external_ids' | 'provenance'>): Promise<ResearchSubject> {
     return request(`/projects/${encodeURIComponent(projectId)}/subjects`, { method: 'POST', body: JSON.stringify(payload) });
   },
-  updateSubject(projectId: string, subjectId: string, payload: Partial<Pick<ResearchSubject, 'name' | 'subject_type' | 'aliases' | 'external_ids'>>): Promise<ResearchSubject> {
+  updateSubject(projectId: string, subjectId: string, payload: Partial<Pick<ResearchSubject, 'name' | 'subject_type' | 'aliases' | 'external_ids' | 'analysis_sections'>>): Promise<ResearchSubject> {
     return request(`/projects/${encodeURIComponent(projectId)}/subjects/${encodeURIComponent(subjectId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
   },
   mapSubjectSource(projectId: string, payload: { source_kind: ResearchSubjectSource['source_kind']; source_id: string; source_key: string; subject_id?: string; create_subject_from_source?: boolean; expected_subject_id?: string }): Promise<ResearchSubjectSource> {

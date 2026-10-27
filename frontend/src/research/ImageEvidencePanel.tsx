@@ -73,7 +73,7 @@ export function ImageEvidencePanel({ projectId }: { projectId: string }) {
     } finally { savingRef.current = false; setSaving(false); }
   }
 
-  return <section className="research-panel image-evidence-panel" aria-label="Project image evidence">
+  return <section id="project-image-evidence" className="research-panel image-evidence-panel" aria-label="Project image evidence">
     <header className="trend-updates-heading"><div><span className="state-label">PROJECT EVIDENCE</span><h3>Image evidence</h3>
       <p>Attach a local screenshot or image to a confirmed subject. Files are stored with the project database; nothing is uploaded to an external service or interpreted automatically.</p></div></header>
     {error && <div role="alert" className="research-alert">{error}</div>}

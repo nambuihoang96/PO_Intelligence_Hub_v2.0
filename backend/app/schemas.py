@@ -61,6 +61,26 @@ class ResearchProjectRead(APIModel):
     updated_at: datetime
 
 
+class ResearchSubjectAnalysisSection(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=120)
+    content: str = Field(min_length=1, max_length=20_000)
+
+    @field_validator("key", "label", "content")
+    @classmethod
+    def clean_analysis_section_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("key", "label", "content")
+    @classmethod
+    def require_nonblank_analysis_section_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Analysis section key, title, and content must not be blank.")
+        return value
+
+
 class ResearchSubjectCreate(APIModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -98,6 +118,7 @@ class ResearchSubjectUpdate(APIModel):
     subject_type: str | None = Field(default=None, max_length=120)
     aliases: list[str] | None = Field(default=None, max_length=100)
     external_ids: list[dict[str, str]] | None = Field(default=None, max_length=100)
+    analysis_sections: list[ResearchSubjectAnalysisSection] | None = Field(default=None, max_length=30)
 
     @model_validator(mode="after")
     def require_change(self) -> "ResearchSubjectUpdate":
@@ -113,6 +134,12 @@ class ResearchSubjectUpdate(APIModel):
             self.aliases = list(dict.fromkeys(value.strip() for value in self.aliases))
             if any(not value for value in self.aliases):
                 raise ValueError("aliases must not contain blank values")
+        if "analysis_sections" in self.model_fields_set:
+            if self.analysis_sections is None:
+                raise ValueError("analysis_sections must be a list; use an empty list to clear optional sections.")
+            keys = [section.key for section in self.analysis_sections]
+            if len(keys) != len(set(keys)):
+                raise ValueError("analysis section keys must be unique per subject.")
         return self
 
 
@@ -124,6 +151,7 @@ class ResearchSubjectRead(APIModel):
     aliases: list[str]
     external_ids: list[dict[str, str]]
     provenance: dict[str, Any]
+    analysis_sections: list[ResearchSubjectAnalysisSection] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
