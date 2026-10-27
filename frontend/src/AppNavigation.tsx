@@ -42,16 +42,16 @@ export function AppNavigation({ pages, currentPath, currentLabel }: AppNavigatio
       type="button"
       aria-expanded={mobileOpen}
       aria-controls="app-navigation"
-      aria-label={`${mobileOpen ? 'Close' : 'Open'} navigation menu. Current page: ${currentLabel}`}
+      aria-label={`${mobileOpen ? 'Đóng' : 'Mở'} menu điều hướng. Trang hiện tại: ${currentLabel}`}
       onClick={() => setMobileOpen((open) => !open)}
     >
-      <span className="mobile-nav-current"><span className="mobile-nav-caption">Current page</span><strong>{currentLabel}</strong></span>
-      <span className="mobile-nav-action">{mobileOpen ? 'Close menu' : 'Browse pages'}<span className="mobile-nav-chevron" aria-hidden="true">{mobileOpen ? '−' : '+'}</span></span>
+      <span className="mobile-nav-current"><span className="mobile-nav-caption">Trang hiện tại</span><strong>{currentLabel}</strong></span>
+      <span className="mobile-nav-action">{mobileOpen ? 'Đóng menu' : 'Xem các trang'}<span className="mobile-nav-chevron" aria-hidden="true">{mobileOpen ? '−' : '+'}</span></span>
     </button>
 
     <div id="app-navigation" className={`sidebar-menu${mobileOpen ? ' is-open' : ''}`}>
-      <div className="nav-label">WORKSPACE</div>
-      <nav aria-label="Main navigation" className="primary-nav">
+      <div className="nav-label">KHU VỰC LÀM VIỆC</div>
+      <nav aria-label="Điều hướng chính" className="primary-nav">
         {pages.map((item) => {
           const isActive = active(item.path);
           return <a className={`nav-item${isActive ? ' active' : ''}`} href={item.path} key={item.path}
@@ -62,7 +62,7 @@ export function AppNavigation({ pages, currentPath, currentLabel }: AppNavigatio
         })}
       </nav>
 
-      <div className="sidebar-footer"><span className="footer-dot" />LOCAL WORKSPACE</div>
+      <div className="sidebar-footer"><span className="footer-dot" />LƯU TRÊN MÁY</div>
     </div>
   </aside>;
 }
