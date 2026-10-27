@@ -402,13 +402,34 @@ class OpportunityAssessment(APIModel):
         return value.strip()
 
 
+class OpportunityDecisionTarget(APIModel):
+    """Explicit source identity for a PO decision that does not require a CSV shortlist."""
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["project", "report_finding", "report_entity", "subject", "collection", "trend_update"]
+    target_id: str = Field(min_length=1, max_length=240)
+    report_id: str | None = Field(default=None, max_length=36)
+    report_content_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    item_key: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def require_kind_specific_identity(self) -> "OpportunityDecisionTarget":
+        if self.kind in {"report_finding", "report_entity"}:
+            if not (self.report_id and self.report_content_sha256 and self.item_key):
+                raise ValueError("Report decision targets require report_id, report_content_sha256, and item_key.")
+            if self.target_id != self.item_key:
+                raise ValueError("A report decision target_id must match its item_key.")
+        return self
+
+
 class OpportunityDecisionUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(default=0, ge=0)
     candidate_id: str = Field(min_length=1, max_length=100)
     dataset_id: str | None = Field(default=None, max_length=36)
     dataset_content_sha256: str | None = Field(default=None, min_length=64, max_length=64)
-    source_entity_id: str = Field(min_length=1, max_length=240)
+    source_entity_id: str | None = Field(default=None, min_length=1, max_length=240)
+    decision_target: OpportunityDecisionTarget | None = None
     decision_status: Literal["investigate", "benchmark", "experiment", "implementation_candidate", "hold", "reject"] | None = None
     rationale: str = Field(default="", max_length=8000)
     supporting_evidence: list[OpportunityEvidenceReference] = Field(default_factory=list, max_length=100)
@@ -421,6 +442,10 @@ class OpportunityDecisionUpdate(APIModel):
 
     @model_validator(mode="after")
     def unique_dimensions_and_questions(self) -> "OpportunityDecisionUpdate":
+        if self.dataset_id and not self.source_entity_id:
+            raise ValueError("CSV decisions require a source entity ID.")
+        if not self.dataset_id and not self.decision_target and not self.source_entity_id:
+            raise ValueError("Select a CSV product or an explicit research subject as the decision target.")
         dimensions = [item.dimension.casefold() for item in self.assessments]
         if len(dimensions) != len(set(dimensions)):
             raise ValueError("Assessment dimensions must be unique.")

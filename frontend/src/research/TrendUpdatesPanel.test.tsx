@@ -39,6 +39,9 @@ describe('TrendUpdatesPanel', () => {
     expect(await screen.findByText(saved.exact_claim)).toBeTruthy();
     expect(screen.getByText('Source-reported · unverified')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open supplied source link' }).getAttribute('href')).toBe(saved.source_url);
+    const decisionLink = screen.getByRole('link', { name: 'Review PO decision' });
+    expect(decisionLink.getAttribute('href')).toContain('decisionKind=trend_update');
+    expect(decisionLink.getAttribute('href')).toContain('decisionTargetId=update-1');
   });
 
   it('keeps the draft and displays a clear error when saving fails', async () => {

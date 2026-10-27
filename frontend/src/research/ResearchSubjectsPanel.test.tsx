@@ -135,6 +135,9 @@ describe('ResearchSubjectsPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
     expect(screen.getByText('Alias A')).toBeTruthy();
     expect(screen.getByText('Available in source details')).toBeTruthy();
+    const poDecisionLink = screen.getByRole('link', { name: 'Review PO decision' });
+    expect(poDecisionLink.getAttribute('href')).toContain('decisionKind=subject');
+    expect(poDecisionLink.getAttribute('href')).toContain('decisionTargetId=subject-1');
     fireEvent.change(screen.getByDisplayValue('Existing PO note.'), { target: { value: 'Updated PO note, still not source verified.' } });
     fireEvent.change(screen.getByLabelText('Custom section title'), { target: { value: 'Accessibility' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add custom section' }));

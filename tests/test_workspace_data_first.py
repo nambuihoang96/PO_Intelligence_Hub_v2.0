@@ -2,6 +2,7 @@
 import os
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,13 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.db import create_database_engine, get_database_path
-from backend.app.models import ImportedResearchReport, POOpportunityDecision, QuantitativeDataset, ResearchProject
+from backend.app.models import ImportedResearchReport, POOpportunityDecision, ProjectTrendUpdate, QuantitativeDataset, ResearchBenchmarkCollection, ResearchProject, ResearchSubject
 from backend.app.opportunities import get_opportunity_workspace, save_opportunity_decision
 from backend.app.dataset_metadata import effective_observations, metadata_group
 from backend.app.quantitative_comparisons import list_comparison_datasets
 from backend.app.quantitative_comparisons import _observation_usable
 from backend.app.reports import import_report, list_reports
-from backend.app.schemas import ImportedReportCreate, OpportunityDecisionUpdate, QuantitativeDatasetImport, ResearchWorkspaceStateUpdate
+from backend.app.schemas import ImportedReportCreate, OpportunityDecisionTarget, OpportunityDecisionUpdate, QuantitativeDatasetImport, ResearchWorkspaceStateUpdate
 from backend.app.workspace_data import (
     import_workspace_dataset,
     link_report,
@@ -435,9 +436,11 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(
             selected_app_ids=context["source_entity_ids"], selected_app_context=context), self.session)
         result = get_opportunity_workspace(self.project.id, self.session)
-        self.assertEqual(len(result["candidates"]), 100)
-        self.assertEqual(len({item["candidate_id"] for item in result["candidates"]}), 100)
-        self.assertTrue(all(item["dataset_content_sha256"] == imported.content_sha256 for item in result["candidates"]))
+        csv_candidates = [item for item in result["candidates"] if item.get("target_kind") is None]
+        self.assertEqual(len(csv_candidates), 100)
+        self.assertEqual(len({item["candidate_id"] for item in csv_candidates}), 100)
+        self.assertTrue(all(item["dataset_content_sha256"] == imported.content_sha256 for item in csv_candidates))
+        self.assertTrue(any(item.get("target_kind") == "project" for item in result["candidates"]))
 
     def test_qualitative_finding_requires_explicit_candidate_attachment_and_stays_unverified(self) -> None:
         imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)
@@ -485,6 +488,90 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         preserved = self.session.get(ImportedResearchReport, report.id)
         self.assertEqual(preserved.benchmark_selections_json, [{"item_type": "finding", "item_key": "finding-alpha"}])
         self.assertEqual(preserved.benchmark_workspace_json["entries"][0]["notes"], "Keep this note")
+
+    def test_report_finding_is_an_independent_po_decision_target_without_csv(self) -> None:
+        report = ImportedResearchReport(id="report-context", project_id=self.project.id,
+            question="What do players value?", geo="Worldwide", os="Not applicable", research_period="2026",
+            content="# Research", research_data_json={"findings": [{"key": "ease", "title": "Ease matters",
+                "finding_type": "reported_finding", "description": "Supplied finding.", "evidence_status": "unverified",
+                "evidence_references": ["https://example.org/source"]}], "entities": []},
+            parse_status="STRUCTURED", extraction_error=None, benchmark_selections_json=[{"item_type": "finding", "item_key": "ease"}],
+            benchmark_workspace_json={"entries": [{"item_type": "finding", "item_key": "ease", "notes": "Legacy note remains"}]},
+            content_sha256="d" * 64, origin="chatgpt_user_import")
+        self.session.add(report); self.session.commit()
+        workspace = get_opportunity_workspace(self.project.id, self.session)
+        target_candidate = next(item for item in workspace["candidates"] if item.get("target_kind") == "report_finding")
+        target = target_candidate["decision_target"]
+        reference = {"kind": "report_finding", "report_id": report.id,
+            "report_content_sha256": report.content_sha256, "item_key": "ease"}
+        saved = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+            candidate_id=target_candidate["candidate_id"], dataset_id=None, dataset_content_sha256=None,
+            source_entity_id=None, decision_target=target, rationale="Assess this finding directly.",
+            supporting_evidence=[reference], next_action="Validate with target users."), self.session)
+        revised = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+            expected_revision=1, candidate_id=target_candidate["candidate_id"], source_entity_id=None,
+            decision_target=target, rationale="Updated assessment after review.", supporting_evidence=[reference],
+            next_action="Run a focused user interview."), self.session)
+        reopened = next(item for item in revised["candidates"] if item["candidate_id"] == target_candidate["candidate_id"])
+        self.assertEqual(reopened["decision"]["rationale"], "Updated assessment after review.")
+        self.assertEqual(reopened["decision"]["next_action"], "Run a focused user interview.")
+        self.assertEqual(reopened["decision"]["revision"], 2)
+        self.assertEqual(reopened["decision"]["revision_history"][0]["revision"], 1)
+        self.assertEqual(reopened["decision"]["revision_history"][0]["snapshot"]["rationale"], "Assess this finding directly.")
+        self.assertEqual(reopened["decision"]["revision_history"][0]["snapshot"]["next_action"], "Validate with target users.")
+        self.assertEqual(reopened["resolved_decision_evidence"][0]["verification_status"], "unverified")
+        self.assertEqual(self.session.get(ImportedResearchReport, report.id).benchmark_workspace_json["entries"][0]["notes"], "Legacy note remains")
+
+    def test_stale_report_decision_target_cannot_be_retargeted(self) -> None:
+        report = ImportedResearchReport(id="report-stale-target", project_id=self.project.id,
+            question="Question", geo="Worldwide", os="Unknown", research_period=None, content="# Original",
+            research_data_json={"findings": [{"key": "stable-key", "title": "Finding"}], "entities": []},
+            parse_status="STRUCTURED", extraction_error=None, benchmark_selections_json=[],
+            benchmark_workspace_json={"entries": []}, content_sha256="e" * 64, origin="chatgpt_user_import")
+        self.session.add(report); self.session.commit()
+        candidate = next(item for item in get_opportunity_workspace(self.project.id, self.session)["candidates"]
+                         if item.get("target_kind") == "report_finding")
+        report.content_sha256 = "f" * 64
+        self.session.commit()
+        with self.assertRaises(HTTPException) as error:
+            save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+                candidate_id=candidate["candidate_id"], decision_target=candidate["decision_target"]), self.session)
+        self.assertEqual(error.exception.status_code, 409)
+
+    def test_report_decision_target_requires_one_consistent_item_identity(self) -> None:
+        with self.assertRaises(ValueError):
+            OpportunityDecisionTarget(kind="report_finding", target_id="finding-a", report_id="report-a",
+                                     report_content_sha256="a" * 64, item_key="finding-b")
+
+    def test_saved_subject_and_trend_update_are_explicit_decision_targets(self) -> None:
+        collection = ResearchBenchmarkCollection(project_id=self.project.id, name="Reviewed subjects")
+        subject = ResearchSubject(project_id=self.project.id, name="Confirmed subject", subject_type="product",
+            aliases_json=[], external_ids_json=[], provenance_json={}, analysis_sections_json=[])
+        self.session.add_all([collection, subject]); self.session.flush()
+        update = ProjectTrendUpdate(project_id=self.project.id, subject_id=subject.id, exact_claim="Exact supplied change",
+            source_note="Owner provided this source context.", source_title="Release notes", source_url=None,
+            published_on=date(2026, 10, 27), source_status="source_reported_unverified")
+        self.session.add(update); self.session.commit()
+        targets = get_opportunity_workspace(self.project.id, self.session)["candidates"]
+        project_target = next(item for item in targets if item.get("target_kind") == "project")
+        collection_target = next(item for item in targets if item.get("target_kind") == "collection")
+        subject_target = next(item for item in targets if item.get("target_kind") == "subject")
+        update_target = next(item for item in targets if item.get("target_kind") == "trend_update")
+        self.assertEqual(project_target["decision_target"]["target_id"], self.project.id)
+        self.assertEqual(collection_target["decision_target"]["target_id"], collection.id)
+        self.assertEqual(subject_target["decision_target"]["target_id"], subject.id)
+        self.assertEqual(update_target["decision_target"]["target_id"], update.id)
+        self.assertEqual(update_target["name"], "Exact supplied change")
+        self.assertFalse(subject_target["decision"])
+        self.assertFalse(update_target["decision"])
+        for item in (project_target, collection_target, subject_target, update_target):
+            saved = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+                candidate_id=item["candidate_id"], source_entity_id=None,
+                decision_target=item["decision_target"], rationale=f"Reviewed {item['target_kind']}.",
+                next_action="Reopen this target after refresh."), self.session)
+            reopened = next(candidate for candidate in saved["candidates"] if candidate["candidate_id"] == item["candidate_id"])
+            self.assertEqual(reopened["decision"]["rationale"], f"Reviewed {item['target_kind']}.")
+            self.assertEqual(reopened["decision"]["next_action"], "Reopen this target after refresh.")
 
     def test_stale_decision_revision_prevents_concurrent_save_from_overwriting_edits(self) -> None:
         imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)

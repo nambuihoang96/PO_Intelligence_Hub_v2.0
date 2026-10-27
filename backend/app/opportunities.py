@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
 from backend.app.dataset_metadata import effective_observations
-from backend.app.models import ImportedResearchReport, POOpportunityDecision, QuantitativeDataset, ResearchProject
+from backend.app.models import ImportedResearchReport, POOpportunityDecision, ProjectTrendUpdate, QuantitativeDataset, ResearchBenchmarkCollection, ResearchProject, ResearchSubject
 from backend.app.quantitative_comparisons import _observation_usable
 from backend.app.schemas import OpportunityDecisionUpdate
 
@@ -30,6 +30,38 @@ def _project(session: Session, project_id: str) -> ResearchProject:
 def _candidate_id(dataset_hash: str, source_entity_id: str) -> str:
     digest = sha256(f"{dataset_hash}:{source_entity_id}".encode("utf-8")).hexdigest()
     return f"csv:{digest}"
+
+
+def _decision_target_candidate_id(target: dict[str, Any]) -> str:
+    # Keep the original context-key algorithm stable so already-saved decisions reopen.
+    identity = "|".join(str(target.get(key) or "") for key in
+                        ("kind", "target_id", "report_id", "report_content_sha256", "item_key"))
+    return f"context:{sha256(identity.encode('utf-8')).hexdigest()}"
+
+
+def _decision_target_name(session: Session, project_id: str, target: dict[str, Any]) -> str | None:
+    kind = target.get("kind")
+    if kind == "project":
+        project = session.get(ResearchProject, target.get("target_id"))
+        return project.name if project and project.id == project_id else None
+    if kind in {"report_finding", "report_entity"}:
+        report = session.get(ImportedResearchReport, target.get("report_id"))
+        if not report or report.project_id != project_id or report.content_sha256 != target.get("report_content_sha256"):
+            return None
+        data = report.research_data_json if isinstance(report.research_data_json, dict) else {}
+        key = "findings" if kind == "report_finding" else "entities"
+        item = next((entry for entry in data.get(key, []) if isinstance(entry, dict) and entry.get("key") == target.get("item_key")), None)
+        return (item.get("title") or item.get("name")) if item else None
+    if kind == "subject":
+        subject = session.get(ResearchSubject, target.get("target_id"))
+        return subject.name if subject and subject.project_id == project_id else None
+    if kind == "collection":
+        collection = session.get(ResearchBenchmarkCollection, target.get("target_id"))
+        return collection.name if collection and collection.project_id == project_id else None
+    if kind == "trend_update":
+        update_row = session.get(ProjectTrendUpdate, target.get("target_id"))
+        return update_row.exact_claim if update_row and update_row.project_id == project_id else None
+    return None
 
 
 def _dataset_for_workspace(session: Session, project_id: str, dataset_id: str) -> QuantitativeDataset | None:
@@ -119,6 +151,77 @@ def _report_items(session: Session, project_id: str) -> list[dict[str, Any]]:
                          for item in entities if isinstance(item, dict) and item.get("key")],
         })
     return output
+
+
+def _context_decision_candidates(session: Session, project_id: str,
+                                 saved: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Offer explicit report, subject and update targets alongside CSV shortlist products."""
+    candidates: list[dict[str, Any]] = []
+
+    def add(target: dict[str, Any], name: str, context_label: str, description: str = "") -> None:
+        candidate_id = _decision_target_candidate_id(target)
+        if candidate_id in {item["candidate_id"] for item in candidates}:
+            return
+        candidates.append({
+            "candidate_id": candidate_id, "name": name, "source_entity_id": None,
+            "dataset_id": None, "dataset_content_sha256": None,
+            "dataset_filename": context_label, "selection_reason": description or "Explicit research target",
+            "target_kind": target["kind"], "decision_target": target,
+            "active_in_shortlist": False, "historical": False, "source_available": True,
+            "stale": False, "stale_reasons": [], "quantitative_evidence": [],
+            "decision": saved.get(candidate_id),
+        })
+
+    project = session.get(ResearchProject, project_id)
+    if project:
+        add({"kind": "project", "target_id": project.id}, project.name, "Project workspace",
+            "PO decision for this research project")
+
+    reports = session.scalars(select(ImportedResearchReport).where(
+        ImportedResearchReport.project_id == project_id
+    ).order_by(ImportedResearchReport.imported_at.desc()))
+    for report in reports:
+        data = report.research_data_json or {}
+        for kind, collection_key in (("report_finding", "findings"), ("report_entity", "entities")):
+            for item in data.get(collection_key, []) if isinstance(data, dict) else []:
+                if not isinstance(item, dict) or not item.get("key"):
+                    continue
+                target = {"kind": kind, "target_id": str(item["key"]), "report_id": report.id,
+                          "report_content_sha256": report.content_sha256, "item_key": str(item["key"])}
+                add(target, str(item.get("title") or item.get("name") or item["key"]),
+                    "Research report", report.question)
+
+    for subject in session.scalars(select(ResearchSubject).where(ResearchSubject.project_id == project_id)):
+        add({"kind": "subject", "target_id": subject.id}, subject.name, "Project subject",
+            f"{subject.subject_type or 'Research subject'} profile")
+
+    for collection in session.scalars(select(ResearchBenchmarkCollection).where(ResearchBenchmarkCollection.project_id == project_id)):
+        add({"kind": "collection", "target_id": collection.id}, collection.name, "Benchmark collection",
+            "Project benchmark collection")
+
+    for update_row in session.scalars(select(ProjectTrendUpdate).where(
+        ProjectTrendUpdate.project_id == project_id
+    ).order_by(ProjectTrendUpdate.published_on.desc(), ProjectTrendUpdate.created_at.desc())):
+        add({"kind": "trend_update", "target_id": update_row.id}, update_row.exact_claim,
+            "Trend update", update_row.source_title or update_row.source_note)
+
+    current_ids = {item["candidate_id"] for item in candidates}
+    for candidate_id, decision in saved.items():
+        target = decision.get("decision_target")
+        if not candidate_id.startswith("context:") or candidate_id in current_ids or not isinstance(target, dict):
+            continue
+        name = decision.get("candidate_name") or str(target.get("item_key") or target.get("target_id") or "Historical research target")
+        candidates.append({
+            "candidate_id": candidate_id, "name": name, "source_entity_id": None,
+            "dataset_id": None, "dataset_content_sha256": None,
+            "dataset_filename": decision.get("dataset_filename", "Historical research target"),
+            "selection_reason": "Previously saved PO decision", "target_kind": target.get("kind"),
+            "decision_target": target, "active_in_shortlist": False, "historical": True,
+            "source_available": False, "stale": True,
+            "stale_reasons": ["The original research target no longer resolves in this project."],
+            "quantitative_evidence": [], "decision": {**decision, "revision": decision.get("revision", 1)},
+        })
+    return candidates
 
 
 def _resolved_ref(session: Session, project_id: str, candidate: dict[str, Any], reference: dict[str, Any]) -> bool:
@@ -233,6 +336,8 @@ def get_opportunity_workspace(project_id: str, session: Session) -> dict[str, An
                     "decision": saved.get(candidate_key)}
     for candidate_key, decision in saved.items():
         if candidate_key not in candidates and isinstance(decision, dict):
+            if candidate_key.startswith("context:"):
+                continue
             dataset = _dataset_for_workspace(session, project_id, str(decision.get("dataset_id") or ""))
             source_id = decision.get("source_entity_id")
             source_available = bool(dataset and dataset.content_sha256 == decision.get("dataset_content_sha256")
@@ -249,6 +354,8 @@ def get_opportunity_workspace(project_id: str, session: Session) -> dict[str, An
                 "source_available": source_available, "stale": not source_available, "stale_reasons": reasons,
                 "quantitative_evidence": [_evidence(row, dataset) for row in historical_rows] if dataset else [],
                 "decision": decision}
+    for item in _context_decision_candidates(session, project_id, saved):
+        candidates[item["candidate_id"]] = item
     for candidate in candidates.values():
         gaps: list[str] = []
         if candidate.get("stale"):
@@ -296,11 +403,20 @@ def save_opportunity_decision(project_id: str, payload: OpportunityDecisionUpdat
     prior = {**(decision_row.decision_json or {}), "revision": decision_row.revision} if decision_row else None
     context = state.get("selected_app_context")
     dataset: QuantitativeDataset | None = None
+    target = payload.decision_target.model_dump(exclude_none=True) if payload.decision_target else None
     is_active = bool(isinstance(context, dict) and context.get("dataset_id") == payload.dataset_id and
                      payload.source_entity_id in context.get("source_entity_ids", []))
     if payload.dataset_id:
         dataset = _dataset_for_workspace(session, project_id, payload.dataset_id)
-    if is_active:
+    target_name = _decision_target_name(session, project_id, target) if target else None
+    if target:
+        if payload.dataset_id or payload.source_entity_id:
+            raise HTTPException(422, detail={"code": "MIXED_DECISION_TARGET", "message": "Choose either a saved research target or a CSV product for one PO decision."})
+        if payload.candidate_id != _decision_target_candidate_id(target):
+            raise HTTPException(422, detail={"code": "DECISION_TARGET_ID_MISMATCH", "message": "The PO decision target does not match its saved identity."})
+        if target_name is None:
+            raise HTTPException(409, detail={"code": "DECISION_TARGET_STALE", "message": "The selected report, subject, or update no longer resolves in this project. The saved decision was not changed."})
+    elif is_active:
         if dataset is None or dataset.content_sha256 != payload.dataset_content_sha256 or context.get("dataset_content_sha256") != dataset.content_sha256:
             raise HTTPException(409, detail={"code": "STALE_CANDIDATE_SOURCE", "message": "The selected source file has changed or is no longer available. Refresh the workspace before saving."})
         if not _source_rows(dataset, payload.source_entity_id):
@@ -324,6 +440,21 @@ def save_opportunity_decision(project_id: str, payload: OpportunityDecisionUpdat
     existing = prior or {}
     candidate_name = existing.get("candidate_name") or (next((row.get("source_entity_name") or row.get("entity_name") for row in _source_rows(dataset, payload.source_entity_id) if row.get("source_entity_name") or row.get("entity_name")), payload.source_entity_id) if dataset else payload.source_entity_id)
     record = payload.model_dump(mode="json", exclude={"expected_revision"})
+    if target:
+        candidate_name = target_name or candidate_name
+        record["decision_target"] = target
+    revision_history = existing.get("revision_history", [])
+    if not isinstance(revision_history, list):
+        revision_history = []
+    if decision_row is not None:
+        previous = dict(decision_row.decision_json or {})
+        previous.pop("revision_history", None)
+        revision_history = [*revision_history, {
+            "revision": decision_row.revision,
+            "saved_at": previous.get("updated_at"),
+            "snapshot": previous,
+        }]
+    record["revision_history"] = revision_history
     record.update({"candidate_name": candidate_name, "dataset_filename": dataset.filename if dataset else existing.get("dataset_filename", "Source file unavailable"),
                    "selection_reason": context.get("selection_criterion") if is_active and isinstance(context, dict) else existing.get("selection_reason", "Previously assessed candidate"),
                    "updated_at": datetime.now(timezone.utc).isoformat()})

@@ -61,6 +61,48 @@ describe('OpportunityReview', () => {
     expect(screen.getByText(/Reports are not matched by product name/i)).toBeTruthy();
   });
 
+  it('opens a report finding PO decision from its explicit contextual link', async () => {
+    const result = structuredClone(workspace);
+    result.candidates.push({
+      candidate_id: 'context:report-finding', name: 'Users value simplicity', source_entity_id: null,
+      dataset_id: null, dataset_content_sha256: null, dataset_filename: 'Research report',
+      selection_reason: 'How do users choose?', target_kind: 'report_finding',
+      decision_target: { kind: 'report_finding', target_id: 'finding-1', report_id: 'report-1',
+        report_content_sha256: 'b'.repeat(64), item_key: 'finding-1' },
+      stale: false, stale_reasons: [], evidence_gaps: [], quantitative_evidence: [], decision: null,
+      resolved_decision_evidence: [], unresolved_decision_evidence: [],
+    });
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(result);
+    window.history.replaceState({}, '', '/research?projectId=workspace-1&view=opportunities&decisionKind=report_finding&decisionReportId=report-1&decisionReportHash=' + 'b'.repeat(64) + '&decisionItemKey=finding-1');
+    render(<OpportunityReview projectId="workspace-1" />);
+    expect(await screen.findByRole('heading', { name: 'Users value simplicity' })).toBeTruthy();
+    expect(screen.getByText('REPORT FINDING')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Assess this finding directly.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].decision_target).toEqual(result.candidates[1].decision_target);
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('shows prior PO decision versions without exposing raw decision JSON', async () => {
+    const result = structuredClone(workspace);
+    result.candidates[0].decision = {
+      candidate_id: result.candidates[0].candidate_id, expected_revision: 2, revision: 2,
+      dataset_id: 'dataset-1', dataset_content_sha256: 'a'.repeat(64), source_entity_id: 'provider:alpha',
+      decision_status: 'investigate', rationale: 'Current rationale.', supporting_evidence: [], contradictory_evidence: [],
+      open_questions: [], assessments: [], priority: 'medium', review_date: null, next_action: 'Current action.',
+      revision_history: [{ revision: 1, saved_at: '2026-10-26T10:00:00Z', snapshot: {
+        rationale: 'Earlier PO rationale.', decision_status: 'hold', next_action: 'Review source context.' } }],
+    };
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(result);
+    render(<OpportunityReview projectId="workspace-1" />);
+    expect(await screen.findByDisplayValue('Current rationale.')).toBeTruthy();
+    fireEvent.click(screen.getByText('Previous decision versions (1)'));
+    expect(screen.getByText('Earlier PO rationale.')).toBeTruthy();
+    expect(screen.getByText(/Decision: Hold · Next action: Review source context./)).toBeTruthy();
+    expect(screen.queryByText(/\{"candidate_id"/)).toBeNull();
+  });
+
   it('reopens saved evidence references when the API includes nullable optional fields', async () => {
     const reference = { kind: 'quantitative' as const, dataset_id: 'dataset-1', source_entity_id: 'provider:alpha',
       source_row_number: 2, metric_id: 'downloads_absolute', report_id: null, report_content_sha256: null, item_key: null };

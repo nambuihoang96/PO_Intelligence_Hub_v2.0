@@ -155,7 +155,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
       </div>
       {profileId === subject.id && <section className="research-subject-profile" aria-label={`${subject.name} profile`}>
         <div className="research-subject-profile-summary"><div><h4>{subject.name}</h4><p>{subject.subject_type || 'Type not specified'} · {linkedSources.length} linked source{linkedSources.length === 1 ? '' : 's'} · {subjectCollections.length} collection{subjectCollections.length === 1 ? '' : 's'} · {savedSections.length} saved analysis section{savedSections.length === 1 ? '' : 's'}</p></div>
-          <nav aria-label={`${subject.name} related workspace sections`}><a href="#project-trend-updates">Trend updates</a><a href="#project-image-evidence">Image evidence</a><a href="#project-benchmark-collections">Collections</a></nav></div>
+          <nav aria-label={`${subject.name} related workspace sections`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Review PO decision</a><a href="#project-trend-updates">Trend updates</a><a href="#project-image-evidence">Image evidence</a><a href="#project-benchmark-collections">Collections</a></nav></div>
         <div className="research-subject-profile-details"><p><strong>Aliases:</strong> {subject.aliases.length ? subject.aliases.join(', ') : 'None supplied'}</p>
           <p><strong>External identifiers:</strong> {subject.external_ids.length ? 'Available in source details' : 'None supplied'}</p>
           <details><summary>Source identity details</summary><ul>
@@ -210,7 +210,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
             const availableSubjects = subjects.filter((subject) => !memberIds.has(subject.id));
             const selectedSubject = collectionSubjectDrafts[collection.id] ?? '';
             return <article className="research-benchmark-collection" key={collection.id}>
-              <header><div><strong>{collection.name}</strong><small>{collection.members.length} subject{collection.members.length === 1 ? '' : 's'} · project collection</small>{collection.description && <p>{collection.description}</p>}</div></header>
+              <header><div><strong>{collection.name}</strong><small>{collection.members.length} subject{collection.members.length === 1 ? '' : 's'} · project collection</small>{collection.description && <p>{collection.description}</p>}<a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=collection&decisionTargetId=${encodeURIComponent(collection.id)}`}>Review PO decision for this collection</a></div></header>
               {collection.members.length ? <ul>{collection.members.map((member) => <li key={member.subject_id}>
                 <div><strong>{member.name}</strong><small>{member.subject_type || 'Type not specified'} · {member.source_count} linked input{member.source_count === 1 ? '' : 's'} ({member.report_source_count} reports, {member.csv_source_count} CSVs, {member.trend_update_count} trend updates)</small></div>
                 <button type="button" className="text-button" disabled={busy === `${collection.id}:${member.subject_id}`} onClick={() => void updateCollectionMember(collection, member.subject_id, false)}>Remove from collection</button>

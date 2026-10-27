@@ -152,13 +152,22 @@ export type OpportunityAssessment = {
   evidence_refs: OpportunityEvidenceReference[];
 };
 
+export type OpportunityDecisionTarget = {
+  kind: 'project' | 'report_finding' | 'report_entity' | 'subject' | 'collection' | 'trend_update';
+  target_id: string;
+  report_id?: string;
+  report_content_sha256?: string;
+  item_key?: string;
+};
+
 export type OpportunityDecision = {
   candidate_id: string;
   expected_revision?: number;
   revision?: number;
   dataset_id: string | null;
   dataset_content_sha256: string | null;
-  source_entity_id: string;
+  source_entity_id: string | null;
+  decision_target?: OpportunityDecisionTarget | null;
   decision_status: 'investigate' | 'benchmark' | 'experiment' | 'implementation_candidate' | 'hold' | 'reject' | null;
   rationale: string;
   supporting_evidence: OpportunityEvidenceReference[];
@@ -172,12 +181,15 @@ export type OpportunityDecision = {
   dataset_filename?: string;
   selection_reason?: string;
   updated_at?: string;
+  revision_history?: { revision: number; saved_at?: string | null; snapshot: Record<string, unknown> }[];
 };
 
 export type OpportunityCandidate = {
   candidate_id: string;
   name: string;
-  source_entity_id: string;
+  source_entity_id: string | null;
+  target_kind?: OpportunityDecisionTarget['kind'];
+  decision_target?: OpportunityDecisionTarget;
   dataset_id: string | null;
   dataset_content_sha256: string | null;
   dataset_filename: string;

@@ -94,6 +94,7 @@ export function TrendUpdatesPanel({ projectId }: { projectId: string }) {
         {update.source_title && <p className="trend-update-source-title">{update.source_title}</p>}
         <p className="trend-update-source-note">{update.source_note}</p>
         {update.source_url && <a href={update.source_url} target="_blank" rel="noopener noreferrer">Open supplied source link</a>}
+        <a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=trend_update&decisionTargetId=${encodeURIComponent(update.id)}`}>Review PO decision</a>
       </article>)}
       {nextCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>Load more updates</button>}
     </div>
