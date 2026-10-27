@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from alembic import command
 from alembic.config import Config
-from fastapi import Response
+from fastapi import HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ from backend.app.opportunities import get_opportunity_workspace, save_opportunit
 from backend.app.dataset_metadata import effective_observations, metadata_group
 from backend.app.quantitative_comparisons import list_comparison_datasets
 from backend.app.quantitative_comparisons import _observation_usable
-from backend.app.reports import import_report
+from backend.app.reports import import_report, list_reports
 from backend.app.schemas import ImportedReportCreate, OpportunityDecisionUpdate, QuantitativeDatasetImport, ResearchWorkspaceStateUpdate
 from backend.app.workspace_data import (
     import_workspace_dataset,
@@ -192,6 +192,79 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         ), Response(), self.session)
         page = list_workspace_reports(self.project.id, self.session, limit=20)
         self.assertEqual({item.id for item in page.items}, {report.id, attached_report.id})
+
+    def test_reports_library_and_project_filters_share_records_and_linking_preserves_report_data(self) -> None:
+        project_b = ResearchProject(name="Project B")
+        self.session.add(project_b)
+        self.session.flush()
+        project_a_reports = [ImportedResearchReport(
+            id=f"project-a-report-{index}", project_id=self.project.id,
+            question=f"Project A report {index}", geo="Worldwide", os="Web", research_period="2026",
+            content=f"Original report content A{index}", research_data_json={"findings": [{"key": f"a{index}"}]},
+            parse_status="PARSED", extraction_error=None,
+            benchmark_selections_json=[{"item_type": "entity", "item_key": f"a{index}"}],
+            benchmark_workspace_json={"custom_dimensions": [], "entries": [{"item_type": "entity", "item_key": f"a{index}", "notes": "Keep A note"}]},
+            content_sha256=f"{index + 2000:064x}", origin="chatgpt_user_import",
+        ) for index in range(1, 4)]
+        project_b_reports = [ImportedResearchReport(
+            id=f"project-b-report-{index}", project_id=project_b.id,
+            question=f"Project B report {index}", geo="VN", os="Unknown", research_period="2026",
+            content=f"Original report content B{index}", research_data_json={"entities": [{"key": f"b{index}"}]},
+            parse_status="PARSED", extraction_error=None, benchmark_selections_json=[],
+            benchmark_workspace_json={"custom_dimensions": [], "entries": []},
+            content_sha256=f"{index + 3000:064x}", origin="chatgpt_user_import",
+        ) for index in range(1, 3)]
+        self.session.add_all([*project_a_reports, *project_b_reports])
+        self.session.commit()
+
+        library = list_reports(self.session, limit=20)
+        project_a = list_workspace_reports(self.project.id, self.session, limit=20)
+        project_b_page = list_workspace_reports(project_b.id, self.session, limit=20)
+        self.assertEqual(len(library.items), 5)
+        self.assertEqual({item.id for item in project_a.items}, {report.id for report in project_a_reports})
+        self.assertEqual({item.id for item in project_b_page.items}, {report.id for report in project_b_reports})
+        self.assertEqual({item.id for item in library.items}, {item.id for item in [*project_a.items, *project_b_page.items]})
+
+        legacy = ImportedResearchReport(
+            id="legacy-unassigned-report", project_id=None, question="Historical report without a project",
+            geo="US", os="Android", research_period="2025", content="Original report must remain byte-for-byte unchanged",
+            research_data_json={"findings": [{"key": "legacy-finding"}]}, parse_status="PARSED", extraction_error=None,
+            benchmark_selections_json=[{"item_type": "finding", "item_key": "legacy-finding"}],
+            benchmark_workspace_json={"custom_dimensions": [], "entries": [{"item_type": "finding", "item_key": "legacy-finding", "notes": "Historical PO note"}]},
+            content_sha256="f" * 64, origin="chatgpt_user_import",
+        )
+        self.session.add(legacy)
+        self.session.commit()
+        stored_before = {
+            "content": legacy.content,
+            "content_sha256": legacy.content_sha256,
+            "research_data_json": legacy.research_data_json,
+            "benchmark_selections_json": legacy.benchmark_selections_json,
+            "benchmark_workspace_json": legacy.benchmark_workspace_json,
+        }
+
+        linked = link_report(self.project.id, legacy.id, self.session)
+        self.assertEqual(linked.id, legacy.id)
+        self.assertEqual(linked.project_id, self.project.id)
+        self.assertEqual({
+            "content": linked.content,
+            "content_sha256": linked.content_sha256,
+            "research_data_json": linked.research_data_json,
+            "benchmark_selections_json": linked.benchmark_selections_json,
+            "benchmark_workspace_json": linked.benchmark_workspace_json,
+        }, stored_before)
+        self.session.expire_all()
+        reopened = self.session.get(ImportedResearchReport, legacy.id)
+        self.assertIsNotNone(reopened)
+        self.assertEqual(reopened.project_id, self.project.id)
+        self.assertEqual(reopened.content, stored_before["content"])
+        self.assertEqual(reopened.benchmark_workspace_json, stored_before["benchmark_workspace_json"])
+        self.assertEqual(len(list_reports(self.session, limit=20).items), 6)
+        self.assertEqual(len(list_workspace_reports(self.project.id, self.session, limit=20).items), 4)
+        with self.assertRaises(HTTPException) as conflict:
+            link_report(project_b.id, legacy.id, self.session)
+        self.assertEqual(conflict.exception.status_code, 409)
+        self.assertEqual(self.session.get(ImportedResearchReport, legacy.id).project_id, self.project.id)
 
     def test_opportunity_decision_resolves_real_workspace_observation_and_survives_new_shortlist(self) -> None:
         imported = import_workspace_dataset(self.project.id, self.csv_payload(), Response(), self.session)

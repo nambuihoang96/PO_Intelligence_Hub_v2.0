@@ -62,6 +62,80 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByText('No reports match these filters.')).toBeTruthy();
   });
 
+  it('shows the same five reports from the shared library and filters three for Project A and two for Project B', async () => {
+    const projects = [
+      { id: 'project-a', name: 'Project A', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' },
+      { id: 'project-b', name: 'Project B', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' },
+    ];
+    const reports = [
+      ...[1, 2, 3].map((index) => ({ ...report, id: `a-${index}`, question: `Project A report ${index}`, project_id: 'project-a' })),
+      ...[1, 2].map((index) => ({ ...report, id: `b-${index}`, question: `Project B report ${index}`, project_id: 'project-b' })),
+    ];
+    mockFetch((url) => {
+      if (url.includes('/api/v1/reports?')) return { items: reports, next_cursor: null, limit: 10 };
+      if (url.includes('/api/v1/projects?')) return { items: projects, next_cursor: null, limit: 20 };
+      if (url.includes('/api/v1/projects/project-a/plans') || url.includes('/api/v1/projects/project-b/plans')) return { items: [], next_cursor: null, limit: 100 };
+      if (url.includes('/api/v1/projects/project-a') || url.includes('/api/v1/projects/project-b')) return projects.find((item) => url.includes(item.id));
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ReportHistory />);
+    expect(await screen.findByText('5 reports')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Project A report 1/ }).getAttribute('href')).toBe('/reports/a-1');
+
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-a' } });
+    expect(await screen.findByText('3 reports')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Project A report 1/ }).getAttribute('href')).toBe('/reports/a-1');
+    expect(screen.getByRole('link', { name: /Project A report 3/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Project B report 1/ })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-b' } });
+    expect(await screen.findByText('2 reports')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Project B report 2/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Project A report 1/ })).toBeNull();
+  });
+
+  it('explicitly links an unassigned report to the selected project without changing its report ID', async () => {
+    const unassigned = { ...report, id: 'legacy-unassigned', question: 'Historical report without a project', project_id: null };
+    const projects = [
+      { id: 'project-a', name: 'Project A', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' },
+      { id: 'project-b', name: 'Project B', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' },
+    ];
+    const fetchMock = mockFetch((url, init) => {
+      if (url.includes('/api/v1/reports?')) return { items: [unassigned], next_cursor: null, limit: 10 };
+      if (url.includes('/api/v1/projects?')) return { items: projects, next_cursor: null, limit: 20 };
+      if (url.includes('/api/v1/projects/project-a/reports/legacy-unassigned') && init.method === 'PUT') return { ...unassigned, project_id: 'project-a' };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ReportHistory />);
+    expect(await screen.findByText('1 report')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'unassigned' } });
+    expect(await screen.findByText('1 report')).toBeTruthy();
+    expect(screen.getByText('Not linked to a project workspace')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Historical report without a project/ }).getAttribute('href')).toBe('/reports/legacy-unassigned?from=unassigned');
+    fireEvent.change(screen.getByLabelText('Choose project for Historical report without a project'), { target: { value: 'project-a' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Link to project' }));
+    expect(await screen.findByText(/is now linked to Project A/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-a/reports/legacy-unassigned', expect.objectContaining({ method: 'PUT' }));
+    expect(screen.getByText('No reports match these filters.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-a' } });
+    expect(await screen.findByText('1 report')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Historical report without a project/ }).getAttribute('href')).toBe('/reports/legacy-unassigned');
+  });
+
+  it('keeps the project filter in report breadcrumb and back navigation', async () => {
+    const linked = { ...report, project_id: 'project-a' };
+    mockFetch((url) => {
+      if (url.includes('/api/v1/reports/saved-report')) return linked;
+      if (url.includes('/api/v1/projects/project-a')) return { id: 'project-a', name: 'Project A', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' };
+      if (url.includes('/api/v1/projects/project-a/plans')) return { items: [], next_cursor: null, limit: 100 };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: report.question });
+    expect(screen.getByRole('link', { name: '← Back to Reports' }).getAttribute('href')).toBe('/reports?projectId=project-a');
+    expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports?projectId=project-a');
+  });
+
   it('copies the prompt for ChatGPT without calling an AI service', async () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     const writeText = vi.fn().mockResolvedValue(undefined);

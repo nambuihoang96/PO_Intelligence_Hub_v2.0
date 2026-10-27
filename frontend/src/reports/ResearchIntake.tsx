@@ -259,7 +259,14 @@ export function ReportHistory() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [projects, setProjects] = useState<ResearchProject[]>([]);
   const [query, setQuery] = useState('');
-  const [projectFilter, setProjectFilter] = useState(new URLSearchParams(window.location.search).get('projectId') || 'all');
+  const [projectFilter, setProjectFilter] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('unassigned') === '1' ? 'unassigned' : params.get('projectId') || 'all';
+  });
+  const [linkTargets, setLinkTargets] = useState<Record<string, string>>({});
+  const [linkingReportId, setLinkingReportId] = useState<string | null>(null);
+  const [linkErrors, setLinkErrors] = useState<Record<string, string>>({});
+  const [linkNotice, setLinkNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -281,14 +288,40 @@ export function ReportHistory() {
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return reports.filter((report) => (projectFilter === 'all' || report.project_id === projectFilter)
+    return reports.filter((report) => (projectFilter === 'all' || (projectFilter === 'unassigned' ? !report.project_id : report.project_id === projectFilter))
       && (!needle || `${report.question} ${report.geo} ${report.os} ${report.research_period ?? ''} ${projectNames.get(report.project_id ?? '') ?? ''}`.toLocaleLowerCase().includes(needle)));
   }, [reports, projectFilter, query, projectNames]);
   const scopedProject = projects.find((project) => project.id === projectFilter);
+  function changeProjectFilter(value: string) {
+    setProjectFilter(value);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('projectId');
+    url.searchParams.delete('unassigned');
+    if (value === 'unassigned') url.searchParams.set('unassigned', '1');
+    else if (value !== 'all') url.searchParams.set('projectId', value);
+    window.history.replaceState({}, '', url);
+  }
+  async function linkReport(report: ReportSummary) {
+    const projectId = linkTargets[report.id];
+    if (!projectId || report.project_id || linkingReportId) return;
+    setLinkingReportId(report.id);
+    setLinkErrors((current) => ({ ...current, [report.id]: '' }));
+    setLinkNotice('');
+    try {
+      const linked = await reportApi.linkReportToProject(projectId, report.id);
+      setReports((current) => current.map((item) => item.id === linked.id ? { ...item, project_id: linked.project_id } : item));
+      setLinkTargets((current) => ({ ...current, [report.id]: '' }));
+      setLinkNotice(`“${recentTitle(report)}” is now linked to ${projectNames.get(projectId) ?? 'the selected project'}. The same report remains in the library.`);
+    } catch (reason) {
+      setLinkErrors((current) => ({ ...current, [report.id]: reason instanceof Error ? reason.message : 'Could not link this report. Please retry.' }));
+    } finally {
+      setLinkingReportId(null);
+    }
+  }
   return <div className="report-library-page">{scopedProject && <ProjectJourneyNav projectId={scopedProject.id} active="report" />}
     <section className="research-panel report-history-page"><div className="panel-heading"><div><span className="field-label">REPORT LIBRARY</span><h2>Saved research reports</h2><p>Search reports and open the project workspace they inform.</p></div><a className="primary-action" href={scopedProject ? `/?projectId=${encodeURIComponent(scopedProject.id)}` : '/research'}>{scopedProject ? 'Import report' : 'Choose a project to import'}</a></div>
-      <div className="report-library-filters"><label className="field-label" htmlFor="report-search">Search reports<input id="report-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Question, GEO, environment, or project" /></label><label className="field-label" htmlFor="report-project-filter">Project<select id="report-project-filter" value={projectFilter} onChange={(event) => { setProjectFilter(event.target.value); const url = new URL(window.location.href); event.target.value === 'all' ? url.searchParams.delete('projectId') : url.searchParams.set('projectId', event.target.value); window.history.replaceState({}, '', url); }}><option value="all">All projects</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label></div>
-      {error && <div className="research-alert" role="alert">{error}</div>}{loading && <p role="status">Loading reports…</p>}{!loading && reports.length === 0 ? <p>No reports have been imported yet.</p> : !loading && filtered.length === 0 ? <p>No reports match these filters.</p> : <div className="report-history-list">{filtered.map((report) => <article className="report-library-row" key={report.id}><a className="report-history-row" href={`/reports/${report.id}`}><span className="report-history-copy"><strong>{recentTitle(report)}</strong><small>{report.geo} · {report.os} · {report.research_period || 'Period not specified'}</small></span><span className="report-date">{new Date(report.imported_at).toLocaleString()}</span><span aria-hidden="true">→</span></a><div className="report-project-link">{report.project_id && projectNames.has(report.project_id) ? <a href={`/research?projectId=${encodeURIComponent(report.project_id)}&view=opportunities`}>Workspace decisions · {projectNames.get(report.project_id)}</a> : <span>Not linked to a project workspace</span>}</div></article>)}</div>}
+      <div className="report-library-filters"><label className="field-label" htmlFor="report-search">Search reports<input id="report-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Question, GEO, environment, or project" /></label><label className="field-label" htmlFor="report-project-filter">Project<select id="report-project-filter" value={projectFilter} onChange={(event) => changeProjectFilter(event.target.value)}><option value="all">All reports</option><option value="unassigned">Unassigned reports</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label></div>
+      {error && <div className="research-alert" role="alert">{error}</div>}{linkNotice && <div className="research-success" role="status">{linkNotice}</div>}{loading && <p role="status">Loading reports…</p>}{!loading && reports.length === 0 ? <p>No reports have been imported yet.</p> : !loading && filtered.length === 0 ? <p>No reports match these filters.</p> : <><p className="report-library-count" role="status">{filtered.length} {filtered.length === 1 ? 'report' : 'reports'}</p><div className="report-history-list">{filtered.map((report) => <article className="report-library-row" key={report.id}><a className="report-history-row" href={`/reports/${report.id}${projectFilter === 'unassigned' ? '?from=unassigned' : ''}`}><span className="report-history-copy"><strong>{recentTitle(report)}</strong><small>{report.geo} · {report.os} · {report.research_period || 'Period not specified'}</small></span><span className="report-date">{new Date(report.imported_at).toLocaleString()}</span><span aria-hidden="true">→</span></a><div className="report-project-link">{report.project_id && projectNames.has(report.project_id) ? <a href={`/research?projectId=${encodeURIComponent(report.project_id)}&view=opportunities`}>Workspace decisions · {projectNames.get(report.project_id)}</a> : report.project_id ? <span>Linked to project {report.project_id}</span> : <><span>Not linked to a project workspace</span><div className="report-link-controls"><label className="sr-only" htmlFor={`link-report-${report.id}`}>Choose project for {recentTitle(report)}</label><select id={`link-report-${report.id}`} value={linkTargets[report.id] ?? ''} disabled={Boolean(linkingReportId)} onChange={(event) => setLinkTargets((current) => ({ ...current, [report.id]: event.target.value }))}><option value="">Choose project…</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select><button className="secondary-action" type="button" disabled={!linkTargets[report.id] || Boolean(linkingReportId)} onClick={() => void linkReport(report)}>{linkingReportId === report.id ? 'Linking…' : 'Link to project'}</button></div>{linkErrors[report.id] && <span className="report-link-error" role="alert">{linkErrors[report.id]}</span>}</>}</div></article>)}</div></>}
       <a className="text-button" href="/research">← Back to Research</a>
     </section>
   </div>;

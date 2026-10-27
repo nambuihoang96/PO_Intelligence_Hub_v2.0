@@ -1564,6 +1564,10 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
 .report-project-link { padding: 0 12px 4px; font-size: 13px; }
 .report-project-link a { color: #175da9; }
 .report-project-link span { color: #718096; }
+.report-library-count { margin: 0 0 8px; color: #5d6e83; font-size: 14px; }
+.report-link-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.report-link-controls select { min-width: min(240px, 100%); max-width: 100%; padding: 8px 10px; border: 1px solid #d3dde8; border-radius: 8px; background: #fff; color: #243b53; font: inherit; }
+.report-link-error { display: block; margin-top: 6px; color: #a52822 !important; }
 .tracking-pending { display: grid; justify-items: start; gap: 10px; padding: 24px; }
 .tracking-pending h2 { margin: 0; }
 .tracking-pending p { max-width: 760px; margin: 0; color: #5f7188; line-height: 1.55; }
