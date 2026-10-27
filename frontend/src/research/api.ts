@@ -93,6 +93,33 @@ export type ProjectTrendUpdate = ProjectTrendUpdateCreate & {
   created_at: string;
 };
 
+export type ProjectImageEvidence = {
+  id: string;
+  project_id: string;
+  subject_id: string;
+  subject_name: string;
+  trend_update_id: string | null;
+  filename: string;
+  content_type: 'image/jpeg' | 'image/png' | 'image/webp';
+  content_size: number;
+  content_sha256: string;
+  source_note: string;
+  source_title: string | null;
+  source_url: string | null;
+  published_on: string | null;
+  source_status: 'source_reported_unverified';
+  content_url: string;
+  created_at: string;
+};
+
+export type ProjectImageEvidenceUpload = {
+  source_note?: string;
+  source_title?: string;
+  source_url?: string;
+  published_on?: string;
+  trend_update_id?: string;
+};
+
 export type ShortlistContext = {
   dataset_id: string;
   dataset_filename: string;
@@ -335,6 +362,32 @@ export const researchApi = {
   },
   createTrendUpdate(projectId: string, payload: ProjectTrendUpdateCreate): Promise<ProjectTrendUpdate> {
     return request(`/projects/${encodeURIComponent(projectId)}/trend-updates`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  listImageEvidence(projectId: string, options: { cursor?: string; limit?: number; subject_id?: string } = {}): Promise<Page<ProjectImageEvidence>> {
+    const params = new URLSearchParams();
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.limit) params.set('limit', String(options.limit));
+    if (options.subject_id) params.set('subject_id', options.subject_id);
+    const queryString = params.toString();
+    return request(`/projects/${encodeURIComponent(projectId)}/image-evidence${queryString ? `?${queryString}` : ''}`);
+  },
+  async uploadImageEvidence(projectId: string, subjectId: string, file: File, options: ProjectImageEvidenceUpload): Promise<ProjectImageEvidence> {
+    const params = new URLSearchParams({ filename: file.name });
+    for (const [key, value] of Object.entries(options)) if (value) params.set(key, value);
+    let response: Response;
+    try {
+      response = await fetch(`${API_ROOT}/projects/${encodeURIComponent(projectId)}/subjects/${encodeURIComponent(subjectId)}/image-evidence?${params.toString()}`, {
+        method: 'POST', headers: { 'Content-Type': file.type }, body: file,
+      });
+    } catch {
+      throw new ApiError('The local API could not be reached. Check that the backend is running, then retry.', 0, 'NETWORK_ERROR', {});
+    }
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as ErrorEnvelope;
+      const error = body.error ?? {};
+      throw new ApiError(error.message ?? `The request failed (${response.status}).`, response.status, error.code ?? 'HTTP_ERROR', error.details ?? {});
+    }
+    return (await response.json()) as ProjectImageEvidence;
   },
   async getPlans(projectId: string): Promise<ResearchPlan[]> {
     const plans: ResearchPlan[] = [];

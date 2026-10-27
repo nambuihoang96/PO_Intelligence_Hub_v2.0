@@ -293,6 +293,31 @@ class ProjectTrendUpdatePage(APIModel):
     limit: int
 
 
+class ProjectImageEvidenceRead(APIModel):
+    id: str
+    project_id: str
+    subject_id: str
+    subject_name: str
+    trend_update_id: str | None
+    filename: str
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+    content_size: int
+    content_sha256: str
+    source_note: str
+    source_title: str | None
+    source_url: str | None
+    published_on: date | None
+    source_status: Literal["source_reported_unverified"]
+    content_url: str
+    created_at: datetime
+
+
+class ProjectImageEvidencePage(APIModel):
+    items: list[ProjectImageEvidenceRead]
+    next_cursor: str | None = None
+    limit: int
+
+
 class ResearchWorkspaceStateUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     selected_app_ids: list[str] = Field(default_factory=list, max_length=500)

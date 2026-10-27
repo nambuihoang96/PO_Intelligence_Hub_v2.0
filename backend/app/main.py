@@ -17,6 +17,7 @@ from backend.app.opportunities import router as opportunities_router
 from backend.app.subjects import router as subjects_router
 from backend.app.benchmark_collections import router as benchmark_collections_router
 from backend.app.trend_updates import router as trend_updates_router
+from backend.app.image_evidence import router as image_evidence_router
 
 
 @asynccontextmanager
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     application.include_router(subjects_router)
     application.include_router(benchmark_collections_router)
     application.include_router(trend_updates_router)
+    application.include_router(image_evidence_router)
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(HTTPException, http_error_handler)
 

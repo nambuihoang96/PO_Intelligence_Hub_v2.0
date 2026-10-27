@@ -1177,8 +1177,30 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .trend-update-source-title, .trend-update-source-note { margin: 0; color: #526782; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .trend-update-source-title { font-weight: 600; }
 .trend-update-item > a { width: fit-content; color: #145aa8; font-size: 14px; }
+.image-evidence-panel { display: grid; gap: 14px; min-width: 0; }
+.image-evidence-form input[type="file"] { padding: 6px; }
+.image-evidence-form input[type="file"]::file-selector-button { min-height: 30px; margin-right: 9px; padding: 5px 9px; border: 0; border-radius: 6px; background: #eaf1fa; color: #244666; font: inherit; cursor: pointer; }
+.image-evidence-preview { display: flex; align-items: center; gap: 12px; min-width: 0; color: #64758b; font-size: 14px; overflow-wrap: anywhere; }
+.image-evidence-preview img { width: 96px; height: 72px; border-radius: 8px; object-fit: contain; background: #eef2f7; }
+.image-evidence-linked-context { padding: 12px 14px; border-left: 3px solid #83aee2; border-radius: 6px; background: #f5f8fc; color: #435a75; }
+.image-evidence-linked-context strong { color: #263b54; }
+.image-evidence-linked-context p { margin: 5px 0; line-height: 1.5; }
+.image-evidence-linked-context span { color: #67798e; font-size: 13px; }
+.image-evidence-history { display: grid; gap: 10px; min-width: 0; }
+.image-evidence-history h4 { margin: 0; color: #233954; font-size: 16px; }
+.image-evidence-grid { display: grid; gap: 10px; min-width: 0; }
+.image-evidence-item { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 14px; min-width: 0; padding: 12px; border-radius: 9px; background: #fbfcfe; }
+.image-evidence-thumb { display: grid; width: 132px; min-height: 96px; place-items: center; overflow: hidden; border-radius: 7px; background: #edf1f6; }
+.image-evidence-thumb img { display: block; width: 100%; height: 100%; max-height: 150px; object-fit: contain; }
+.image-evidence-copy { display: grid; align-content: start; gap: 4px; min-width: 0; color: #5e7189; font-size: 13px; overflow-wrap: anywhere; }
+.image-evidence-copy strong { color: #263b54; font-size: 15px; }
+.image-evidence-copy p { margin: 3px 0; color: #435a75; font-size: 14px; line-height: 1.45; }
+.image-evidence-copy a { width: fit-content; color: #145aa8; }
+.image-evidence-copy details { margin-top: 3px; }
+.image-evidence-copy summary { cursor: pointer; }
+.image-evidence-copy code { display: block; max-width: 100%; overflow-wrap: anywhere; color: #64758b; }
 @media (max-width: 900px) { .trend-update-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .trend-update-form-grid { grid-template-columns: minmax(0, 1fr); } .trend-update-form-actions { align-items: stretch; flex-direction: column; } .trend-update-form-actions .primary-action { width: 100%; } }
+@media (max-width: 600px) { .trend-update-form-grid { grid-template-columns: minmax(0, 1fr); } .trend-update-form-actions { align-items: stretch; flex-direction: column; } .trend-update-form-actions .primary-action { width: 100%; } .image-evidence-item { grid-template-columns: minmax(0, 1fr); } .image-evidence-thumb { width: 100%; height: 180px; } }
 @media (max-width: 700px) { .research-subjects-panel > summary { align-items: flex-start; flex-direction: column; gap: 4px; } .research-subject-item, .research-subject-source, .research-benchmark-collection li { align-items: stretch; flex-direction: column; } .research-subject-source-actions { min-width: 0; justify-content: stretch; } .research-subject-source-actions > *, .research-collection-create > *, .research-collection-add > * { flex: 1 1 100%; } }
 @media (max-width: 900px) { .workspace-source-grid { grid-template-columns: minmax(0, 1fr); } .data-workspace-heading { align-items: flex-start; flex-direction: column; } .data-workspace-actions { justify-content: flex-start; } }
 @media (max-width: 600px) { .project-row-wrap { grid-template-columns: 1fr; } .project-data-link { justify-self: start; margin: 0 0 8px 54px; } .workspace-source-grid > .research-panel, .workspace-explorer { padding: 15px; } .workspace-link-report, .workspace-followup { align-items: stretch; flex-direction: column; } .workspace-app-table { min-width: 720px; } .workspace-app-table th, .workspace-app-table td { padding: 9px; } }

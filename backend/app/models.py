@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import (
+    LargeBinary,
     CheckConstraint,
     Date,
     DateTime,
@@ -136,6 +137,7 @@ class ProjectTrendUpdate(Base):
 
     __tablename__ = "project_trend_updates"
     __table_args__ = (
+        UniqueConstraint("project_id", "subject_id", "id", name="uq_project_trend_updates_project_subject_id"),
         ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
                              name="fk_project_trend_updates_project"),
         ForeignKeyConstraint(["project_id", "subject_id"], ["research_subjects.project_id", "research_subjects.id"],
@@ -156,6 +158,44 @@ class ProjectTrendUpdate(Base):
     source_title: Mapped[str | None] = mapped_column(String(500))
     source_url: Mapped[str | None] = mapped_column(String(2048))
     published_on: Mapped[date] = mapped_column(Date, nullable=False)
+    source_status: Mapped[str] = mapped_column(String(40), nullable=False, default="source_reported_unverified",
+                                               server_default="source_reported_unverified")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class ProjectImageEvidence(Base):
+    """Append-only local image attachment with an exact content hash and source context."""
+
+    __tablename__ = "project_image_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_project_image_evidence_project"),
+        ForeignKeyConstraint(["project_id", "subject_id"], ["research_subjects.project_id", "research_subjects.id"],
+                             ondelete="RESTRICT", name="fk_project_image_evidence_subject"),
+        ForeignKeyConstraint(["project_id", "subject_id", "trend_update_id"],
+                             ["project_trend_updates.project_id", "project_trend_updates.subject_id", "project_trend_updates.id"],
+                             ondelete="RESTRICT", name="fk_project_image_evidence_trend_update"),
+        CheckConstraint("source_status = 'source_reported_unverified'", name="ck_project_image_evidence_unverified"),
+        CheckConstraint("content_type IN ('image/jpeg','image/png','image/webp')", name="ck_project_image_evidence_type"),
+        CheckConstraint("content_size > 0 AND content_size <= 10485760", name="ck_project_image_evidence_size"),
+        CheckConstraint("length(content_sha256) = 64", name="ck_project_image_evidence_sha_length"),
+        Index("ix_project_image_evidence_subject_created", "project_id", "subject_id", "created_at"),
+        Index("ix_project_image_evidence_trend_update", "trend_update_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    trend_update_id: Mapped[str | None] = mapped_column(String(36))
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    source_note: Mapped[str] = mapped_column(Text, nullable=False)
+    source_title: Mapped[str | None] = mapped_column(String(500))
+    source_url: Mapped[str | None] = mapped_column(String(2048))
+    published_on: Mapped[date | None] = mapped_column(Date)
     source_status: Mapped[str] = mapped_column(String(40), nullable=False, default="source_reported_unverified",
                                                server_default="source_reported_unverified")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
