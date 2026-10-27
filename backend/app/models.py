@@ -131,6 +131,36 @@ class ResearchBenchmarkCollectionMember(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class ProjectTrendUpdate(Base):
+    """Append-only owner-captured trend claim with explicit project provenance."""
+
+    __tablename__ = "project_trend_updates"
+    __table_args__ = (
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_project_trend_updates_project"),
+        ForeignKeyConstraint(["project_id", "subject_id"], ["research_subjects.project_id", "research_subjects.id"],
+                             ondelete="RESTRICT", name="fk_project_trend_updates_subject"),
+        ForeignKeyConstraint(["project_id", "collection_id"], ["research_benchmark_collections.project_id", "research_benchmark_collections.id"],
+                             ondelete="RESTRICT", name="fk_project_trend_updates_collection"),
+        CheckConstraint("source_status = 'source_reported_unverified'", name="ck_project_trend_updates_unverified"),
+        Index("ix_project_trend_updates_project_published", "project_id", "published_on", "created_at"),
+        Index("ix_project_trend_updates_collection_subject", "project_id", "collection_id", "subject_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    collection_id: Mapped[str | None] = mapped_column(String(36))
+    exact_claim: Mapped[str] = mapped_column(Text, nullable=False)
+    source_note: Mapped[str] = mapped_column(Text, nullable=False)
+    source_title: Mapped[str | None] = mapped_column(String(500))
+    source_url: Mapped[str | None] = mapped_column(String(2048))
+    published_on: Mapped[date] = mapped_column(Date, nullable=False)
+    source_status: Mapped[str] = mapped_column(String(40), nullable=False, default="source_reported_unverified",
+                                               server_default="source_reported_unverified")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class POOpportunityDecision(Base):
     """PO-owned candidate decisions with optimistic concurrency, separate from imported research."""
 

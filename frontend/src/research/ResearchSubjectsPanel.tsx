@@ -126,17 +126,18 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
             return <article className="research-benchmark-collection" key={collection.id}>
               <header><div><strong>{collection.name}</strong><small>{collection.members.length} subject{collection.members.length === 1 ? '' : 's'} · project collection</small>{collection.description && <p>{collection.description}</p>}</div></header>
               {collection.members.length ? <ul>{collection.members.map((member) => <li key={member.subject_id}>
-                <div><strong>{member.name}</strong><small>{member.subject_type || 'Type not specified'} · {member.source_count} linked source{member.source_count === 1 ? '' : 's'} ({member.report_source_count} reports, {member.csv_source_count} CSVs)</small></div>
+                <div><strong>{member.name}</strong><small>{member.subject_type || 'Type not specified'} · {member.source_count} linked input{member.source_count === 1 ? '' : 's'} ({member.report_source_count} reports, {member.csv_source_count} CSVs, {member.trend_update_count} trend updates)</small></div>
                 <button type="button" className="text-button" disabled={busy === `${collection.id}:${member.subject_id}`} onClick={() => void updateCollectionMember(collection, member.subject_id, false)}>Remove from collection</button>
               </li>)}</ul> : <p>This collection is empty. Add confirmed subjects to start organizing a comparison.</p>}
               {collection.members.length > 0 && <details className="research-collection-matrix">
                 <summary>View source-backed comparison{collection.dimensions.length ? ` · ${collection.dimensions.length} supplied dimension${collection.dimensions.length === 1 ? '' : 's'}` : ''}</summary>
-                {collection.dimensions.length ? <div className="research-collection-matrix-scroll"><table><thead><tr><th scope="col">Subject</th>{collection.dimensions.map((dimension) => <th scope="col" key={dimension.key}>{dimension.name}<small>{dimension.source_kind === 'report_entity' ? 'Report-supplied' : 'CSV imported'}</small></th>)}</tr></thead>
+                {collection.dimensions.length ? <div className="research-collection-matrix-scroll"><table><thead><tr><th scope="col">Subject</th>{collection.dimensions.map((dimension) => <th scope="col" key={dimension.key}>{dimension.name}<small>{dimension.source_kind === 'report_entity' ? 'Report-supplied' : dimension.source_kind === 'trend_update' ? 'Source-reported updates' : 'CSV imported'}</small></th>)}</tr></thead>
                   <tbody>{collection.members.map((member) => <tr key={member.subject_id}><th scope="row">{member.name}</th>{collection.dimensions.map((dimension) => {
                     const values = member.observations.filter((observation) => observation.dimension_key === dimension.key);
                     return <td key={dimension.key}>{values.length ? values.map((observation, index) => <div className="research-collection-observation" key={`${observation.source_name}:${index}`}>
                       <strong>{observation.value === null || observation.value === undefined || observation.value === '' ? 'Unknown / Not provided' : String(observation.value)}{observation.unit ? ` ${observation.unit}` : ''}</strong>
-                      <small>{observation.source_name} · {observation.verification_status}</small>
+                      <small>{observation.source_name} · {observation.source_kind === 'trend_update' ? 'Source-reported · unverified' : observation.verification_status}</small>
+                      {observation.source_note && <small>Source note: {observation.source_note}</small>}
                       {Object.entries(observation.scope).filter(([, value]) => value !== null && value !== undefined && value !== '').map(([label, value]) => <small key={label}>{label}: {String(value)}</small>)}
                       {observation.evidence_status && <small>Evidence: {observation.evidence_status}</small>}
                       {observation.uncertainty && <small>Uncertainty: {observation.uncertainty}</small>}

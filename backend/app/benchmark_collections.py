@@ -14,6 +14,7 @@ from backend.app.models import (
     ResearchBenchmarkCollection,
     ResearchBenchmarkCollectionMember,
     ImportedResearchReport,
+    ProjectTrendUpdate,
     QuantitativeDataset,
     ResearchProject,
     ResearchSubject,
@@ -81,6 +82,11 @@ def _collection_read(session: Session, collection: ResearchBenchmarkCollection) 
         source_counts = counts.get(subject.id, {})
         report_count = source_counts.get("report_entity", 0)
         csv_count = source_counts.get("csv_entity", 0)
+        trend_updates = list(session.scalars(select(ProjectTrendUpdate).where(
+            ProjectTrendUpdate.project_id == collection.project_id,
+            ProjectTrendUpdate.collection_id == collection.id,
+            ProjectTrendUpdate.subject_id == subject.id,
+        ).order_by(ProjectTrendUpdate.published_on, ProjectTrendUpdate.created_at, ProjectTrendUpdate.id)))
         references = list(session.scalars(select(ResearchSubjectReference).where(
             ResearchSubjectReference.project_id == collection.project_id,
             ResearchSubjectReference.subject_id == subject.id,
@@ -154,9 +160,24 @@ def _collection_read(session: Session, collection: ResearchBenchmarkCollection) 
                         source_locations=locations,
                         validation_reasons=observation.get("validation_reasons") or observation.get("source_validation_reasons") or [],
                     ))
+        if trend_updates:
+            trend_dimension_key = f"trend:{collection.id}:source-reported-updates"
+            trend_dimension_name = "Trend updates (source-reported)"
+            dimension_by_key.setdefault(trend_dimension_key, ResearchBenchmarkCollectionDimensionRead(
+                key=trend_dimension_key, name=trend_dimension_name, source_kind="trend_update"))
+            for update in trend_updates:
+                observations.append(ResearchBenchmarkCollectionObservationRead(
+                    dimension_key=trend_dimension_key, dimension_name=trend_dimension_name, source_kind="trend_update",
+                    source_name=update.source_title or "Owner-captured source note", value=update.exact_claim,
+                    scope={"published date": update.published_on.isoformat()}, verification_status="unverified",
+                    evidence_status="Source-reported · unverified", source_note=update.source_note,
+                    uncertainty="Not independently verified. No period, GEO, platform, or measurement methodology is inferred.",
+                    evidence_references=[update.source_url] if update.source_url else [],
+                ))
         member_reads.append(ResearchBenchmarkCollectionMemberRead(
             subject_id=subject.id, name=subject.name, subject_type=subject.subject_type,
-            source_count=report_count + csv_count, report_source_count=report_count, csv_source_count=csv_count,
+            source_count=report_count + csv_count + len(trend_updates), report_source_count=report_count,
+            csv_source_count=csv_count, trend_update_count=len(trend_updates),
             observations=observations,
         ))
     return ResearchBenchmarkCollectionRead(

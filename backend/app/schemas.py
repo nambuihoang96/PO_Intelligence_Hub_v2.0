@@ -192,19 +192,21 @@ class ResearchBenchmarkCollectionMemberRead(APIModel):
     source_count: int
     report_source_count: int
     csv_source_count: int
+    trend_update_count: int = 0
     observations: list["ResearchBenchmarkCollectionObservationRead"] = Field(default_factory=list)
 
 
 class ResearchBenchmarkCollectionObservationRead(APIModel):
     dimension_key: str
     dimension_name: str
-    source_kind: Literal["report_entity", "csv_entity"]
+    source_kind: Literal["report_entity", "csv_entity", "trend_update"]
     source_name: str
     value: Any = None
     unit: str | None = None
     scope: dict[str, Any] = Field(default_factory=dict)
     verification_status: Literal["unverified", "needs_review", "verified"] = "unverified"
     evidence_status: str | None = None
+    source_note: str | None = None
     uncertainty: str | None = None
     evidence_references: list[str] = Field(default_factory=list)
     source_locations: list[str] = Field(default_factory=list)
@@ -214,7 +216,7 @@ class ResearchBenchmarkCollectionObservationRead(APIModel):
 class ResearchBenchmarkCollectionDimensionRead(APIModel):
     key: str
     name: str
-    source_kind: Literal["report_entity", "csv_entity"]
+    source_kind: Literal["report_entity", "csv_entity", "trend_update"]
 
 
 class ResearchBenchmarkCollectionRead(APIModel):
@@ -230,6 +232,63 @@ class ResearchBenchmarkCollectionRead(APIModel):
 
 class ResearchBenchmarkCollectionPage(APIModel):
     items: list[ResearchBenchmarkCollectionRead]
+    next_cursor: str | None = None
+    limit: int
+
+
+class ProjectTrendUpdateCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject_id: str = Field(min_length=1, max_length=36)
+    collection_id: str | None = Field(default=None, min_length=1, max_length=36)
+    exact_claim: str = Field(min_length=1, max_length=20_000)
+    source_note: str = Field(min_length=1, max_length=10_000)
+    source_title: str | None = Field(default=None, max_length=500)
+    source_url: str | None = Field(default=None, max_length=2048)
+    published_on: date
+
+    @field_validator("exact_claim", "source_note", "source_title", "source_url")
+    @classmethod
+    def strip_trend_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("exact_claim", "source_note")
+    @classmethod
+    def require_nonblank_trend_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError("This field must not be blank.")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def require_http_source_url(cls, value: str | None) -> str | None:
+        if value is None or not value:
+            return value
+        from urllib.parse import urlsplit
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Source URL must start with http:// or https://.")
+        return value
+
+
+class ProjectTrendUpdateRead(APIModel):
+    id: str
+    project_id: str
+    subject_id: str
+    subject_name: str
+    collection_id: str | None
+    collection_name: str | None
+    exact_claim: str
+    source_note: str
+    source_title: str | None
+    source_url: str | None
+    published_on: date
+    source_status: Literal["source_reported_unverified"]
+    created_at: datetime
+
+
+class ProjectTrendUpdatePage(APIModel):
+    items: list[ProjectTrendUpdateRead]
     next_cursor: str | None = None
     limit: int
 

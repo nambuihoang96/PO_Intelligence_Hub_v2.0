@@ -14,8 +14,8 @@ const source = (overrides: Partial<ResearchSubjectSource> = {}): ResearchSubject
   mapped_subject_name: null, source_state: 'available', ...overrides,
 });
 const page = <T,>(items: T[]) => ({ items, next_cursor: null, limit: 50 });
-const collection = (members: (Omit<ResearchBenchmarkCollection['members'][number], 'observations'> & { observations?: ResearchBenchmarkCollection['members'][number]['observations'] })[] = [], dimensions: ResearchBenchmarkCollection['dimensions'] = []): ResearchBenchmarkCollection => ({
-  id: 'collection-1', project_id: 'project-1', name: 'Shortlist', description: null, dimensions, members: members.map((member) => ({ ...member, observations: member.observations ?? [] })),
+const collection = (members: (Omit<ResearchBenchmarkCollection['members'][number], 'observations' | 'trend_update_count'> & { observations?: ResearchBenchmarkCollection['members'][number]['observations']; trend_update_count?: number })[] = [], dimensions: ResearchBenchmarkCollection['dimensions'] = []): ResearchBenchmarkCollection => ({
+  id: 'collection-1', project_id: 'project-1', name: 'Shortlist', description: null, dimensions, members: members.map((member) => ({ ...member, trend_update_count: member.trend_update_count ?? 0, observations: member.observations ?? [] })),
   created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z',
 });
 
@@ -77,11 +77,16 @@ describe('ResearchSubjectsPanel', () => {
     const collectionReads = vi.spyOn(researchApi, 'listBenchmarkCollections')
       .mockResolvedValueOnce(page<ResearchBenchmarkCollection>([]))
       .mockResolvedValueOnce(page([collection()]))
-      .mockResolvedValueOnce(page([collection([{ subject_id: saved.id, name: saved.name, subject_type: 'product', source_count: 2, report_source_count: 1, csv_source_count: 1, observations: [{
+      .mockResolvedValueOnce(page([collection([{ subject_id: saved.id, name: saved.name, subject_type: 'product', source_count: 3, report_source_count: 1, csv_source_count: 1, trend_update_count: 1, observations: [{
         dimension_key: 'csv:downloads', dimension_name: 'Downloads', source_kind: 'csv_entity', source_name: 'export.csv',
         value: 42, unit: 'downloads', scope: { GEO: 'US', platform: 'Android' }, verification_status: 'unverified',
-        evidence_status: null, uncertainty: null, evidence_references: ['https://example.org/source'], source_locations: ['CSV row 2'], validation_reasons: ['Original row has no confirmed period.', 'Metric value was imported without independent verification.'],
-      }] }], [{ key: 'csv:downloads', name: 'Downloads', source_kind: 'csv_entity' }])]))
+        evidence_status: null, source_note: null, uncertainty: null, evidence_references: ['https://example.org/source'], source_locations: ['CSV row 2'], validation_reasons: ['Original row has no confirmed period.', 'Metric value was imported without independent verification.'],
+      }, {
+        dimension_key: 'trend:collection-1:source-reported-updates', dimension_name: 'Trend updates (source-reported)', source_kind: 'trend_update', source_name: 'Owner note',
+        value: 'Exact source claim, unchanged.', unit: null, scope: { 'published date': '2026-10-21' }, verification_status: 'unverified',
+        evidence_status: 'Source-reported · unverified', source_note: 'Source context supplied by the owner.', uncertainty: 'Not independently verified.',
+        evidence_references: ['https://example.org/trend'], source_locations: [], validation_reasons: [],
+      }] }], [{ key: 'csv:downloads', name: 'Downloads', source_kind: 'csv_entity' }, { key: 'trend:collection-1:source-reported-updates', name: 'Trend updates (source-reported)', source_kind: 'trend_update' }])]))
       .mockResolvedValue(page([collection()]));
     const create = vi.spyOn(researchApi, 'createBenchmarkCollection').mockResolvedValue(collection());
     const add = vi.spyOn(researchApi, 'addBenchmarkCollectionSubject').mockResolvedValue(collection([{ subject_id: saved.id, name: saved.name, subject_type: 'product', source_count: 2, report_source_count: 1, csv_source_count: 1 }]));
@@ -96,12 +101,14 @@ describe('ResearchSubjectsPanel', () => {
     fireEvent.change(screen.getByLabelText('Choose a project subject to add to Shortlist'), { target: { value: saved.id } });
     fireEvent.click(screen.getByRole('button', { name: 'Add subject' }));
     await waitFor(() => expect(add).toHaveBeenCalledWith('project-1', 'collection-1', saved.id));
-    await screen.findByText(/2 linked sources \(1 reports, 1 CSVs\)/);
+    await screen.findByText(/3 linked inputs \(1 reports, 1 CSVs, 1 trend updates\)/);
     fireEvent.click(screen.getByText(/View source-backed comparison/));
     expect(screen.getByText('42 downloads')).toBeTruthy();
     expect(screen.getByText('GEO: US')).toBeTruthy();
     expect(screen.getByText('CSV row 2')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open source' }).getAttribute('href')).toBe('https://example.org/source');
+    expect(screen.getByText('Exact source claim, unchanged.')).toBeTruthy();
+    expect(screen.getByText('Source note: Source context supplied by the owner.')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Open source' }).map((link) => link.getAttribute('href'))).toEqual(['https://example.org/source', 'https://example.org/trend']);
     const validationDetails = screen.getByText('Validation details · 2').closest('details');
     expect(validationDetails?.open).toBe(false);
     fireEvent.click(screen.getByText('Validation details · 2'));

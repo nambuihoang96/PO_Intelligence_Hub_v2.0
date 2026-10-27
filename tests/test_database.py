@@ -18,7 +18,7 @@ from backend.app.db import create_database_engine, get_database_path
 from backend.app.main import create_app
 
 
-CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence", "app_store_listings", "po_opportunity_decisions", "research_subjects", "research_subject_references", "research_benchmark_collections", "research_benchmark_collection_members"}
+CORE_TABLES = {"research_projects", "research_plans", "research_runs", "research_run_manifests", "source_registry", "source_records", "evidence", "app_store_listings", "po_opportunity_decisions", "research_subjects", "research_subject_references", "research_benchmark_collections", "research_benchmark_collection_members", "project_trend_updates"}
 
 
 class DatabaseMigrationTest(unittest.TestCase):
@@ -255,14 +255,14 @@ class DatabaseMigrationTest(unittest.TestCase):
                 self.assertEqual(candidate_after_restore["decision"]["rationale"], decision_payload["rationale"])
                 with closing(sqlite3.connect(restored_database)) as restored:
                     self.assertEqual(restored.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-                    self.assertEqual(restored.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261027_0011")
+                    self.assertEqual(restored.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261027_0012")
             finally:
                 restored_client_context.__exit__(None, None, None)
                 restored_app.state.session_factory.kw["bind"].dispose()
 
         with closing(sqlite3.connect(database_path)) as migrated:
             self.assertEqual(migrated.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-            self.assertEqual(migrated.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261027_0011")
+            self.assertEqual(migrated.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261027_0012")
 
     def _assert_historical_fixture_reopened(self, client: TestClient, project_id: str, report_id: str, run_id: str,
                                             report_dataset_id: str, workspace_dataset_id: str, manifest_checksum: str,

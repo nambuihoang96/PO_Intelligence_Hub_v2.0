@@ -151,12 +151,12 @@ class BenchmarkCollectionTest(unittest.TestCase):
                 ResearchBenchmarkCollectionMemberAdd(subject_id=other_subject.id), self.session)
         self.assertEqual(path_mismatch.exception.status_code, 409)
 
-    def test_collection_revision_preserves_subject_links_and_old_report_state(self) -> None:
+    def test_trend_update_migration_preserves_subject_links_and_old_report_state(self) -> None:
         subject, report = self._subject("Legacy linked product", "provider:legacy")
         self.session.close()
         self.engine.dispose()
-        command.downgrade(self.config, "20261027_0010")
-        command.upgrade(self.config, "20261027_0011")
+        command.downgrade(self.config, "20261027_0011")
+        command.upgrade(self.config, "head")
         self.engine = create_database_engine(get_database_path())
         self.session = Session(self.engine, expire_on_commit=False)
         saved_subject = self.session.get(ResearchSubject, subject.id)
@@ -169,12 +169,14 @@ class BenchmarkCollectionTest(unittest.TestCase):
         self.assertEqual(saved_report.benchmark_workspace_json["entries"][0]["notes"], "Keep existing PO note")
         with self.engine.connect() as connection:
             self.assertEqual(connection.exec_driver_sql("PRAGMA integrity_check").scalar_one(), "ok")
+            self.assertIn("project_trend_updates", {row[0] for row in connection.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'").all()})
 
     def test_collection_routes_are_in_openapi(self) -> None:
         paths = create_app().openapi()["paths"]
         self.assertIn("/api/v1/projects/{project_id}/benchmark-collections", paths)
         self.assertIn("/api/v1/projects/{project_id}/benchmark-collections/{collection_id}", paths)
         self.assertIn("/api/v1/projects/{project_id}/benchmark-collections/{collection_id}/subjects/{subject_id}", paths)
+        self.assertIn("/api/v1/projects/{project_id}/trend-updates", paths)
 
 
 if __name__ == "__main__":

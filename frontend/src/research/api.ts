@@ -42,19 +42,21 @@ export type ResearchBenchmarkCollectionMember = {
   source_count: number;
   report_source_count: number;
   csv_source_count: number;
+  trend_update_count: number;
   observations: ResearchBenchmarkCollectionObservation[];
 };
 
 export type ResearchBenchmarkCollectionObservation = {
   dimension_key: string;
   dimension_name: string;
-  source_kind: ResearchSubjectSource['source_kind'];
+  source_kind: ResearchSubjectSource['source_kind'] | 'trend_update';
   source_name: string;
   value: unknown;
   unit: string | null;
   scope: Record<string, unknown>;
   verification_status: 'unverified' | 'needs_review' | 'verified';
   evidence_status: string | null;
+  source_note: string | null;
   uncertainty: string | null;
   evidence_references: string[];
   source_locations: string[];
@@ -67,9 +69,28 @@ export type ResearchBenchmarkCollection = {
   name: string;
   description: string | null;
   members: ResearchBenchmarkCollectionMember[];
-  dimensions: { key: string; name: string; source_kind: ResearchSubjectSource['source_kind'] }[];
+  dimensions: { key: string; name: string; source_kind: ResearchSubjectSource['source_kind'] | 'trend_update' }[];
   created_at: string;
   updated_at: string;
+};
+
+export type ProjectTrendUpdateCreate = {
+  subject_id: string;
+  collection_id?: string | null;
+  exact_claim: string;
+  source_note: string;
+  source_title?: string | null;
+  source_url?: string | null;
+  published_on: string;
+};
+
+export type ProjectTrendUpdate = ProjectTrendUpdateCreate & {
+  id: string;
+  project_id: string;
+  subject_name: string;
+  collection_name: string | null;
+  source_status: 'source_reported_unverified';
+  created_at: string;
 };
 
 export type ShortlistContext = {
@@ -302,6 +323,18 @@ export const researchApi = {
   },
   removeBenchmarkCollectionSubject(projectId: string, collectionId: string, subjectId: string): Promise<void> {
     return request(`/projects/${encodeURIComponent(projectId)}/benchmark-collections/${encodeURIComponent(collectionId)}/subjects/${encodeURIComponent(subjectId)}`, { method: 'DELETE' });
+  },
+  listTrendUpdates(projectId: string, options: { cursor?: string; limit?: number; subject_id?: string; collection_id?: string } = {}): Promise<Page<ProjectTrendUpdate>> {
+    const query = new URLSearchParams();
+    if (options.cursor) query.set('cursor', options.cursor);
+    if (options.limit) query.set('limit', String(options.limit));
+    if (options.subject_id) query.set('subject_id', options.subject_id);
+    if (options.collection_id) query.set('collection_id', options.collection_id);
+    const queryString = query.toString();
+    return request(`/projects/${encodeURIComponent(projectId)}/trend-updates${queryString ? `?${queryString}` : ''}`);
+  },
+  createTrendUpdate(projectId: string, payload: ProjectTrendUpdateCreate): Promise<ProjectTrendUpdate> {
+    return request(`/projects/${encodeURIComponent(projectId)}/trend-updates`, { method: 'POST', body: JSON.stringify(payload) });
   },
   async getPlans(projectId: string): Promise<ResearchPlan[]> {
     const plans: ResearchPlan[] = [];
