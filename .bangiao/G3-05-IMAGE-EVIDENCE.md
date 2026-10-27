@@ -65,4 +65,4 @@ This adds no OCR, image interpretation, remote upload, source fetching, AI calls
 - The browser UX, actual inline image rendering, refresh/reopen journey and responsive layout were not exercised in a real browser.
 - No OCR, chart value extraction, image claims, or verification is performed.
 
-**Implementation commit:** `TBD`
+**Implementation commit:** `100c994b2dab77b1ad2f632abbe1d732cc5c8543`
