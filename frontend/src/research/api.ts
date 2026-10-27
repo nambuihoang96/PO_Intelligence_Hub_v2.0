@@ -96,6 +96,40 @@ export type ProjectTrendUpdate = ProjectTrendUpdateCreate & {
   created_at: string;
 };
 
+export type ProjectSavedInformation = {
+  id: string;
+  project_id: string;
+  subject_id: string | null;
+  subject_name: string | null;
+  collection_id: string | null;
+  collection_name: string | null;
+  original_content: string;
+  source_context: string | null;
+  source_title: string | null;
+  source_url: string | null;
+  captured_on: string | null;
+  image_filename: string | null;
+  image_content_type: 'image/jpeg' | 'image/png' | 'image/webp' | null;
+  image_size: number | null;
+  image_sha256: string | null;
+  image_url: string | null;
+  source_status: 'source_reported_unverified';
+  created_at: string;
+};
+
+export type ProjectSavedInformationCreate = {
+  original_content: string;
+  subject_id?: string | null;
+  collection_id?: string | null;
+  source_context?: string | null;
+  source_title?: string | null;
+  source_url?: string | null;
+  captured_on?: string | null;
+  image_filename?: string | null;
+  image_content_type?: 'image/jpeg' | 'image/png' | 'image/webp' | null;
+  image_base64?: string | null;
+};
+
 export type ProjectImageEvidence = {
   id: string;
   project_id: string;
@@ -377,6 +411,19 @@ export const researchApi = {
   },
   createTrendUpdate(projectId: string, payload: ProjectTrendUpdateCreate): Promise<ProjectTrendUpdate> {
     return request(`/projects/${encodeURIComponent(projectId)}/trend-updates`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  listSavedInformation(projectId: string, options: { cursor?: string; limit?: number } = {}): Promise<Page<ProjectSavedInformation>> {
+    const params = new URLSearchParams();
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.limit) params.set('limit', String(options.limit));
+    const query = params.toString();
+    return request(`/projects/${encodeURIComponent(projectId)}/saved-information${query ? `?${query}` : ''}`);
+  },
+  createSavedInformation(projectId: string, payload: ProjectSavedInformationCreate): Promise<ProjectSavedInformation> {
+    return request(`/projects/${encodeURIComponent(projectId)}/saved-information`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  updateSavedInformationContext(projectId: string, informationId: string, payload: { subject_id: string | null; collection_id: string | null }): Promise<ProjectSavedInformation> {
+    return request(`/projects/${encodeURIComponent(projectId)}/saved-information/${encodeURIComponent(informationId)}/context`, { method: 'PATCH', body: JSON.stringify(payload) });
   },
   listImageEvidence(projectId: string, options: { cursor?: string; limit?: number; subject_id?: string } = {}): Promise<Page<ProjectImageEvidence>> {
     const params = new URLSearchParams();

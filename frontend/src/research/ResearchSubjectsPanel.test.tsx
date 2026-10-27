@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { researchApi, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectSource } from './api';
+import { researchApi, type ProjectSavedInformation, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectSource } from './api';
 import { ResearchSubjectsPanel } from './ResearchSubjectsPanel';
 
 const subject = (id = 'subject-1', name = 'Example Product'): ResearchSubject => ({
@@ -14,6 +14,11 @@ const source = (overrides: Partial<ResearchSubjectSource> = {}): ResearchSubject
   mapped_subject_name: null, source_state: 'available', ...overrides,
 });
 const page = <T,>(items: T[]) => ({ items, next_cursor: null, limit: 50 });
+const savedInformation = (overrides: Partial<ProjectSavedInformation> = {}): ProjectSavedInformation => ({
+  id: 'saved-1', project_id: 'project-1', subject_id: 'subject-1', subject_name: 'Example Product', collection_id: null, collection_name: null,
+  original_content: 'Exact source note, preserved with its original wording.', source_context: 'Release announcement', source_title: 'Supplied announcement', source_url: 'https://example.org/announcement', captured_on: null,
+  image_filename: null, image_content_type: null, image_size: null, image_sha256: null, image_url: null, source_status: 'source_reported_unverified', created_at: '2026-10-27T12:00:00Z', ...overrides,
+});
 const collection = (members: (Omit<ResearchBenchmarkCollection['members'][number], 'observations' | 'trend_update_count'> & { observations?: ResearchBenchmarkCollection['members'][number]['observations']; trend_update_count?: number })[] = [], dimensions: ResearchBenchmarkCollection['dimensions'] = []): ResearchBenchmarkCollection => ({
   id: 'collection-1', project_id: 'project-1', name: 'Shortlist', description: null, dimensions, members: members.map((member) => ({ ...member, trend_update_count: member.trend_update_count ?? 0, observations: member.observations ?? [] })),
   created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z',
@@ -149,5 +154,32 @@ describe('ResearchSubjectsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open profile' }));
     expect(screen.getByDisplayValue('Updated PO note, still not source verified.')).toBeTruthy();
     expect(screen.getByDisplayValue('Check keyboard navigation.')).toBeTruthy();
+  });
+
+  it('shows exact saved information and provenance in the explicitly linked subject profile', async () => {
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([subject()]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValue(page([savedInformation()]));
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+    fireEvent.click(screen.getByText('Research subjects'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
+    expect(screen.getByText('Exact source note, preserved with its original wording.')).toBeTruthy();
+    expect(screen.getByText('Source-reported · unverified')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open supplied source' }).getAttribute('href')).toBe('https://example.org/announcement');
+  });
+
+  it('refreshes an open project’s subject history after information is linked', async () => {
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([subject()]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
+    const savedRead = vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValueOnce(page([])).mockResolvedValue(page([savedInformation()]));
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+    fireEvent.click(screen.getByText('Research subjects'));
+    await screen.findByText('Saved in this project');
+    window.dispatchEvent(new CustomEvent('project-saved-information-changed', { detail: { projectId: 'project-1' } }));
+    await waitFor(() => expect(savedRead).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
+    expect(await screen.findByText('Exact source note, preserved with its original wording.')).toBeTruthy();
   });
 });

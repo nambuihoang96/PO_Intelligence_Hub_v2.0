@@ -164,6 +164,43 @@ class ProjectTrendUpdate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class ProjectSavedInformation(Base):
+    """Append-only original information captured in a project without requiring a subject."""
+
+    __tablename__ = "project_saved_information"
+    __table_args__ = (
+        ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
+                             name="fk_project_saved_information_project"),
+        ForeignKeyConstraint(["project_id", "subject_id"], ["research_subjects.project_id", "research_subjects.id"],
+                             ondelete="RESTRICT", name="fk_project_saved_information_subject"),
+        ForeignKeyConstraint(["project_id", "collection_id"], ["research_benchmark_collections.project_id", "research_benchmark_collections.id"],
+                             ondelete="RESTRICT", name="fk_project_saved_information_collection"),
+        CheckConstraint("source_status = 'source_reported_unverified'", name="ck_project_saved_information_unverified"),
+        CheckConstraint("image_content IS NULL OR (image_size > 0 AND image_size <= 10485760)",
+                        name="ck_project_saved_information_image_size"),
+        CheckConstraint("image_content IS NULL OR length(image_sha256) = 64", name="ck_project_saved_information_image_sha_length"),
+        Index("ix_project_saved_information_project_created", "project_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    subject_id: Mapped[str | None] = mapped_column(String(36))
+    collection_id: Mapped[str | None] = mapped_column(String(36))
+    original_content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_context: Mapped[str | None] = mapped_column(Text)
+    source_title: Mapped[str | None] = mapped_column(String(500))
+    source_url: Mapped[str | None] = mapped_column(String(2048))
+    captured_on: Mapped[date | None] = mapped_column(Date)
+    image_filename: Mapped[str | None] = mapped_column(String(255))
+    image_content_type: Mapped[str | None] = mapped_column(String(32))
+    image_size: Mapped[int | None] = mapped_column(Integer)
+    image_sha256: Mapped[str | None] = mapped_column(String(64))
+    image_content: Mapped[bytes | None] = mapped_column(LargeBinary)
+    source_status: Mapped[str] = mapped_column(String(40), nullable=False, default="source_reported_unverified",
+                                               server_default="source_reported_unverified")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class ProjectImageEvidence(Base):
     """Append-only local image attachment with an exact content hash and source context."""
 

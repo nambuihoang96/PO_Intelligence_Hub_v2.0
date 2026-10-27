@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { researchApi, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectAnalysisSection, type ResearchSubjectSource } from './api';
+import { researchApi, type ProjectSavedInformation, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectAnalysisSection, type ResearchSubjectSource } from './api';
 
 function sourceKey(source: ResearchSubjectSource): string {
   return [source.source_kind, source.source_id, source.source_key].join('|');
@@ -9,6 +9,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   const [subjects, setSubjects] = useState<ResearchSubject[]>([]);
   const [sources, setSources] = useState<ResearchSubjectSource[]>([]);
   const [collections, setCollections] = useState<ResearchBenchmarkCollection[]>([]);
+  const [savedInformation, setSavedInformation] = useState<ProjectSavedInformation[]>([]);
   const [sourceCursor, setSourceCursor] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -26,13 +27,15 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   async function load(append = false) {
     setLoading(true); setError('');
     try {
-      const [subjectPage, sourcePage, collectionPage] = await Promise.all([
+      const [subjectPage, sourcePage, collectionPage, savedInformationPage] = await Promise.all([
         researchApi.listSubjects(projectId),
         researchApi.listSubjectSources(projectId, append ? sourceCursor ?? undefined : undefined),
         researchApi.listBenchmarkCollections(projectId),
+        researchApi.listSavedInformation(projectId, { limit: 100 }).catch(() => ({ items: [], next_cursor: null, limit: 100 })),
       ]);
       setSubjects(subjectPage.items);
       setCollections(collectionPage.items);
+      setSavedInformation(savedInformationPage.items);
       setSources((current) => append ? [...current, ...sourcePage.items] : sourcePage.items);
       setSourceCursor(sourcePage.next_cursor);
       setDrafts((current) => {
@@ -45,7 +48,15 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, [projectId]);
+  useEffect(() => {
+    void load();
+    const refreshForProject = (event: Event) => {
+      const changedProjectId = (event as CustomEvent<{ projectId?: string }>).detail?.projectId;
+      if (changedProjectId === projectId) void load();
+    };
+    window.addEventListener('project-saved-information-changed', refreshForProject);
+    return () => window.removeEventListener('project-saved-information-changed', refreshForProject);
+  }, [projectId]);
 
   async function mapSource(source: ResearchSubjectSource, createFromSource = false) {
     const key = sourceKey(source);
@@ -143,6 +154,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     const sections = analysisDrafts[subject.id] ?? savedSections;
     const hasChanges = JSON.stringify(savedSections) !== JSON.stringify(sections);
     const linkedSources = sources.filter((source) => source.mapped_subject_id === subject.id);
+    const savedItems = savedInformation.filter((item) => item.subject_id === subject.id);
     const subjectCollections = collections.filter((collection) => collection.members.some((member) => member.subject_id === subject.id));
     return <article className="research-subject-item research-subject-profile-item" key={subject.id}>
       <div className="research-subject-profile-heading">
@@ -154,8 +166,8 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
             <button type="button" className="secondary-action" aria-expanded={profileId === subject.id} onClick={() => toggleProfile(subject)}>{profileId === subject.id ? 'Close profile' : 'Open profile'}</button></>}
       </div>
       {profileId === subject.id && <section className="research-subject-profile" aria-label={`${subject.name} profile`}>
-        <div className="research-subject-profile-summary"><div><h4>{subject.name}</h4><p>{subject.subject_type || 'Type not specified'} · {linkedSources.length} linked source{linkedSources.length === 1 ? '' : 's'} · {subjectCollections.length} collection{subjectCollections.length === 1 ? '' : 's'} · {savedSections.length} saved analysis section{savedSections.length === 1 ? '' : 's'}</p></div>
-          <nav aria-label={`${subject.name} related workspace sections`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Review PO decision</a><a href="#project-trend-updates">Trend updates</a><a href="#project-image-evidence">Image evidence</a><a href="#project-benchmark-collections">Collections</a></nav></div>
+        <div className="research-subject-profile-summary"><div><h4>{subject.name}</h4><p>{subject.subject_type || 'Type not specified'} · {linkedSources.length} linked source{linkedSources.length === 1 ? '' : 's'} · {savedItems.length} saved item{savedItems.length === 1 ? '' : 's'} · {subjectCollections.length} collection{subjectCollections.length === 1 ? '' : 's'} · {savedSections.length} saved analysis section{savedSections.length === 1 ? '' : 's'}</p></div>
+          <nav aria-label={`${subject.name} related workspace sections`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Review PO decision</a><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=data#project-saved-information`}>Saved information</a><a href="#project-trend-updates">Trend updates</a><a href="#project-image-evidence">Image evidence</a><a href="#project-benchmark-collections">Collections</a></nav></div>
         <div className="research-subject-profile-details"><p><strong>Aliases:</strong> {subject.aliases.length ? subject.aliases.join(', ') : 'None supplied'}</p>
           <p><strong>External identifiers:</strong> {subject.external_ids.length ? 'Available in source details' : 'None supplied'}</p>
           <details><summary>Source identity details</summary><ul>
@@ -163,6 +175,17 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
             {Object.entries(subject.provenance).map(([key, value]) => <li key={key}>{key}: {typeof value === 'string' ? value : JSON.stringify(value)}</li>)}
           </ul></details>
         </div>
+        <section className="research-subject-history" aria-label={`${subject.name} saved information history`}>
+          <div><h5>Saved information for this product or topic</h5><p>Original wording and attachments are shown as supplied; they are not independently verified.</p></div>
+          {!savedItems.length ? <p>No saved information is linked to this profile yet. You can link it later from the project’s saved information.</p> : <div className="research-subject-history-list">{savedItems.slice(0, 10).map((item) => <article key={item.id}>
+            <div><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><span>Source-reported · unverified</span></div>
+            {item.source_title && <strong>{item.source_title}</strong>}
+            <p>{item.original_content}</p>
+            {item.source_context && <small>{item.source_context}</small>}
+            {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer">Open supplied source</a>}
+            {item.image_url && <figure><img src={item.image_url} alt={`Attachment for ${subject.name}: ${item.image_filename || 'saved information'}`} /><figcaption>{item.image_filename} · Local attachment · not verified</figcaption></figure>}
+          </article>)}</div>}
+        </section>
         <section className="research-subject-analysis" aria-label={`${subject.name} optional analysis`}>
           <div><h5>Optional PO analysis</h5><p>These are your working notes. They remain separate from source-reported research and can use any section names.</p></div>
           <div className="research-subject-analysis-starters" aria-label="Suggested optional analysis sections">

@@ -321,6 +321,83 @@ class ProjectTrendUpdatePage(APIModel):
     limit: int
 
 
+class ProjectSavedInformationCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    original_content: str = Field(min_length=1, max_length=200_000)
+    subject_id: str | None = Field(default=None, min_length=1, max_length=36)
+    collection_id: str | None = Field(default=None, min_length=1, max_length=36)
+    source_context: str | None = Field(default=None, max_length=10_000)
+    source_title: str | None = Field(default=None, max_length=500)
+    source_url: str | None = Field(default=None, max_length=2048)
+    captured_on: date | None = None
+    image_filename: str | None = Field(default=None, max_length=255)
+    image_content_type: Literal["image/jpeg", "image/png", "image/webp"] | None = None
+    image_base64: str | None = Field(default=None, max_length=14_000_000)
+
+    @field_validator("source_context", "source_title", "source_url", "image_filename")
+    @classmethod
+    def strip_saved_information_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("original_content")
+    @classmethod
+    def require_saved_information_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Paste the information you want to save.")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def require_safe_saved_information_url(cls, value: str | None) -> str | None:
+        if value is None or not value:
+            return value
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Source URL must start with http:// or https://.")
+        return value
+
+    @model_validator(mode="after")
+    def image_fields_must_be_consistent(self):
+        has_image_metadata = bool(self.image_filename or self.image_content_type)
+        if bool(self.image_base64) != has_image_metadata or (has_image_metadata and not (self.image_filename and self.image_content_type)):
+            raise ValueError("Choose an image file with a supported type.")
+        return self
+
+
+class ProjectSavedInformationContextUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    subject_id: str | None = Field(default=None, min_length=1, max_length=36)
+    collection_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+
+class ProjectSavedInformationRead(APIModel):
+    id: str
+    project_id: str
+    subject_id: str | None
+    subject_name: str | None
+    collection_id: str | None
+    collection_name: str | None
+    original_content: str
+    source_context: str | None
+    source_title: str | None
+    source_url: str | None
+    captured_on: date | None
+    image_filename: str | None
+    image_content_type: Literal["image/jpeg", "image/png", "image/webp"] | None
+    image_size: int | None
+    image_sha256: str | None
+    image_url: str | None
+    source_status: Literal["source_reported_unverified"]
+    created_at: datetime
+
+
+class ProjectSavedInformationPage(APIModel):
+    items: list[ProjectSavedInformationRead]
+    next_cursor: str | None = None
+    limit: int
+
+
 class ProjectImageEvidenceRead(APIModel):
     id: str
     project_id: str

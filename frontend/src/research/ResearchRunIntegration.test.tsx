@@ -74,15 +74,16 @@ describe('research run UI integration', () => {
       if (url.includes('/projects/project-1/benchmark-collections?')) return page([]);
       if (url.includes('/projects/project-1/subjects?')) return page([]);
       if (url.includes('/projects/project-1/trend-updates?')) return page([]);
+      if (url.includes('/projects/project-1/saved-information?')) return page([]);
       throw new Error(`Unexpected request: ${url}`);
     });
 
     window.history.replaceState({}, '', '/research?projectId=project-1');
     render(<ResearchWorkspace mode="list" />);
     expect(await screen.findByRole('heading', { name: 'Move this research forward' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Start Deep Research Shape a research question/ }).getAttribute('href')).toContain('view=plan');
-    expect(screen.getByRole('link', { name: /Capture Trend Update/ }).getAttribute('href')).toContain('#project-trend-updates');
-    expect(screen.getByRole('link', { name: /Import \/ Analyze CSV/ }).getAttribute('href')).toContain('action=import-csv');
+    expect(screen.getByRole('link', { name: /Start Research Explore a question/ }).getAttribute('href')).toContain('view=plan');
+    expect(screen.getByRole('link', { name: /Save New Information Keep a note/ }).getAttribute('href')).toContain('#project-saved-information');
+    expect(screen.getByRole('link', { name: /Analyze Data Import or explore/ }).getAttribute('href')).toContain('action=import-csv');
   });
 
   it('keeps a saved report, benchmark collection, and subject visible in the same Project Home', async () => {
@@ -95,6 +96,7 @@ describe('research run UI integration', () => {
       if (url.includes('/projects/project-1/benchmark-collections?')) return page([collection]);
       if (url.includes('/projects/project-1/subjects?')) return page([subject]);
       if (url.includes('/projects/project-1/trend-updates?')) return page([]);
+      if (url.includes('/projects/project-1/saved-information?')) return page([]);
       throw new Error(`Unexpected request: ${url}`);
     });
 

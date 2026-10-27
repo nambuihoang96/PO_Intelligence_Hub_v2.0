@@ -7,6 +7,7 @@ import { ProjectJourneyNav } from './ProjectJourneyNav';
 import { ResearchSubjectsPanel } from './ResearchSubjectsPanel';
 import { TrendUpdatesPanel } from './TrendUpdatesPanel';
 import { ImageEvidencePanel } from './ImageEvidencePanel';
+import { SavedInformationPanel } from './SavedInformationPanel';
 
 type AppObservation = QuantitativeDataset['observations'][number];
 type AppGroup = { id: string; name: string; rows: AppObservation[] };
@@ -302,9 +303,9 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   return <div className="data-first-workspace">
     <ProjectJourneyNav projectId={projectId} active="research" />
     <section className="research-panel data-workspace-heading"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Back to project</a><span className="state-label">PROJECT RESEARCH</span><h2>{project.name}</h2><p>Saved reports, research updates, and project data stay together here.</p></div></section>
+    <SavedInformationPanel projectId={projectId} />
     <ResearchSubjectsPanel projectId={projectId} />
-    <TrendUpdatesPanel projectId={projectId} />
-    <ImageEvidencePanel projectId={projectId} />
+    <details className="saved-information-legacy"><summary>Earlier trend update and image records</summary><p>These records were saved using the previous workflow. They remain available and unchanged.</p><TrendUpdatesPanel projectId={projectId} /><ImageEvidencePanel projectId={projectId} /></details>
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     <div className="workspace-source-grid">
       <section className="research-panel" id="project-csv-data"><div className="panel-heading"><div><span className="state-label">MARKET DATA</span><h3>CSV datasets</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Close import' : 'Import CSV'}</button></div><p>{datasets.length ? `${datasets.length} dataset${datasets.length === 1 ? '' : 's'} saved` : 'You can add a dataset before or after importing a research report.'}</p>
