@@ -137,6 +137,11 @@ h2 { margin: 3px 0 0; color: var(--ink); font-size: 17px; line-height: 1.3; lett
   .finding-grid { grid-template-columns: minmax(0, 1fr); }
   .overview-top-grid { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); }
 }
+@media (max-width: 1120px) {
+  .content-grid { grid-template-columns: minmax(0, 1fr); }
+  .secondary-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .decision-card { grid-column: 1 / -1; }
+}
 @media (max-width: 760px) {
   .app-shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--divider); }
