@@ -1,6 +1,6 @@
 # G3-03 — Project Benchmark Collections
 
-**Status:** `DEV_DONE` for report and CSV sources; trend-source integration remains pending G3-04. Owner acceptance is pending.
+**Status:** `READY_FOR_OWNER` — report, CSV and source-attributed trend observations are supported; owner acceptance is pending.
 **Branch:** `feat/ux-recovery-01-research-results`
 **Starting HEAD:** `7c45cad3ab12b7eb92940f4d5300541274ac78e6`
 **Production SQLite:** not accessed or modified
@@ -11,7 +11,7 @@ Project Research now supports named benchmark collections using existing project
 
 The comparison matrix only includes report-supplied benchmark dimensions and CSV observations whose source entity was explicitly linked to a subject. CSV dimensions retain dataset and metric/method/scope/period identity, so similar labels are not treated as equivalent. Missing observations display `Unknown / Not provided`; imported and report-supplied records remain unverified unless their source explicitly says otherwise. Validation details are collapsed by default and accessible on demand.
 
-Trend Update records are not yet a persisted source type, so they are not represented in the collection matrix in this slice. G3-04 will add that source workflow; collection integration must be revisited against its actual provenance model rather than inferred now.
+**Follow-up iteration (G3-03 re-opened when G3-04 introduced its source model):** The matrix now includes exact owner-captured trend claims only when the update explicitly references this collection and its confirmed subject. They appear under a generic `Trend updates (source-reported)` dimension, with the source note, publication date, source link and `source-reported · unverified` status. The claims remain text; no number, period, GEO, platform, metric, or comparison is inferred. Implementation is in the G3-04 follow-up commit documented below.
 
 ## API and migration
 
@@ -49,7 +49,8 @@ Trend Update records are not yet a persisted source type, so they are not repres
 - TypeScript: **passed**.
 - Production build: **passed**; Vite reports the existing >500 kB chunk advisory (524.46 kB JS).
 - `git diff --check`: **passed** before handoff edits; rerun before commit.
-- Browser UAT: **passed for the collection/report/CSV workflow** using headless Google Chrome + Playwright and isolated QA SQLite under `.g3-03-collection-uat/appdata`. The test created a QA project, imported one structured report and one CSV, explicitly linked both source identities to one subject, created a collection, added/removed/restored the subject, refreshed/reopened, and verified two source-backed observations and the original report/CSV/subject links remained. This is synthetic mechanics UAT, not genuine owner-data acceptance. Responsive/mobile UAT is **NOT VERIFIED**.
+- Backend regression additionally verifies trend claims appear in the collection response with exact source note, publication date, source link and unverified status. Frontend tests cover trend-source labelling and note rendering.
+- Browser UAT: **passed for the earlier collection/report/CSV workflow** using headless Google Chrome + Playwright and isolated QA SQLite under `.g3-03-collection-uat/appdata`. The G3-04 trend-source extension has not been exercised in a browser; post-extension browser UAT, genuine owner-data acceptance and responsive/mobile UAT are **NOT VERIFIED**.
 - The screenshots are real captures from that running QA app. The matrix capture predates the final progressive-disclosure adjustment for CSV validation reasons. The final collapsed/expand behavior is verified by a frontend interaction test; a post-adjustment browser screenshot is **NOT VERIFIED** because the isolated QA server ports could not be rebound in this session.
 - Screenshot 1: [membership after refresh](screenshots/g3-03-benchmark-collection/collection-membership-after-refresh.png)
 - Screenshot 2: [source-backed comparison matrix (captured before validation disclosure adjustment)](screenshots/g3-03-benchmark-collection/collection-comparison-matrix.png)
@@ -70,4 +71,5 @@ Trend Update records are not yet a persisted source type, so they are not repres
 - The matrix deliberately keeps CSV dimensions dataset-specific; cross-dataset metric equivalence/aggregation is not performed.
 - The full backend suite and responsive browser views were not verified.
 
-**Implementation commit:** `e1728be7e9f76a700ab04beed021df417673c2c1`
+**Initial implementation commit:** `e1728be7e9f76a700ab04beed021df417673c2c1`
+**Trend-source integration commit:** `867f321`
