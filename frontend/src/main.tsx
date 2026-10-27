@@ -25,53 +25,53 @@ type Page = {
 const pages: Page[] = [
   {
     path: '/research',
-    label: 'Research',
+    label: 'Nghiên cứu',
     icon: 'search',
-    eyebrow: 'RESEARCH WORKSPACE',
-    title: 'Research projects',
-    intro: 'Plan and follow research work from a focused workspace.',
-    emptyTitle: 'No research projects yet',
-    emptyCopy: 'Create a project to start from a research question or CSV market data.',
+    eyebrow: 'NGHIÊN CỨU',
+    title: 'Dự án nghiên cứu',
+    intro: 'Quản lý nghiên cứu, phân tích dữ liệu và theo dõi quyết định trong một nơi.',
+    emptyTitle: 'Chưa có dự án nghiên cứu',
+    emptyCopy: 'Tạo dự án để nghiên cứu hoặc phân tích dữ liệu CSV.',
   },
   {
     path: '/reports',
-    label: 'Reports',
+    label: 'Báo cáo',
     icon: 'reports',
-    eyebrow: 'REPORTS & DECISIONS',
-    title: 'Reports and decisions',
-    intro: 'Find completed research outputs and the decisions they inform.',
-    emptyTitle: 'No reports are available',
-    emptyCopy: 'Completed research reports will appear here. No example or placeholder findings are shown.',
+    eyebrow: 'BÁO CÁO VÀ QUYẾT ĐỊNH',
+    title: 'Báo cáo và quyết định',
+    intro: 'Tìm lại báo cáo đã lưu và các quyết định liên quan.',
+    emptyTitle: 'Chưa có báo cáo',
+    emptyCopy: 'Các báo cáo nghiên cứu đã lưu sẽ xuất hiện tại đây.',
   },
   {
     path: '/tracking',
-    label: 'Tracking',
+    label: 'Theo dõi',
     icon: 'runs',
-    eyebrow: 'PRODUCT TRACKING',
-    title: 'Tracking',
-    intro: 'Follow up on decisions and future research updates by project.',
-    emptyTitle: 'Tracking setup is pending',
-    emptyCopy: 'No automatic monitoring or report-to-report change tracking is configured yet.',
+    eyebrow: 'THEO DÕI',
+    title: 'Theo dõi',
+    intro: 'Theo dõi quyết định và cập nhật nghiên cứu theo dự án.',
+    emptyTitle: 'Chưa có dữ liệu theo dõi',
+    emptyCopy: 'Chưa có tính năng tự động giám sát hoặc so sánh các lần báo cáo.',
   },
 ];
 
 const secondaryPages: Page[] = [
   {
     path: '/research/new',
-    label: 'New research',
+    label: 'Tạo dự án',
     icon: 'findings',
-    eyebrow: 'RESEARCH WORKSPACE',
-    title: 'Start a research project',
-    intro: 'A research project will keep its plan, runs, sources, and outputs together.',
+    eyebrow: 'NGHIÊN CỨU',
+    title: 'Tạo dự án nghiên cứu',
+    intro: 'Tất cả câu hỏi, báo cáo và dữ liệu được lưu chung trong dự án.',
     emptyTitle: 'Project setup is not available yet',
     emptyCopy: 'This workspace shell is ready. Project creation and plan editing are scheduled for a later task.',
   },
   {
     path: '/research/runs',
-    label: 'Research runs',
+    label: 'Lượt nghiên cứu',
     icon: 'runs',
-    eyebrow: 'RESEARCH WORKSPACE',
-    title: 'Research runs',
+    eyebrow: 'NGHIÊN CỨU',
+    title: 'Lượt nghiên cứu',
     intro: 'Track each research session and return to its results when available.',
     emptyTitle: 'No research runs yet',
     emptyCopy: 'Research sessions will appear here after a project has been set up.',
@@ -94,7 +94,7 @@ function EmptyState({ page }: { page: Page }) {
     <section className="empty-card" aria-labelledby="empty-title">
       <div className="empty-icon"><ResultsIcon name={page.icon} /></div>
       <div className="empty-copy">
-        <span className="state-label">EMPTY WORKSPACE</span>
+        <span className="state-label">CHƯA CÓ DỮ LIỆU</span>
         <h2 id="empty-title">{page.emptyTitle}</h2>
         <p>{page.emptyCopy}</p>
       </div>
@@ -118,14 +118,14 @@ function App() {
   const opportunityReviewView = params.get('view') === 'opportunities';
   const dataWorkspace = projectSelected && ['data', 'opportunities'].includes(params.get('view') ?? '');
   const projectView = params.get('view');
-  const pageTitle = pathname.startsWith('/reports/') ? 'Research report' : pathname === '/' && projectId ? 'Import research report' : pathname === '/reports' ? 'Saved research reports' : pathname === '/tracking' ? 'Tracking' : pathname === '/explorer' ? 'App Store listings explorer' : pathname === '/compare-periods' ? 'Compare periods' : pathname === '/sources' ? runId ? 'Run evidence' : 'Research sources' : page.path === '/research/new' ? 'Create a project'
-    : page.path === '/research/runs' ? runId ? 'Research run' : 'Research runs'
-      : page.path === '/sources' && runId ? 'Run evidence' : projectSelected && projectView === 'plan' ? 'Start Deep Research' : dataWorkspace ? 'Project workspace' : projectSelected ? 'Project Home' : page.title;
-  const pageIntro = pathname === '/' && projectId ? 'Add a ChatGPT research report to this project workspace.' : pathname === '/reports' ? 'Search and reopen saved research outputs, or follow them back to their project decisions.' : pathname === '/tracking' ? 'Project follow-up and tracking setup status.' : pathname === '/explorer' ? 'Search listings by app name, platform, and country.' : pathname === '/compare-periods' ? 'Compare only CSV measurements with compatible metric and scope.' : pathname === '/sources' ? runId ? 'Review evidence connected to the selected research run.' : 'Review source records used by research projects.' : page.path === '/research/new'
-    ? 'Create a project; you can choose what to do next from its home.'
-    : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Browse saved research sessions and their selected plan versions.'
+  const pageTitle = pathname.startsWith('/reports/') ? 'Báo cáo nghiên cứu' : pathname === '/' && projectId ? 'Nhập báo cáo nghiên cứu' : pathname === '/reports' ? 'Báo cáo đã lưu' : pathname === '/tracking' ? 'Theo dõi' : pathname === '/explorer' ? 'Danh sách ứng dụng App Store' : pathname === '/compare-periods' ? 'So sánh các kỳ' : pathname === '/sources' ? runId ? 'Bằng chứng nghiên cứu' : 'Nguồn nghiên cứu' : page.path === '/research/new' ? 'Tạo dự án'
+    : page.path === '/research/runs' ? runId ? 'Lượt nghiên cứu' : 'Lượt nghiên cứu'
+      : page.path === '/sources' && runId ? 'Bằng chứng nghiên cứu' : projectSelected && projectView === 'plan' ? 'Nghiên cứu chuyên sâu' : dataWorkspace ? 'Không gian nghiên cứu' : projectSelected ? 'Tổng quan dự án' : page.title;
+  const pageIntro = pathname === '/' && projectId ? 'Lưu báo cáo ChatGPT vào dự án.' : pathname === '/reports' ? 'Tìm và mở báo cáo đã lưu, tiếp tục đánh giá từ dự án liên quan.' : pathname === '/tracking' ? 'Xem các quyết định đã lưu và những công việc cần tiếp tục.' : pathname === '/explorer' ? 'Tìm ứng dụng theo tên, nền tảng và quốc gia.' : pathname === '/compare-periods' ? 'Chỉ so sánh dữ liệu CSV có cùng định nghĩa và phạm vi phù hợp.' : pathname === '/sources' ? runId ? 'Xem bằng chứng của lượt nghiên cứu đã chọn.' : 'Xem nguồn tham khảo trong nghiên cứu.' : page.path === '/research/new'
+    ? 'Tạo dự án để bắt đầu nghiên cứu từ trang tổng quan.'
+    : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Xem lại các lượt nghiên cứu và yêu cầu đã lưu.'
       : page.path === '/sources' && runId ? 'Add and review manual evidence linked to this research run.'
-        : projectSelected && projectView === 'plan' ? 'Shape the research question and scope for this project.' : dataWorkspace ? 'Bring reports, updates, and data together for this project.' : projectSelected ? 'Reports, research, and next steps in one place.' : page.intro;
+        : projectSelected && projectView === 'plan' ? 'Nhập câu hỏi và phạm vi nghiên cứu cho dự án.' : dataWorkspace ? 'Lưu thông tin, đọc báo cáo và phân tích dữ liệu trong cùng dự án.' : projectSelected ? 'Báo cáo, dữ liệu và các bước tiếp theo nằm trong cùng dự án.' : page.intro;
 
   return (
     <div className={`app-shell${researchPage ? ' research-page' : ''}`}>
@@ -134,7 +134,7 @@ function App() {
       <main className="main-panel">
         <header className="topbar">
           <div className="breadcrumb"><a href="/">Workspace</a><span aria-hidden="true">/</span>{page.label}</div>
-          <div className="local-badge"><span className="badge-dot" />Local mode</div>
+          <div className="local-badge"><span className="badge-dot" />Chế độ cục bộ</div>
         </header>
 
         <div className="content-wrap">
@@ -144,18 +144,18 @@ function App() {
             <p className="intro">{pageIntro}</p>
             {page.path === '/research' && !projectId && (
               <div className="home-actions">
-                <a className="secondary-action" href="/explorer">App Store listings explorer</a>
+                <a className="secondary-action" href="/explorer">Khám phá danh sách ứng dụng</a>
               </div>
             )}
           </section>}
 
           {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : pathname === '/tracking' ? <TrackingWorkspace projectId={projectId} /> : pathname === '/compare-periods' ? <QuantitativePeriodComparison /> : pathname === '/' ? projectId ? <ResearchIntake /> : <ResearchWorkspace mode="list" /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : page.path.startsWith('/research') ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : ['data', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : pathname === '/sources' ? <SourcesWorkspace runId={runId} /> : pathname === '/explorer' ? <ExplorerWorkspace /> : <>
-            <div className="section-divider"><span>WORKSPACE CONTENT</span><span className="divider-line" /></div>
+            <div className="section-divider"><span>NỘI DUNG</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">
               <span className="connection-icon" aria-hidden="true">i</span>
-              <div><strong>No workspace data connected</strong><span>This screen does not contain sample or generated research data.</span></div>
-              <span className="note-tag">LOCAL ONLY</span>
+              <div><strong>Chưa kết nối dữ liệu</strong><span>Màn hình này không chứa dữ liệu giả lập.</span></div>
+              <span className="note-tag">CHỈ LƯU CỤC BỘ</span>
             </aside>
           </>}
         </div>
