@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { reportApi, type ComparisonDataset, type QuantitativeDataset, type ReportSummary } from '../reports/api';
 import { QuantitativeDatasetImport } from '../reports/QuantitativeDatasetImport';
 import { csvMetricLabel, csvSourcePeriodLabel } from '../reports/csvPresentation';
+import { nextCsvColumnSort } from '../reports/csvTableInteraction';
 import { researchApi, type ResearchBenchmarkCollection, type ResearchProject, type ResearchSubjectSource, type ShortlistContext } from './api';
 import { OpportunityReview } from './OpportunityReview';
 import { ProjectJourneyNav } from './ProjectJourneyNav';
@@ -136,6 +137,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   const [targetCollectionId, setTargetCollectionId] = useState('');
   const [productQuery, setProductQuery] = useState('');
   const [displayMetric, setDisplayMetric] = useState('');
+  const [visibleProductMetrics, setVisibleProductMetrics] = useState<string[]>([]);
   const [productSort, setProductSort] = useState<'asc' | 'desc'>('desc');
   const [productActionBusy, setProductActionBusy] = useState<string | null>(null);
   const [dataset, setDataset] = useState<QuantitativeDataset | null>(null);
@@ -238,18 +240,34 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   const apps = useMemo(() => groupsFor(dataset), [dataset]);
   const rankingOptions = useMemo(() => rankingOptionsFor(apps), [apps]);
   const datasetMetrics = useMemo(() => [...new Map((dataset?.observations ?? []).filter((row) => row.metric_id).map((row) => [row.metric_id!, row.metric_definition || row.metric_id!])).entries()], [dataset]);
-  const activeMetric = datasetMetrics.find(([id]) => id === displayMetric)?.[0] ?? datasetMetrics[0]?.[0] ?? '';
+  const visibleDatasetMetrics = datasetMetrics.filter(([id]) =>
+    visibleProductMetrics.length ? visibleProductMetrics.includes(id) : id === datasetMetrics[0]?.[0]);
+  function sortProductsBy(column: string) {
+    const next = nextCsvColumnSort({ column: displayMetric, direction: productSort }, column, column === '__name__' ? 'asc' : 'desc');
+    setDisplayMetric(next.column); setProductSort(next.direction);
+  }
+  function toggleProductMetric(id: string) {
+    const selected = visibleDatasetMetrics.map(([key]) => key);
+    if (selected.includes(id) && selected.length <= 1) return;
+    setVisibleProductMetrics(selected.includes(id) ? selected.filter((key) => key !== id) : [...selected, id]);
+    if (displayMetric === id && selected.includes(id)) setDisplayMetric('');
+  }
   const visibleProductRows = useMemo(() => {
     const filtered = apps.filter((app) => `${app.name} ${app.id}`.toLocaleLowerCase().includes(productQuery.trim().toLocaleLowerCase()));
-    const metricId = activeMetric;
-    if (metricId) filtered.sort((left, right) => {
-      const a = left.rows.find((row) => row.metric_id === metricId)?.value;
-      const b = right.rows.find((row) => row.metric_id === metricId)?.value;
-      const difference = (a == null ? Number.NEGATIVE_INFINITY : Number(a)) - (b == null ? Number.NEGATIVE_INFINITY : Number(b));
-      return (productSort === 'desc' ? -difference : difference) || left.name.localeCompare(right.name);
-    });
+    if (displayMetric === '__name__') {
+      filtered.sort((left, right) => (productSort === 'asc' ? 1 : -1) * left.name.localeCompare(right.name, 'vi', { numeric: true }));
+    } else if (datasetMetrics.some(([id]) => id === displayMetric)) {
+      filtered.sort((left, right) => {
+        const a = left.rows.find((row) => row.metric_id === displayMetric)?.value;
+        const b = right.rows.find((row) => row.metric_id === displayMetric)?.value;
+        // Missing source values are unknown, never zero and never put first.
+        if (a == null || b == null) return a == null ? (b == null ? 0 : 1) : -1;
+        const difference = Number(a) - Number(b);
+        return (productSort === 'desc' ? -difference : difference) || left.name.localeCompare(right.name);
+      });
+    }
     return filtered;
-  }, [apps, productQuery, activeMetric, productSort]);
+  }, [apps, productQuery, displayMetric, productSort, datasetMetrics]);
   if (new URLSearchParams(window.location.search).get('view') === 'opportunities') {
     return <OpportunityReview projectId={projectId} />;
   }
@@ -391,7 +409,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     <div className="workspace-source-grid">
       <section className="research-panel" id="project-csv-data"><div className="panel-heading"><div><span className="state-label">SỐ LIỆU THỊ TRƯỜNG</span><h3>Tệp dữ liệu CSV</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Đóng phần nhập' : 'Nhập CSV'}</button></div><p>{datasets.length ? `Đã lưu ${datasets.length} bộ dữ liệu` : 'Bạn có thể thêm tệp dữ liệu trước hoặc sau khi nhập báo cáo nghiên cứu.'}</p>
-        {datasets.length > 0 && <label className="field-label">Tệp dữ liệu cần xem<select value={selectedDatasetId} onChange={(event) => { setSelectedDatasetId(event.target.value); setVisibleApps(50); setPrompt(''); }}><option value="">Chọn tệp dữ liệu</option>{datasets.map((item) => <option value={item.id} key={item.id}>{item.filename} · {item.source_apps ?? 0} sản phẩm</option>)}</select></label>}
+        {datasets.length > 0 && <label className="field-label">Tệp dữ liệu cần xem<select value={selectedDatasetId} onChange={(event) => { setSelectedDatasetId(event.target.value); setVisibleApps(50); setPrompt(''); setVisibleProductMetrics([]); setDisplayMetric(''); }}><option value="">Chọn tệp dữ liệu</option>{datasets.map((item) => <option value={item.id} key={item.id}>{item.filename} · {item.source_apps ?? 0} sản phẩm</option>)}</select></label>}
         {showImport && <QuantitativeDatasetImport projectId={projectId} onImported={(item) => { setSelectedDatasetId(item.id); setDataset(item); setShowImport(false); setVisibleApps(50); void (async () => { const all: ComparisonDataset[] = []; let cursor: string | undefined; do { const page = await reportApi.listComparisonDatasets(cursor, projectId); all.push(...page.items.filter((row) => !all.some((existing) => existing.id === row.id))); cursor = page.next_cursor ?? undefined; } while (cursor); setDatasets(all); })().catch((cause) => setError(cause instanceof Error ? cause.message : 'CSV đã lưu nhưng danh sách chưa làm mới. Hãy bấm Refresh.')); }} />}
       </section>
       <section className="research-panel" id="workspace-reports"><div className="panel-heading"><div><span className="state-label">KẾT QUẢ CHATGPT</span><h3>Báo cáo trong dự án</h3></div><a className="secondary-action" href={`/reports?projectId=${encodeURIComponent(projectId)}`}>Mở thư viện báo cáo</a></div><p>{reports.length ? `Đã liên kết ${reports.length} báo cáo` : 'Nhập báo cáo tại đây sau khi nghiên cứu bằng ChatGPT Plus.'}</p><div className="workspace-report-list">{reports.map((report) => <a key={report.id} href={`/reports/${encodeURIComponent(report.id)}`}><strong>{report.question}</strong><small>{displayReportScope(report.geo, report.os, report.research_period)}</small></a>)}</div>
@@ -404,8 +422,57 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
       {!activeSelectionMatchesDataset && <div className="research-alert" role="status">Danh sách đã lưu thuộc tệp dữ liệu “{selectedContext?.dataset_filename || 'nguồn cũ chưa biết'}”, không phải tệp đang xem. Chọn “Tạo danh sách mới…” để bắt đầu từ tệp này; danh sách cũ vẫn được giữ cho đến khi bạn xác nhận hành động đó.</div>}
       {activeSelectionMatchesDataset && selectedApps.length === 0 && selectedContext && <p className="field-help">Danh sách mới đã mở từ tệp này. Chọn sản phẩm bên dưới để lưu vào danh sách.</p>}
       {!activeSelectionMatchesDataset && <button type="button" className="secondary-action" onClick={startNewShortlist} disabled={savingSelection}>Tạo danh sách mới từ tệp này (thay danh sách hiện tại)</button>}
-      {apps.length > 0 && <div className="workspace-product-controls"><label>Tìm sản phẩm<input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Tên hoặc mã sản phẩm…" /></label><label>Chỉ số cần xem<select aria-label="Chỉ số cần xem trong bảng sản phẩm" value={activeMetric} onChange={(event) => setDisplayMetric(event.target.value)}>{datasetMetrics.map(([id, name]) => <option key={id} value={id} title={name}>{csvMetricLabel(id, name)}</option>)}</select></label><button type="button" className="secondary-action" onClick={() => setProductSort((current) => current === 'desc' ? 'asc' : 'desc')}>Giá trị: {productSort === 'desc' ? 'cao → thấp' : 'thấp → cao'}</button><label>Bộ so sánh<select aria-label="Bộ so sánh đích" value={targetCollectionId} onChange={(event) => setTargetCollectionId(event.target.value)}><option value="">Chọn bộ so sánh…</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label></div>}
-      {apps.length === 0 ? <p>Không tìm thấy dòng sản phẩm trong tệp dữ liệu này.</p> : <div className="workspace-app-table-scroll"><table className="workspace-app-table"><thead><tr><th>Chọn nghiên cứu</th><th>Sản phẩm / mã nguồn</th><th>{csvMetricLabel(activeMetric, datasetMetrics.find(([id]) => id === activeMetric)?.[1])}<span className="table-source-label">Tên cột CSV: {datasetMetrics.find(([id]) => id === activeMetric)?.[1] || 'Không rõ'}</span></th><th>Phạm vi trong file</th><th>Hồ sơ và bộ so sánh</th></tr></thead><tbody>{visibleProductRows.slice(0, visibleApps).map((app) => { const observation = app.rows.find((row) => row.metric_id === activeMetric); const mapping = sourceMappingFor(app); const profileHref = mapping?.mapped_subject_id ? `/research?projectId=${encodeURIComponent(projectId)}&view=data&subjectId=${encodeURIComponent(mapping.mapped_subject_id)}#project-subject-profiles` : ''; return <tr key={app.id}><td><input type="checkbox" aria-label={`Chọn ${app.name} để nghiên cứu bằng ChatGPT`} checked={activeSelectionMatchesDataset && selectedApps.includes(app.id)} disabled={!activeSelectionMatchesDataset || savingSelection} onChange={() => void toggleApp(app.id)} /></td><th scope="row">{app.name}<small>{app.id}</small></th><td data-label={csvMetricLabel(activeMetric, datasetMetrics.find(([id]) => id === activeMetric)?.[1])}><strong className="workspace-source-value">{observation?.value == null ? (observation?.source_validation_reasons?.length ? 'Giá trị không hợp lệ' : 'Chưa có giá trị') : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(observation.value)}${observation.unit ? ` ${observation.unit}` : ''}`}</strong><small>{observation?.verification_status === 'verified' ? 'Đã xác minh độc lập' : 'Đọc từ CSV · chưa xác minh độc lập'}{observation && !observation.analysis_ready ? ' · Chưa đủ metadata so sánh' : ''}</small></td><td data-label="Phạm vi nguồn">{[...new Set(app.rows.map((row) => `${row.geo || 'Chưa có GEO'} · ${row.platform || 'Chưa rõ nền tảng'} · ${csvSourcePeriodLabel(row)}`))].join('; ')}</td><td className="workspace-product-actions" data-label="Xem hồ sơ / so sánh">{profileHref ? <a className="secondary-action" href={profileHref}>Mở hồ sơ</a> : <button type="button" className="secondary-action" disabled={productActionBusy === app.id} onClick={async () => { setProductActionBusy(app.id); setError(''); try { const subjectId = await resolveSubject(app); setNotice(`Đã tạo hồ sơ cho ${app.name}.`); window.history.pushState({}, '', `/research?projectId=${encodeURIComponent(projectId)}&view=data&subjectId=${encodeURIComponent(subjectId)}#project-subject-profiles`); window.dispatchEvent(new PopStateEvent('popstate')); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không tạo được hồ sơ.'); } finally { setProductActionBusy(null); } }}>{productActionBusy === app.id ? 'Đang tạo…' : 'Tạo hồ sơ'}</button>}<button type="button" className="text-button" disabled={productActionBusy === app.id || !targetCollectionId} onClick={() => void addProductToCollection(app)}>Thêm vào bộ so sánh</button></td></tr>; })}</tbody></table></div>}
+      {apps.length > 0 && <div className="workspace-product-controls">
+        <label>Tìm sản phẩm<input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Tên hoặc mã sản phẩm…" /></label>
+        {datasetMetrics.length > 0 && <details className="quant-column-picker workspace-column-picker">
+          <summary>Chọn cột chỉ số · {visibleDatasetMetrics.length}/{datasetMetrics.length}</summary>
+          <div role="group" aria-label="Chọn chỉ số hiển thị trong bảng sản phẩm">
+            {datasetMetrics.map(([id, name]) => <label key={id}>
+              <input type="checkbox" checked={visibleDatasetMetrics.some(([key]) => key === id)} disabled={visibleDatasetMetrics.length === 1 && visibleDatasetMetrics[0]?.[0] === id} onChange={() => toggleProductMetric(id)} aria-label={`Hiển thị cột ${csvMetricLabel(id, name)}`} />
+              <span>{csvMetricLabel(id, name)}<small>Tên cột nguồn: {name}</small></span>
+            </label>)}
+          </div>
+        </details>}
+        <label>Bộ so sánh<select aria-label="Bộ so sánh đích" value={targetCollectionId} onChange={(event) => setTargetCollectionId(event.target.value)}><option value="">Chọn bộ so sánh…</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label>
+        <span className="quant-sort-instruction">Bấm tiêu đề ↕ để sắp xếp · chọn metric để thêm cột</span>
+      </div>}
+      {apps.length === 0 ? <p>Không tìm thấy dòng sản phẩm trong tệp dữ liệu này.</p> : <div className="workspace-app-table-scroll">
+        <table className="workspace-app-table">
+          <thead><tr>
+            <th>Chọn nghiên cứu</th>
+            <th aria-sort={displayMetric === '__name__' ? productSort === 'asc' ? 'ascending' : 'descending' : 'none'}>
+              <button type="button" className="quant-sort-header" onClick={() => sortProductsBy('__name__')}>
+                <span>Sản phẩm / mã nguồn</span><span aria-hidden="true">{displayMetric === '__name__' ? productSort === 'asc' ? '↑' : '↓' : '↕'}</span>
+              </button>
+            </th>
+            {visibleDatasetMetrics.map(([id, name]) => <th key={id} aria-sort={displayMetric === id ? productSort === 'asc' ? 'ascending' : 'descending' : 'none'}>
+              <button className="quant-sort-header" type="button" onClick={() => sortProductsBy(id)}>
+                <span>{csvMetricLabel(id, name)}<small className="table-source-label">Tên cột CSV: {name}</small></span>
+                <span aria-hidden="true">{displayMetric === id ? productSort === 'asc' ? '↑' : '↓' : '↕'}</span>
+              </button>
+            </th>)}
+            <th>Phạm vi trong file</th>
+            <th>Hồ sơ và bộ so sánh</th>
+          </tr></thead>
+          <tbody>{visibleProductRows.slice(0, visibleApps).map((app) => {
+            const mapping = sourceMappingFor(app);
+            const profileHref = mapping?.mapped_subject_id ? `/research?projectId=${encodeURIComponent(projectId)}&view=data&subjectId=${encodeURIComponent(mapping.mapped_subject_id)}#project-subject-profiles` : '';
+            return <tr key={app.id}>
+              <td><input type="checkbox" aria-label={`Chọn ${app.name} để nghiên cứu bằng ChatGPT`} checked={activeSelectionMatchesDataset && selectedApps.includes(app.id)} disabled={!activeSelectionMatchesDataset || savingSelection} onChange={() => void toggleApp(app.id)} /></td>
+              <th scope="row">{app.name}<small>{app.id}</small></th>
+              {visibleDatasetMetrics.map(([metricId, metricName]) => {
+                const observation = app.rows.find((row) => row.metric_id === metricId);
+                return <td key={metricId} data-label={csvMetricLabel(metricId, metricName)}>
+                  <strong className="workspace-source-value">{observation?.value == null ? (observation?.source_validation_reasons?.length ? 'Giá trị không hợp lệ' : 'Chưa có giá trị') : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(observation.value)}${observation.unit ? ` ${observation.unit}` : ''}`}</strong>
+                  <small>{observation?.verification_status === 'verified' ? 'Đã xác minh độc lập' : 'Đọc từ CSV · chưa xác minh độc lập'}{observation && !observation.analysis_ready ? ' · Chưa đủ metadata so sánh' : ''}</small>
+                </td>;
+              })}
+              <td data-label="Phạm vi nguồn">{[...new Set(app.rows.map((row) => `${row.geo || 'Chưa có GEO'} · ${row.platform || 'Chưa rõ nền tảng'} · ${csvSourcePeriodLabel(row)}`))].join('; ')}</td>
+              <td className="workspace-product-actions" data-label="Xem hồ sơ / so sánh">{profileHref ? <a className="secondary-action" href={profileHref}>Mở hồ sơ</a> : <button type="button" className="secondary-action" disabled={productActionBusy === app.id} onClick={async () => { setProductActionBusy(app.id); setError(''); try { const subjectId = await resolveSubject(app); setNotice(`Đã tạo hồ sơ cho ${app.name}.`); window.history.pushState({}, '', `/research?projectId=${encodeURIComponent(projectId)}&view=data&subjectId=${encodeURIComponent(subjectId)}#project-subject-profiles`); window.dispatchEvent(new PopStateEvent('popstate')); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không tạo được hồ sơ.'); } finally { setProductActionBusy(null); } }}>{productActionBusy === app.id ? 'Đang tạo…' : 'Tạo hồ sơ'}</button>}<button type="button" className="text-button" disabled={productActionBusy === app.id || !targetCollectionId} onClick={() => void addProductToCollection(app)}>Thêm vào bộ so sánh</button></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>}
       {visibleProductRows.length > visibleApps && <button type="button" className="secondary-action" onClick={() => setVisibleApps((current) => current + 50)}>Tải thêm sản phẩm</button>}
       {rankingOption && <div className="workspace-selection-criterion"><label className="field-label">Chọn sản phẩm theo số liệu đã ghi nhận<select value={rankingOption.key} onChange={(event) => setRankingKey(event.target.value)}>{rankingOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label><button type="button" className="secondary-action" disabled={!activeSelectionMatchesDataset || savingSelection || rankingOption.rows.size < 5} onClick={() => void selectFiveHighest()}>Chọn 5 giá trị cao nhất trong CSV này</button><span>Dùng 5 quan sát chính xác, đầy đủ và cùng phạm vi trong tệp này. Đây không phải thứ hạng thị trường.</span></div>}
       {rankingOptions.length === 0 && <p className="field-help">Chưa thể tự chọn sản phẩm vì không có nhóm 5 quan sát chính xác, đầy đủ cùng chỉ số, đơn vị, thị trường, nền tảng, phương pháp và kỳ. Bạn vẫn có thể tự chọn sản phẩm sau khi tạo danh sách từ tệp này.</p>}
