@@ -31,3 +31,7 @@ Legacy preservation and revision-conflict behavior still require applicable revi
 ## Concurrent edit QA
 
 Two browser tabs edited the same synthetic trend decision. The first saved a newer revision; the second received a conflict and retained its unsaved draft. After refresh, the first tab's saved value and revision history remained. The originally English conflict response is now displayed in Vietnamese with instructions to preserve the draft and review the newer version. [Conflict and retained draft](../screenshots/g2-03/decision-conflict-draft.jpg). After the fix, frontend 26 files / 220 tests, typecheck and build passed. Legacy preservation remains under review; product acceptance remains pending.
+
+## Legacy preservation
+
+In isolated browser QA, a `[QA]` historical report note survived a separate update to the finding's project decision; Tracking showed the new project next action while the note remained in the report. [Legacy note after decision update](../screenshots/g2-03/legacy-note-after-decision.jpg). The workspace backend regression suite ran 19 tests successfully on temporary SQLite databases and migrations, including legacy report notes, linking, stale targets, historical decisions and revision conflicts. Report-entity-specific browser UAT was not separately run. The scoped G2-03 technical workflow is DEV_DONE; genuine-report G2-04 and owner product acceptance are still pending.
