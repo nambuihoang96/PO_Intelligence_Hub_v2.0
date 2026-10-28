@@ -3,7 +3,7 @@
 Ngày: 2026-10-28
 Nhánh: `feat/ux-recovery-01-research-results`
 Baseline đã xác nhận: `2bcecd75f6c2b0be42feadf377ee79b97ebb79c3`
-Implementation commit: `e13343f2df4daa29c90a732c1f7673d403dac600`.
+Implementation commit: `e13343f2df4daa29c90a732c1f7673d403dac600`. UAT closure/screenshots: `4798877` (documentation + real browser evidence only; no source changes in this closure).
 
 ## Kết quả
 
