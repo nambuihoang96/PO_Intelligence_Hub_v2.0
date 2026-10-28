@@ -53,7 +53,7 @@ describe('OpportunityReview', () => {
   it('shows source measurements as unverified and does not auto-attach similarly named report findings', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
     expect(await screen.findByRole('heading', { name: 'Theo dõi quyết định sản phẩm' })).toBeTruthy();
-    expect(await screen.findByText('Product Alpha')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Product Alpha' })).toBeTruthy();
     expect(await screen.findByLabelText('Gắn Downloads ở dòng dữ liệu 2')).toBeTruthy();
     expect(screen.getByText(/dòng dữ liệu 2.*chưa xác minh/i)).toBeTruthy();
     expect(screen.queryByText('Users value simplicity')).toBeNull();
@@ -78,11 +78,26 @@ describe('OpportunityReview', () => {
     render(<OpportunityReview projectId="workspace-1" />);
     expect(await screen.findByRole('heading', { name: 'Users value simplicity' })).toBeTruthy();
     expect(screen.getByText('PHÁT HIỆN TRONG BÁO CÁO')).toBeTruthy();
+    expect((screen.getByLabelText('Báo cáo nghiên cứu') as HTMLSelectElement).value).toBe('report-1');
+    expect(screen.getByText(/The report says users prefer simple flows\./)).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Gắn phát hiện báo cáo: Users value simplicity' }) as HTMLInputElement).checked).toBe(false);
     fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Assess this finding directly.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(1));
     expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].decision_target).toEqual(result.candidates[1].decision_target);
     window.history.replaceState({}, '', '/');
+  });
+
+  it('does not open a report as context when its content hash differs from the finding target', async () => {
+    const result = structuredClone(workspace);
+    result.candidates = [{ ...result.candidates[0], candidate_id: 'stale-finding', name: 'Old finding',
+      decision_target: { kind: 'report_finding', target_id: 'finding-1', report_id: 'report-1',
+        report_content_sha256: 'c'.repeat(64), item_key: 'finding-1' } }];
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue(result);
+    render(<OpportunityReview projectId="workspace-1" />);
+    await screen.findByRole('heading', { name: 'Old finding' });
+    expect((screen.getByLabelText('Báo cáo nghiên cứu') as HTMLSelectElement).value).toBe('');
+    expect(screen.queryByRole('checkbox', { name: 'Gắn phát hiện báo cáo: Users value simplicity' })).toBeNull();
   });
 
   it('shows prior Quyết định của PO versions without exposing raw decision JSON', async () => {

@@ -138,7 +138,13 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
     baseline.current = nextDecision ? { candidateId: nextDecision.candidate_id, snapshot: decisionSnapshot(nextDecision, nextQuestions) } : null;
     const linkedReport = candidate?.decision?.assessments.flatMap((assessment) => assessment.evidence_refs)
       .find((reference) => reference.kind.startsWith('report_'));
-    setSelectedReportId(linkedReport?.report_id ?? '');
+    const target = candidate?.decision_target;
+    const contextualReport = target && (target.kind === 'report_finding' || target.kind === 'report_entity')
+      ? workspace?.reports.find((item) => item.report_id === target.report_id
+        && item.content_sha256 === target.report_content_sha256
+        && (target.kind === 'report_finding' ? item.findings.some((finding) => finding.key === target.item_key) : item.entities.some((entity) => entity.key === target.item_key)))
+      : undefined;
+    setSelectedReportId(contextualReport?.report_id ?? linkedReport?.report_id ?? '');
   }, [candidate?.candidate_id]);
 
   const hasUnsavedChanges = Boolean(candidate && decision?.candidate_id === candidate.candidate_id && baseline.current?.candidateId === candidate.candidate_id
