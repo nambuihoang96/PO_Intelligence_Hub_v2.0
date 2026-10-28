@@ -29,7 +29,7 @@ describe('report-scoped analytics selection contract', () => {
     const selection = buildAnalyticsSelection('report-1', [row()], []);
     expect(selection.sourceProvenance.report).toBe(1);
     expect(selection.sourceProvenance.csvDatasets).toBe(0);
-    expect(selection.selectedObservations[0].sourceLabel).toContain('ChatGPT research');
+    expect(selection.selectedObservations[0].sourceLabel).toContain('Nghiên cứu ChatGPT');
     expect(selection.selectedObservations[0].observation.value).toBe(100);
   });
 
@@ -37,7 +37,7 @@ describe('report-scoped analytics selection contract', () => {
     const selection = buildAnalyticsSelection('report-1', [], [dataset([row({ observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'dataset-1' })])]);
     expect(selection.sourceProvenance.report).toBe(0);
     expect(selection.sourceProvenance.csvDatasets).toBe(1);
-    expect(selection.selectedObservations[0].sourceLabel).toContain('not automatically verified');
+    expect(selection.selectedObservations[0].sourceLabel).toContain('chưa tự động xác minh');
     expect(selection.selectedObservations[0].observation.verification_status).toBe('unverified');
   });
 

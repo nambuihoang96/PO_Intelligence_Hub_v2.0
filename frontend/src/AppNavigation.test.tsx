@@ -4,11 +4,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AppNavigation, type NavigationPage } from './AppNavigation';
 
 const pages: NavigationPage[] = [
-  { path: '/research', label: 'Research', icon: 'home' },
-  { path: '/reports', label: 'Reports', icon: 'reports' },
-  { path: '/tracking', label: 'Tracking', icon: 'runs' },
+  { path: '/research', label: 'Nghiên cứu', icon: 'home' },
+  { path: '/reports', label: 'Báo cáo', icon: 'reports' },
+  { path: '/tracking', label: 'Theo dõi', icon: 'runs' },
 ];
-function renderNavigation(currentPath = '/reports', currentLabel = 'Reports') {
+function renderNavigation(currentPath = '/reports', currentLabel = 'Báo cáo') {
   return render(<AppNavigation pages={pages} currentPath={currentPath} currentLabel={currentLabel} />);
 }
 
@@ -17,17 +17,17 @@ afterEach(() => cleanup());
 describe('AppNavigation', () => {
   it('keeps exactly Research, Reports, and Tracking as primary areas', () => {
     renderNavigation();
-    expect(screen.getByRole('navigation', { name: 'Main navigation' }).querySelectorAll('a')).toHaveLength(3);
-    expect(screen.getByRole('link', { name: 'Research' }).getAttribute('href')).toBe('/research');
-    expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports');
-    expect(screen.getByRole('link', { name: 'Tracking' }).getAttribute('href')).toBe('/tracking');
+    expect(screen.getByRole('navigation', { name: 'Điều hướng chính' }).querySelectorAll('a')).toHaveLength(3);
+    expect(screen.getByRole('link', { name: 'Nghiên cứu' }).getAttribute('href')).toBe('/research');
+    expect(screen.getByRole('link', { name: 'Báo cáo' }).getAttribute('href')).toBe('/reports');
+    expect(screen.getByRole('link', { name: 'Theo dõi' }).getAttribute('href')).toBe('/tracking');
   });
   it('shows the current location and exposes every destination from the expandable menu', () => {
     renderNavigation();
 
-    const toggle = screen.getByRole('button', { name: 'Open navigation menu. Current page: Reports' });
+    const toggle = screen.getByRole('button', { name: 'Mở menu điều hướng. Trang hiện tại: Báo cáo' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Báo cáo' }).getAttribute('aria-current')).toBe('page');
 
     fireEvent.click(toggle);
 
@@ -41,7 +41,7 @@ describe('AppNavigation', () => {
 
   it('closes on Escape and returns keyboard focus to the menu button', () => {
     renderNavigation('/research/runs', 'Research runs');
-    const toggle = screen.getByRole('button', { name: 'Open navigation menu. Current page: Research runs' });
+    const toggle = screen.getByRole('button', { name: 'Mở menu điều hướng. Trang hiện tại: Research runs' });
 
     fireEvent.click(toggle);
     fireEvent.keyDown(window, { key: 'Escape' });
@@ -51,11 +51,11 @@ describe('AppNavigation', () => {
   });
 
   it('closes after a primary destination is selected', () => {
-    renderNavigation('/research', 'Research');
-    const toggle = screen.getByRole('button', { name: 'Open navigation menu. Current page: Research' });
+    renderNavigation('/research', 'Nghiên cứu');
+    const toggle = screen.getByRole('button', { name: 'Mở menu điều hướng. Trang hiện tại: Nghiên cứu' });
     fireEvent.click(toggle);
 
-    const researchLink = screen.getByRole('link', { name: 'Tracking' });
+    const researchLink = screen.getByRole('link', { name: 'Theo dõi' });
     researchLink.addEventListener('click', (event) => event.preventDefault(), { once: true });
     fireEvent.click(researchLink);
 
@@ -65,6 +65,6 @@ describe('AppNavigation', () => {
 
   it('marks nested research routes as the current Research section', () => {
     renderNavigation('/research/runs', 'Research runs');
-    expect(screen.getByRole('link', { name: 'Research' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Nghiên cứu' }).getAttribute('aria-current')).toBe('page');
   });
 });

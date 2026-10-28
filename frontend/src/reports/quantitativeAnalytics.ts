@@ -86,7 +86,7 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
         const comparableEntities = new Set(period.map(({ row }) => row.entity_id)).size;
         views.push({
           kind: comparableEntities >= 2 ? 'ranking' : 'observation',
-          label: period[0].row.metric_definition || 'Reported ranking position',
+          label: period[0].row.metric_definition || 'Vị trí xếp hạng được báo cáo',
           observations: comparableEntities >= 2 ? [...period].sort((a, b) => Number(a.row.value) - Number(b.row.value)) : [...period],
         });
       }
@@ -107,7 +107,7 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
         label: group[0].row.metric_definition || group[0].row.metric_id || 'Reported metric',
         observations: [...group].sort((a, b) => chronological(a, b)
           || (a.row.entity_name || a.row.entity_id || '').localeCompare(b.row.entity_name || b.row.entity_id || '')),
-        ...(overlapping ? { explanation: 'Measurement windows overlap. Exact dates are shown in a table; values are not presented as consecutive periods or a growth trend.' } : {}),
+        ...(overlapping ? { explanation: 'Các kỳ đo bị chồng lấn. Ngày chính xác được hiển thị trong bảng; các giá trị không được coi là kỳ liên tiếp hoặc xu hướng tăng trưởng.' } : {}),
       });
       continue;
     }
@@ -119,8 +119,8 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
         observations: [...group].sort((a, b) => chronological(a, b)
           || (a.row.entity_name || a.row.entity_id || '').localeCompare(b.row.entity_name || b.row.entity_id || '')),
         explanation: hasNegativeValues
-          ? 'Signed values are shown in a table so negative measurements cannot look like positive-width bars.'
-          : 'The entities do not share one compatible pair of period windows. Exact dates are preserved in a comparison table.',
+          ? 'Giá trị có dấu được hiển thị trong bảng để số âm không bị hiểu nhầm thành cột dương.'
+          : 'Các đối tượng không có cùng một cặp kỳ tương thích. Ngày chính xác được giữ trong bảng so sánh.',
       });
       continue;
     }
@@ -135,8 +135,8 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
           label: series[0].row.metric_definition || series[0].row.metric_id || 'Reported metric',
           observations: series,
           explanation: entityHasOverlap
-            ? 'Measurement windows overlap. These values are shown as separate dated observations instead of a connected trend.'
-            : 'Signed values are shown in a table so negative measurements cannot look like positive-width bars.',
+            ? 'Các kỳ đo bị chồng lấn. Giá trị được hiển thị thành từng quan sát có ngày riêng, không nối thành xu hướng.'
+            : 'Giá trị có dấu được hiển thị trong bảng để số âm không bị hiểu nhầm thành cột dương.',
         });
         continue;
       }
@@ -170,21 +170,21 @@ export function quantitativeLimitations(rows: QuantitativeObservation[]): string
     byGranularityFreeIdentity.set(identity, granularities);
   }
   if ([...byGranularityFreeIdentity.values()].some((values) => values.size > 1)) {
-    reasons.add('Known granularity is inconsistent or missing within otherwise similar observations; observations remain in separate views.');
+    reasons.add('Chu kỳ đo không nhất quán hoặc còn thiếu giữa các quan sát có vẻ tương tự; các quan sát vẫn được hiển thị riêng.');
   }
   if (rows.some((row) => row.value !== null && row.value < 0)) {
-    reasons.add('Negative values are shown with their sign in a table or signed comparison; they are not treated as positive downloads.');
+    reasons.add('Giá trị âm được giữ nguyên dấu trong bảng hoặc phép so sánh có dấu; không được coi là lượt tải dương.');
   }
   const rowsByEntity = new Map<string, QuantitativeObservation[]>();
   for (const row of rows.filter(hasRenderableScope)) rowsByEntity.set(row.entity_id!, [...(rowsByEntity.get(row.entity_id!) ?? []), row]);
   if ([...rowsByEntity.values()].some((entityRows) => periodsOverlap(entityRows))) {
-    reasons.add('Overlapping measurement windows are not connected as consecutive time points.');
+    reasons.add('Các kỳ đo bị chồng lấn không được nối thành các mốc thời gian liên tiếp.');
   }
   if (rows.some((row) => !row.scope_compatible && !row.validation_reasons.some((reason) => /scope|GEO|platform/i.test(reason)))) {
-    reasons.add('Observation scope is not confirmed as compatible with this report.');
+    reasons.add('Chưa xác nhận phạm vi quan sát tương thích với báo cáo này.');
   }
   if (rows.length && selectQuantitativeViews(rows).length === 0 && reasons.size === 0) {
-    reasons.add('There are not enough compatible observations for a comparison or time-based view.');
+    reasons.add('Chưa có đủ quan sát tương thích để so sánh hoặc hiển thị theo thời gian.');
   }
   return [...reasons];
 }

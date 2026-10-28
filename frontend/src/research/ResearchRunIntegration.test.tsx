@@ -58,12 +58,12 @@ describe('research run UI integration', () => {
 
     window.history.replaceState({}, '', '/research?projectId=project-1&view=plan');
     render(<ResearchWorkspace mode="list" />);
-    await screen.findByRole('heading', { name: 'Prepare your research' });
-    fireEvent.change(screen.getByLabelText('Plan version for new run'), { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create run' }));
+    await screen.findByRole('heading', { name: 'Chuẩn bị nghiên cứu' });
+    fireEvent.change(screen.getByLabelText('Dùng phiên bản yêu cầu'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo lượt nghiên cứu' }));
 
     expect(await screen.findByRole('status')).toBeTruthy();
-    expect(await screen.findByText('queued')).toBeTruthy();
+    expect(await screen.findByText('Đang chờ')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/projects/project-1/runs') && init?.method === 'POST')).toBe(true);
   });
 
@@ -80,10 +80,10 @@ describe('research run UI integration', () => {
 
     window.history.replaceState({}, '', '/research?projectId=project-1');
     render(<ResearchWorkspace mode="list" />);
-    expect(await screen.findByRole('heading', { name: 'Move this research forward' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Start Research Explore a question/ }).getAttribute('href')).toContain('view=plan');
-    expect(screen.getByRole('link', { name: /Save New Information Keep a note/ }).getAttribute('href')).toContain('#project-saved-information');
-    expect(screen.getByRole('link', { name: /Analyze Data Import or explore/ }).getAttribute('href')).toContain('action=import-csv');
+    expect(await screen.findByRole('heading', { name: 'Bạn muốn thực hiện gì?' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Nghiên cứu chuyên sâu Đặt câu hỏi/ }).getAttribute('href')).toContain('view=plan');
+    expect(screen.getByRole('link', { name: /Ghi nhận xu hướng Lưu quan sát/ }).getAttribute('href')).toContain('#project-saved-information');
+    expect(screen.getByRole('link', { name: /Phân tích dữ liệu Nhập CSV/ }).getAttribute('href')).toContain('action=import-csv');
   });
 
   it('keeps a saved report, benchmark collection, and subject visible in the same Project Home', async () => {
@@ -107,7 +107,7 @@ describe('research run UI integration', () => {
     expect(savedReport?.getAttribute('href')).toBe('/reports/report-1');
     expect(screen.getByText('Puzzle October')).toBeTruthy();
     expect(screen.getByText('Puzzle One')).toBeTruthy();
-    expect(screen.getByText('Research report added')).toBeTruthy();
+    expect(screen.getByText('Đã lưu báo cáo')).toBeTruthy();
   });
 
   it('shows a run detail pinned to the exact saved plan version and exposes evidence navigation', async () => {

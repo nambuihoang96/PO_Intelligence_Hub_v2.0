@@ -35,7 +35,7 @@ describe('CSV comparison chart adapter', () => {
     expect(sortComparisonPoints(points, 'current_desc').map((point) => point.key)).toEqual(['m', 'z', 'a']);
     expect(sortComparisonPoints(points, 'baseline_desc').map((point) => point.key)).toEqual(['a', 'm', 'z']);
     expect(sortComparisonPoints(points, 'name').map((point) => point.key)).toEqual(['a', 'm', 'z']);
-    expect(comparisonSortLabel('current_desc', 'downloads')).toBe('highest current value (downloads)');
+    expect(comparisonSortLabel('current_desc', 'downloads')).toBe('giá trị kỳ hiện tại cao nhất (downloads)');
   });
 
   it('sorts increases, decreases and valid percentages with deterministic ties and null percentages last', () => {

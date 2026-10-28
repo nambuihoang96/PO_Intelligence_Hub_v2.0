@@ -41,7 +41,7 @@ export function ImageEvidencePanel({ projectId }: { projectId: string }) {
       setImages((current) => append ? [...current, ...imagePage.items] : imagePage.items);
       setNextCursor(imagePage.next_cursor);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load saved image evidence.');
+      setError(cause instanceof Error ? cause.message : 'Không thể tải ảnh chứng cứ đã lưu.');
     } finally { setLoading(false); }
   }
 
@@ -49,16 +49,16 @@ export function ImageEvidencePanel({ projectId }: { projectId: string }) {
 
   function chooseFile(next: File | null) {
     setError(''); setNotice('');
-    if (next && !SUPPORTED_TYPES.includes(next.type)) { setFile(null); setError('Choose a PNG, JPEG, or WebP image.'); return; }
-    if (next && next.size > MAX_IMAGE_BYTES) { setFile(null); setError('Choose an image smaller than 10 MB.'); return; }
+    if (next && !SUPPORTED_TYPES.includes(next.type)) { setFile(null); setError('Hãy chọn ảnh PNG, JPEG hoặc WebP.'); return; }
+    if (next && next.size > MAX_IMAGE_BYTES) { setFile(null); setError('Hãy chọn ảnh nhỏ hơn 10 MB.'); return; }
     setFile(next);
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (savingRef.current) return;
-    if (!file || !subjectId) { setError('Choose a saved subject and an image file.'); return; }
-    if (!linkedUpdate && !sourceNote.trim()) { setError('Add a note describing where this image came from.'); return; }
+    if (!file || !subjectId) { setError('Hãy chọn hồ sơ đã lưu và một tệp ảnh.'); return; }
+    if (!linkedUpdate && !sourceNote.trim()) { setError('Hãy ghi rõ ảnh này được lấy từ đâu.'); return; }
     savingRef.current = true; setSaving(true); setError(''); setNotice('');
     try {
       await researchApi.uploadImageEvidence(projectId, subjectId, file, linkedUpdate ? { trend_update_id: linkedUpdate.id } : {
@@ -66,53 +66,53 @@ export function ImageEvidencePanel({ projectId }: { projectId: string }) {
         ...(sourceUrl.trim() ? { source_url: sourceUrl.trim() } : {}), ...(publishedOn ? { published_on: publishedOn } : {}),
       });
       setFile(null); setSourceNote(''); setSourceTitle(''); setSourceUrl(''); setPublishedOn(''); setTrendUpdateId('');
-      setNotice('Image saved with its source context. It remains marked as source-reported and unverified.');
+      setNotice('Đã lưu ảnh kèm bối cảnh nguồn. Ảnh vẫn được đánh dấu là do nguồn cung cấp và chưa xác minh.');
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save this image. Your selection is still here.');
+      setError(cause instanceof Error ? cause.message : 'Không thể lưu ảnh. Tệp bạn đã chọn vẫn được giữ lại.');
     } finally { savingRef.current = false; setSaving(false); }
   }
 
-  return <section id="project-image-evidence" className="research-panel image-evidence-panel" aria-label="Project image evidence">
-    <header className="trend-updates-heading"><div><span className="state-label">PROJECT EVIDENCE</span><h3>Image evidence</h3>
-      <p>Attach a local screenshot or image to a confirmed subject. Files are stored with the project database; nothing is uploaded to an external service or interpreted automatically.</p></div></header>
+  return <section id="project-image-evidence" className="research-panel image-evidence-panel" aria-label="Ảnh chứng cứ của dự án">
+    <header className="trend-updates-heading"><div><span className="state-label">CHỨNG CỨ CỦA DỰ ÁN</span><h3>Ảnh chứng cứ</h3>
+      <p>Đính kèm ảnh chụp hoặc hình ảnh trên máy với một hồ sơ đã xác nhận. Tệp được lưu cùng dữ liệu dự án, không tải lên dịch vụ ngoài và không tự động diễn giải.</p></div></header>
     {error && <div role="alert" className="research-alert">{error}</div>}
     {notice && <div role="status" className="research-success">{notice}</div>}
     <form className="trend-update-form image-evidence-form" onSubmit={(event) => void save(event)}>
       <div className="trend-update-form-grid">
-        <label>Confirmed subject<select required value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTrendUpdateId(''); }}>
-          <option value="">Choose a saved subject…</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+        <label>Hồ sơ đã xác nhận<select required value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTrendUpdateId(''); }}>
+          <option value="">Chọn hồ sơ đã lưu…</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
         </select></label>
-        <label>Related saved update <span className="optional-label">Optional</span><select value={trendUpdateId} disabled={!subjectId || !subjectUpdates.length} onChange={(event) => setTrendUpdateId(event.target.value)}>
-          <option value="">Add image source context separately</option>{subjectUpdates.map((update) => <option key={update.id} value={update.id}>{update.published_on} · {update.exact_claim.slice(0, 90)}</option>)}
+        <label>Cập nhật liên quan <span className="optional-label">Không bắt buộc</span><select value={trendUpdateId} disabled={!subjectId || !subjectUpdates.length} onChange={(event) => setTrendUpdateId(event.target.value)}>
+          <option value="">Thêm riêng bối cảnh nguồn cho ảnh</option>{subjectUpdates.map((update) => <option key={update.id} value={update.id}>{update.published_on} · {update.exact_claim.slice(0, 90)}</option>)}
         </select></label>
-        <label>Image file (PNG, JPEG, WebP; up to 10 MB)<input type="file" accept="image/png,image/jpeg,image/webp" required onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} /></label>
+        <label>Tệp ảnh (PNG, JPEG, WebP; tối đa 10 MB)<input type="file" accept="image/png,image/jpeg,image/webp" required onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} /></label>
       </div>
-      {linkedUpdate ? <div className="image-evidence-linked-context"><strong>Using saved update source context</strong><p>{linkedUpdate.source_note}</p><span>{linkedUpdate.source_title || 'Untitled source'} · {linkedUpdate.published_on} · source-reported, unverified</span></div> : <>
+      {linkedUpdate ? <div className="image-evidence-linked-context"><strong>Đang dùng bối cảnh nguồn từ cập nhật đã lưu</strong><p>{linkedUpdate.source_note}</p><span>{linkedUpdate.source_title || 'Nguồn chưa có tiêu đề'} · {linkedUpdate.published_on} · do nguồn cung cấp, chưa xác minh</span></div> : <>
         <div className="trend-update-form-grid">
-          <label>Source title <span className="optional-label">Optional</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label>
-          <label>Source link <span className="optional-label">Optional</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
-          <label>Publication date <span className="optional-label">Optional</span><input type="date" value={publishedOn} onChange={(event) => setPublishedOn(event.target.value)} /></label>
+          <label>Tên nguồn <span className="optional-label">Không bắt buộc</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label>
+          <label>Liên kết nguồn <span className="optional-label">Không bắt buộc</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
+          <label>Ngày đăng <span className="optional-label">Không bắt buộc</span><input type="date" value={publishedOn} onChange={(event) => setPublishedOn(event.target.value)} /></label>
         </div>
-        <label>Where did this image come from?<textarea required maxLength={10_000} rows={2} value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Describe the supplied source context. This note is not an independent verification." /></label>
+        <label>Ảnh này được lấy từ đâu?<textarea required maxLength={10_000} rows={2} value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Mô tả bối cảnh nguồn được cung cấp. Ghi chú này không phải xác minh độc lập." /></label>
       </>}
-      {previewUrl && <div className="image-evidence-preview"><img src={previewUrl} alt={`Preview of ${file?.name ?? 'selected image'}`} /><span>{file?.name} · {((file?.size ?? 0) / 1024).toFixed(0)} KB</span></div>}
-      <div className="trend-update-form-actions"><small>Saved images are append-only and remain unverified. The original file hash and source context are retained.</small>
-        <button type="submit" className="primary-action" disabled={saving || !subjects.length}>{saving ? 'Saving image…' : 'Save image evidence'}</button>
+      {previewUrl && <div className="image-evidence-preview"><img src={previewUrl} alt={`Xem trước ${file?.name ?? 'ảnh đã chọn'}`} /><span>{file?.name} · {((file?.size ?? 0) / 1024).toFixed(0)} KB</span></div>}
+      <div className="trend-update-form-actions"><small>Ảnh đã lưu không bị ghi đè và vẫn chưa xác minh. Ứng dụng giữ mã kiểm tra tệp gốc và bối cảnh nguồn.</small>
+        <button type="submit" className="primary-action" disabled={saving || !subjects.length}>{saving ? 'Đang lưu ảnh…' : 'Lưu ảnh chứng cứ'}</button>
       </div>
     </form>
-    <div className="image-evidence-history"><h4>Saved images</h4>
-      {loading && <p role="status">Loading saved images…</p>}
-      {!loading && images.length === 0 && <p>No image evidence saved for this project yet.</p>}
+    <div className="image-evidence-history"><h4>Ảnh đã lưu</h4>
+      {loading && <p role="status">Đang tải ảnh đã lưu…</p>}
+      {!loading && images.length === 0 && <p>Dự án chưa có ảnh chứng cứ nào.</p>}
       <div className="image-evidence-grid">{images.map((image) => <article className="image-evidence-item" key={image.id}>
-        <a className="image-evidence-thumb" href={image.content_url} target="_blank" rel="noopener noreferrer" aria-label={`Open original image ${image.filename}`}><img src={image.content_url} alt={image.filename} loading="lazy" /></a>
+        <a className="image-evidence-thumb" href={image.content_url} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh gốc ${image.filename}`}><img src={image.content_url} alt={image.filename} loading="lazy" /></a>
         <div className="image-evidence-copy"><strong>{image.subject_name}</strong><span>{image.filename} · {(image.content_size / 1024).toFixed(0)} KB</span>
-          <span>Source-reported · unverified{image.published_on ? ` · ${image.published_on}` : ''}</span>
-          <p>{image.source_note}</p>{image.source_url && <a href={image.source_url} target="_blank" rel="noopener noreferrer">Open supplied source link</a>}
-          <details><summary>File details</summary><code>{image.content_sha256}</code></details>
+          <span>Do nguồn cung cấp · chưa xác minh{image.published_on ? ` · ${image.published_on}` : ''}</span>
+          <p>{image.source_note}</p>{image.source_url && <a href={image.source_url} target="_blank" rel="noopener noreferrer">Mở liên kết nguồn đã cung cấp</a>}
+          <details><summary>Chi tiết tệp</summary><code>{image.content_sha256}</code></details>
         </div>
       </article>)}</div>
-      {nextCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>Load more images</button>}
+      {nextCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>Tải thêm ảnh</button>}
     </div>
   </section>;
 }

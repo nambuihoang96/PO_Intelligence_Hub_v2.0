@@ -32,6 +32,6 @@ describe('selectQuantitativeState', () => {
     };
     const result = selectQuantitativeState([], [{ ...dataset, observations: [worldwide], compatibility_status: 'incompatible' }], { geo: 'US', platform: 'Android' });
     expect(result.state).toBe('report_scope_mismatch');
-    expect(result.reasons.some((reason) => reason.includes('Worldwide / Unified analysis') && reason.includes('US / Android measurements'))).toBe(true);
+    expect(result.reasons.some((reason) => reason.includes('Worldwide / Unified') && reason.includes('US / Android'))).toBe(true);
   });
 });

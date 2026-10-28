@@ -41,26 +41,26 @@ describe('QuantitativeDatasetExplorer', () => {
 
   it('explores source-only apps, searches IDs, sorts metrics, and exposes observation provenance', () => {
     render(<QuantitativeDatasetExplorer dataset={dataset} reportScope={{ geo: 'US', platform: 'Android' }} onRevalidated={vi.fn()} />);
-    expect(screen.getByText(/CSV data remains available for Worldwide \/ Unified analysis\. It cannot be used directly as US \/ Android measurements\./)).toBeTruthy();
-    const comparisonCandidates = screen.getByText('Comparison candidates · need compatible peers');
+    expect(screen.getByText(/Số liệu CSV vẫn có thể xem trong phạm vi Worldwide \/ Unified\. Không thể dùng trực tiếp thay cho số đo US \/ Android\./)).toBeTruthy();
+    const comparisonCandidates = screen.getByText('Có thể so sánh khi có tệp phù hợp');
     expect(comparisonCandidates.previousElementSibling?.textContent).toBe('2');
     expect(screen.getByText('Game One')).toBeTruthy();
     expect(screen.getByText('Game Two')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Search app or source ID'), { target: { value: 'st-2' } });
+    fireEvent.change(screen.getByLabelText('Tìm sản phẩm hoặc mã nguồn'), { target: { value: 'st-2' } });
     expect(screen.getByText('Game Two')).toBeTruthy();
     expect(screen.queryByText('Game One')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Search app or source ID'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: /Inspect Game One, Downloads \(Absolute\)/ }));
+    fireEvent.change(screen.getByLabelText('Tìm sản phẩm hoặc mã nguồn'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Xem Game One, Downloads \(Absolute\)/ }));
     expect(screen.getByText('sensor_tower · sensor_tower:st-1')).toBeTruthy();
-    expect(screen.getByText('Ready for dataset analysis · Unverified import')).toBeTruthy();
+    expect(screen.getByText('Đủ thông tin để phân tích trong tệp · CSV chưa được xác minh độc lập')).toBeTruthy();
   });
 
   it('revalidates the saved dataset explicitly without changing its dataset identity', async () => {
     vi.mocked(reportApi.revalidateQuantitativeDataset).mockResolvedValue(dataset);
     const onRevalidated = vi.fn();
     render(<QuantitativeDatasetExplorer dataset={dataset} reportScope={{ geo: 'US', platform: 'Android' }} onRevalidated={onRevalidated} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Revalidate dataset' }));
-    expect(await screen.findByText(/Dataset đã được kiểm tra lại từ CSV gốc/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra lại dữ liệu' }));
+    expect(await screen.findByText(/Đã kiểm tra lại từ CSV gốc\. Mã tệp dữ liệu và liên kết báo cáo được giữ nguyên\./)).toBeTruthy();
     expect(reportApi.revalidateQuantitativeDataset).toHaveBeenCalledWith('report-1', 'dataset-1');
     expect(onRevalidated).toHaveBeenCalledWith(dataset);
   });
@@ -74,8 +74,8 @@ describe('QuantitativeDatasetExplorer', () => {
       ],
     } as unknown as QuantitativeDataset;
     render(<QuantitativeDatasetExplorer dataset={multiple} onRevalidated={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: '2 observations · choose' }));
-    expect(screen.getByRole('region', { name: 'Choose a specific source measurement' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '2 phép đo · chọn để xem' }));
+    expect(screen.getByRole('region', { name: 'Chọn một phép đo từ nguồn' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /1[.,]200 downloads.*2026-10-01.*Method A/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /900 downloads.*2026-10-05.*Method B/ }));
     expect(screen.getByText('2026-10-05 – 2026-11-03 · rolling_period')).toBeTruthy();
@@ -93,7 +93,7 @@ describe('QuantitativeDatasetExplorer', () => {
     render(<QuantitativeDatasetExplorer dataset={crossProvider} onRevalidated={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Provider A Game' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Provider B Game' })).toBeTruthy();
-    expect(screen.getByText('provider-a:shared-id · Source-only entity')).toBeTruthy();
-    expect(screen.getByText('provider-b:shared-id · Source-only entity')).toBeTruthy();
+    expect(screen.getByText('provider-a:shared-id · Chỉ có trong tệp nguồn')).toBeTruthy();
+    expect(screen.getByText('provider-b:shared-id · Chỉ có trong tệp nguồn')).toBeTruthy();
   });
 });

@@ -79,7 +79,7 @@ function ErrorNotice({ error, onRetry }: { error: ApiError; onRetry?: () => void
       <div><strong>{error.code === 'STALE_PLAN_VERSION' ? 'This plan changed in another view.' : error.message}</strong>
         {messages.length > 0 && <ul>{messages.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul>}
       </div>
-      {onRetry && <button className="text-button" type="button" onClick={onRetry}>Reload project</button>}
+      {onRetry && <button className="text-button" type="button" onClick={onRetry}>Tải lại dự án</button>}
     </div>
   );
 }
@@ -97,22 +97,22 @@ function ProjectList({
   return (
     <div className="research-layout">
       <section className="research-panel" aria-labelledby="projects-title">
-        <div className="panel-heading"><div><span className="state-label">PROJECTS</span><h2 id="projects-title">Your research projects</h2></div>
-          <a className="primary-action" href="/research/new">New project <span aria-hidden="true">＋</span></a>
+        <div className="panel-heading"><div><span className="state-label">DỰ ÁN</span><h2 id="projects-title">Dự án của bạn</h2></div>
+          <a className="primary-action" href="/research/new">Tạo dự án <span aria-hidden="true">＋</span></a>
         </div>
         {error && <ErrorNotice error={error} onRetry={onRetry} />}
-        {loading ? <p className="state-message" role="status">Loading projects…</p> : projects.length === 0 && !error ? (
-          <div className="research-empty"><span aria-hidden="true">⌕</span><strong>No projects yet</strong><p>Create a project to keep reports and research work together.</p><a className="secondary-action" href="/research/new">Create a project</a></div>
+        {loading ? <p className="state-message" role="status">Đang tải dự án…</p> : projects.length === 0 && !error ? (
+          <div className="research-empty"><span aria-hidden="true">⌕</span><strong>Chưa có dự án</strong><p>Tạo một dự án để tập hợp báo cáo và hoạt động nghiên cứu.</p><a className="secondary-action" href="/research/new">Tạo dự án</a></div>
         ) : (
           <div className="project-list">
             {projects.map((project) => (
               <div className="project-row-wrap" key={project.id}><a className="project-row" href={`/research?projectId=${encodeURIComponent(project.id)}`}>
                 <span className="project-mark" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span>
-                <span className="project-row-copy"><strong>{project.name}</strong><small>{project.category || 'Uncategorized'}{project.owner ? ` · ${project.owner}` : ''}</small></span>
+                <span className="project-row-copy"><strong>{project.name}</strong><small>{project.category || 'Chưa phân loại'}{project.owner ? ` · ${project.owner}` : ''}</small></span>
                 <span className="row-arrow" aria-hidden="true">→</span>
               </a></div>
             ))}
-            {nextCursor && <button className="secondary-action load-more" type="button" onClick={onLoadMore}>Load more projects</button>}
+            {nextCursor && <button className="secondary-action load-more" type="button" onClick={onLoadMore}>Tải thêm dự án</button>}
           </div>
         )}
       </section>
@@ -137,7 +137,7 @@ function NewProjectForm() {
       });
       window.location.assign(`/research?projectId=${encodeURIComponent(project.id)}`);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause : new ApiError('The project could not be created.', 0, 'REQUEST_FAILED', {}));
+      setError(cause instanceof ApiError ? cause : new ApiError('Không thể tạo dự án. Vui lòng thử lại.', 0, 'REQUEST_FAILED', {}));
     } finally {
       setBusy(false);
     }
@@ -146,16 +146,16 @@ function NewProjectForm() {
   return (
     <div className="research-layout">
       <form className="research-panel research-form" onSubmit={submit}>
-        <div className="panel-heading"><div><span className="state-label">NEW PROJECT</span><h2>Create a place for this research</h2></div></div>
-        <p className="form-intro">Reports, updates, and comparisons you add later will stay together here.</p>
+        <div className="panel-heading"><div><span className="state-label">DỰ ÁN MỚI</span><h2>Tạo không gian cho nghiên cứu này</h2></div></div>
+        <p className="form-intro">Báo cáo, cập nhật và nội dung so sánh sẽ được tập hợp tại đây.</p>
         {error && <ErrorNotice error={error} />}
-        <label className="field-label" htmlFor="project-name">Project name <span>Required</span></label>
-        <input id="project-name" autoComplete="off" maxLength={200} required value={name} onChange={(event) => setName(event.target.value)} placeholder="For example, Cozy puzzle market scan" />
+        <label className="field-label" htmlFor="project-name">Tên dự án <span>Bắt buộc</span></label>
+        <input id="project-name" autoComplete="off" maxLength={200} required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Nghiên cứu thị trường game giải đố" />
         <div className="field-grid">
-          <div><label className="field-label" htmlFor="project-owner">Owner <span>Optional</span></label><input id="project-owner" maxLength={200} value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="Person or team" /></div>
-          <div><label className="field-label" htmlFor="project-category">Category <span>Optional</span></label><input id="project-category" maxLength={120} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Games, productivity…" /></div>
+          <div><label className="field-label" htmlFor="project-owner">Người phụ trách <span>Không bắt buộc</span></label><input id="project-owner" maxLength={200} value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="Cá nhân hoặc nhóm" /></div>
+          <div><label className="field-label" htmlFor="project-category">Lĩnh vực <span>Không bắt buộc</span></label><input id="project-category" maxLength={120} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Trò chơi, năng suất…" /></div>
         </div>
-        <div className="form-actions"><a className="secondary-action" href="/research">Cancel</a><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create project'}</button></div>
+        <div className="form-actions"><a className="secondary-action" href="/research">Hủy</a><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Đang tạo…' : 'Tạo dự án'}</button></div>
       </form>
     </div>
   );
@@ -188,7 +188,7 @@ function PlanEditor({ projectId }: { projectId: string }) {
       setRunPlanVersion((current) => current || String(loadedPlans.at(-1)?.version ?? ''));
       setViewVersion(loadedPlans.at(-1)?.version ?? null);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause : new ApiError('The project could not be loaded.', 0, 'REQUEST_FAILED', {}));
+      setError(cause instanceof ApiError ? cause : new ApiError('Không thể mở dự án. Vui lòng thử lại.', 0, 'REQUEST_FAILED', {}));
     } finally {
       setLoading(false);
     }
@@ -215,9 +215,9 @@ function PlanEditor({ projectId }: { projectId: string }) {
         : await researchApi.createPlan(projectId, payload);
       await reload();
       setViewVersion(saved.version);
-      setNotice(`Plan version ${saved.version} saved.`);
+      setNotice(`Đã lưu phiên bản yêu cầu nghiên cứu ${saved.version}.`);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause : new ApiError('The research plan could not be saved.', 0, 'REQUEST_FAILED', {}));
+      setError(cause instanceof ApiError ? cause : new ApiError('Không thể lưu yêu cầu nghiên cứu. Vui lòng thử lại.', 0, 'REQUEST_FAILED', {}));
     } finally {
       setBusy(false);
     }
@@ -232,9 +232,9 @@ function PlanEditor({ projectId }: { projectId: string }) {
     try {
       const run = await researchApi.createRun(projectId, selectedVersion);
       setRuns((current) => [run, ...current]);
-      setRunNotice(`Run created with plan version ${run.plan_version}. Research does not run automatically.`);
+      setRunNotice(`Đã lưu lượt nghiên cứu theo yêu cầu phiên bản ${run.plan_version}. Nghiên cứu không tự chạy; hãy gửi yêu cầu cho ChatGPT.`);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause : new ApiError('The research run could not be created.', 0, 'REQUEST_FAILED', {}));
+      setError(cause instanceof ApiError ? cause : new ApiError('Không thể tạo lượt nghiên cứu.', 0, 'REQUEST_FAILED', {}));
     } finally {
       setCreatingRun(false);
     }
@@ -244,73 +244,73 @@ function PlanEditor({ projectId }: { projectId: string }) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  if (loading) return <div className="research-panel"><p className="state-message" role="status">Loading project and plan…</p></div>;
+  if (loading) return <div className="research-panel"><p className="state-message" role="status">Đang tải dự án và kế hoạch…</p></div>;
   if (error && !project) return <div className="research-panel"><ErrorNotice error={error} onRetry={() => void reload()} /></div>;
-  if (!project) return <div className="research-panel"><p className="state-message">Project not found.</p><a href="/research">Back to projects</a></div>;
+  if (!project) return <div className="research-panel"><p className="state-message">Không tìm thấy dự án.</p><a href="/research">Về danh sách dự án</a></div>;
 
   return (
     <div className="research-layout">
       <div className="research-main-column">
         <ProjectJourneyNav projectId={projectId} active="research" />
         <form className="research-panel research-form" onSubmit={save}>
-          <div className="panel-heading"><div><span className="state-label">DEEP RESEARCH · {latestPlan ? `BRIEF VERSION ${activePlan?.version ?? latestPlan.version}` : 'NEW BRIEF'}</span><h2>Prepare your research</h2><p>Shape the question and scope. Research happens in ChatGPT; no source is contacted from here.</p></div>
-            <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Back to project</a>
+          <div className="panel-heading"><div><span className="state-label">NGHIÊN CỨU CHUYÊN SÂU · {latestPlan ? `BẢN TÓM TẮT PHIÊN BẢN ${activePlan?.version ?? latestPlan.version}` : 'TÓM TẮT MỚI'}</span><h2>Chuẩn bị nghiên cứu</h2><p>Định hình câu hỏi và phạm vi. Bạn sẽ nghiên cứu bằng ChatGPT; ứng dụng không tự truy cập nguồn từ màn hình này.</p></div>
+            <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Về trang dự án</a>
           </div>
-          {latestPlan && <div className="project-context-actions"><a className="primary-action" href={`/?projectId=${encodeURIComponent(projectId)}&question=${encodeURIComponent(latestPlan.question)}&geo=${encodeURIComponent(latestPlan.geos.join(', '))}&environment=${encodeURIComponent(latestPlan.platforms.join(', '))}&period=${encodeURIComponent([latestPlan.period_start, latestPlan.period_end].filter(Boolean).join(' – '))}`}>Continue to ChatGPT report</a><a className="secondary-action" href={`/research/runs?projectId=${encodeURIComponent(projectId)}`}>View saved research history</a></div>}
-          {readOnly && <div className="read-only-note" role="status">This saved plan version is read-only. Editing the latest version will create a new version.</div>}
+          {latestPlan && <div className="project-context-actions"><a className="primary-action" href={`/?projectId=${encodeURIComponent(projectId)}&question=${encodeURIComponent(latestPlan.question)}&geo=${encodeURIComponent(latestPlan.geos.join(', '))}&environment=${encodeURIComponent(latestPlan.platforms.join(', '))}&period=${encodeURIComponent([latestPlan.period_start, latestPlan.period_end].filter(Boolean).join(' – '))}`}>Tiếp tục nhập báo cáo ChatGPT</a><a className="secondary-action" href={`/research/runs?projectId=${encodeURIComponent(projectId)}`}>Xem lịch sử nghiên cứu đã lưu</a></div>}
+          {readOnly && <div className="read-only-note" role="status">Phiên bản kế hoạch đã lưu chỉ có thể xem. Chỉnh sửa bản mới nhất sẽ tạo phiên bản mới.</div>}
           {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
           {notice && <div className="research-success" role="status">{notice}</div>}
-          <label className="field-label" htmlFor="research-question">Research question <span>Required</span></label>
-          <textarea id="research-question" rows={3} maxLength={5000} required disabled={readOnly} value={form.question} onChange={(event) => update('question', event.target.value)} placeholder="What do you need to understand about this market or product?" />
-          <details className="deep-research-scope"><summary>Optional scope and research preferences</summary>
+          <label className="field-label" htmlFor="research-question">Câu hỏi nghiên cứu <span>Bắt buộc</span></label>
+          <textarea id="research-question" rows={3} maxLength={5000} required disabled={readOnly} value={form.question} onChange={(event) => update('question', event.target.value)} placeholder="Bạn cần hiểu điều gì về thị trường hoặc sản phẩm này?" />
+          <details className="deep-research-scope"><summary>Phạm vi và tùy chọn nghiên cứu (không bắt buộc)</summary>
             <div className="field-grid">
-              <div><label className="field-label" htmlFor="plan-geos">Markets <span>Optional</span></label><input id="plan-geos" disabled={readOnly} value={form.geos} onChange={(event) => update('geos', event.target.value)} placeholder="For example, United States, Japan" /></div>
-              <div><label className="field-label" htmlFor="plan-platforms">Platforms or environments <span>Optional</span></label><input id="plan-platforms" disabled={readOnly} value={form.platforms} onChange={(event) => update('platforms', event.target.value)} placeholder="For example, iOS, Android, Web" /></div>
+              <div><label className="field-label" htmlFor="plan-geos">Thị trường <span>Không bắt buộc</span></label><input id="plan-geos" disabled={readOnly} value={form.geos} onChange={(event) => update('geos', event.target.value)} placeholder="Ví dụ: Hoa Kỳ, Nhật Bản" /></div>
+              <div><label className="field-label" htmlFor="plan-platforms">Nền tảng hoặc môi trường <span>Không bắt buộc</span></label><input id="plan-platforms" disabled={readOnly} value={form.platforms} onChange={(event) => update('platforms', event.target.value)} placeholder="Ví dụ: iOS, Android, Web" /></div>
             </div>
             <fieldset className="period-fieldset">
-              <legend>Research period <span>Optional</span></legend>
+              <legend>Thời gian nghiên cứu <span>Không bắt buộc</span></legend>
               <div className="field-grid">
-                <div><label className="field-label" htmlFor="period-start">Start date</label><input id="period-start" type="date" disabled={readOnly} value={form.periodStart} onChange={(event) => update('periodStart', event.target.value)} /></div>
-                <div><label className="field-label" htmlFor="period-end">End date</label><input id="period-end" type="date" disabled={readOnly} value={form.periodEnd} onChange={(event) => update('periodEnd', event.target.value)} /></div>
+                <div><label className="field-label" htmlFor="period-start">Từ ngày</label><input id="period-start" type="date" disabled={readOnly} value={form.periodStart} onChange={(event) => update('periodStart', event.target.value)} /></div>
+                <div><label className="field-label" htmlFor="period-end">Đến ngày</label><input id="period-end" type="date" disabled={readOnly} value={form.periodEnd} onChange={(event) => update('periodEnd', event.target.value)} /></div>
               </div>
             </fieldset>
             <fieldset className="period-fieldset comparison-fieldset">
-              <legend>Compare with another period <span>Optional</span></legend>
-              <p className="field-help">Leave these blank if you do not need a comparison.</p>
+              <legend>So sánh với một giai đoạn khác <span>Không bắt buộc</span></legend>
+              <p className="field-help">Để trống nếu bạn không cần so sánh.</p>
               <div className="field-grid">
-                <div><label className="field-label" htmlFor="comparison-start">Start date</label><input id="comparison-start" type="date" disabled={readOnly} value={form.comparisonStart} onChange={(event) => update('comparisonStart', event.target.value)} /></div>
-                <div><label className="field-label" htmlFor="comparison-end">End date</label><input id="comparison-end" type="date" disabled={readOnly} value={form.comparisonEnd} onChange={(event) => update('comparisonEnd', event.target.value)} /></div>
+                <div><label className="field-label" htmlFor="comparison-start">Từ ngày</label><input id="comparison-start" type="date" disabled={readOnly} value={form.comparisonStart} onChange={(event) => update('comparisonStart', event.target.value)} /></div>
+                <div><label className="field-label" htmlFor="comparison-end">Đến ngày</label><input id="comparison-end" type="date" disabled={readOnly} value={form.comparisonEnd} onChange={(event) => update('comparisonEnd', event.target.value)} /></div>
               </div>
             </fieldset>
             <div className="field-grid">
-              <div><label className="field-label" htmlFor="plan-goals">What should the research help you decide? <span>Optional</span></label><textarea id="plan-goals" rows={2} disabled={readOnly} value={form.goals} onChange={(event) => update('goals', event.target.value)} placeholder="For example, understand positioning or unmet needs" /></div>
-              <div><label className="field-label" htmlFor="plan-keywords">Topics to include <span>Optional</span></label><textarea id="plan-keywords" rows={2} disabled={readOnly} value={form.keywords} onChange={(event) => update('keywords', event.target.value)} placeholder="Separate topics with commas" /></div>
+              <div><label className="field-label" htmlFor="plan-goals">Quyết định nào cần được hỗ trợ? <span>Không bắt buộc</span></label><textarea id="plan-goals" rows={2} disabled={readOnly} value={form.goals} onChange={(event) => update('goals', event.target.value)} placeholder="Ví dụ: hiểu định vị hoặc nhu cầu chưa được đáp ứng" /></div>
+              <div><label className="field-label" htmlFor="plan-keywords">Chủ đề cần nghiên cứu <span>Không bắt buộc</span></label><textarea id="plan-keywords" rows={2} disabled={readOnly} value={form.keywords} onChange={(event) => update('keywords', event.target.value)} placeholder="Phân tách các chủ đề bằng dấu phẩy" /></div>
             </div>
-            <div><label className="field-label" htmlFor="plan-sources">Sources to consider <span>Optional</span></label><textarea id="plan-sources" rows={2} disabled={readOnly} value={form.sources} onChange={(event) => update('sources', event.target.value)} placeholder="Specific sources you want to consult" /><small className="field-help">Preferences only; the app will not access sources from this screen.</small></div>
+            <div><label className="field-label" htmlFor="plan-sources">Nguồn bạn muốn tham khảo <span>Không bắt buộc</span></label><textarea id="plan-sources" rows={2} disabled={readOnly} value={form.sources} onChange={(event) => update('sources', event.target.value)} placeholder="Tên nguồn cụ thể bạn muốn xem xét" /><small className="field-help">Đây chỉ là gợi ý; ứng dụng không tự truy cập nguồn từ màn hình này.</small></div>
           </details>
-          <div className="form-actions"><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Back to project</a>{readOnly ? <button className="primary-action" type="button" onClick={() => setViewVersion(latestPlan?.version ?? null)}>Edit latest brief</button> : <button className="primary-action" type="submit" disabled={busy}>{busy ? 'Saving…' : latestPlan ? 'Save brief changes' : 'Save research brief'}</button>}</div>
+          <div className="form-actions"><a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Về trang dự án</a>{readOnly ? <button className="primary-action" type="button" onClick={() => setViewVersion(latestPlan?.version ?? null)}>Chỉnh sửa bản tóm tắt mới nhất</button> : <button className="primary-action" type="submit" disabled={busy}>{busy ? 'Đang lưu…' : latestPlan ? 'Lưu thay đổi' : 'Lưu yêu cầu nghiên cứu'}</button>}</div>
         </form>
       </div>
-      <details className="research-side-note"><summary><strong>Saved brief versions</strong></summary>
-        {plans.length === 0 ? <p>No plan has been saved yet.</p> : <div className="version-list">{[...plans].reverse().map((plan) => <button className={`version-item${plan.version === activePlan?.version ? ' selected' : ''}`} type="button" key={plan.id} onClick={() => setViewVersion(plan.version)}><span>Version {plan.version}</span><small>{new Date(plan.created_at).toLocaleDateString()}</small></button>)}</div>}
-        <span>Saved versions remain available to research runs.</span>
+      <details className="research-side-note"><summary><strong>Các phiên bản yêu cầu đã lưu</strong></summary>
+        {plans.length === 0 ? <p>Chưa có yêu cầu nghiên cứu nào được lưu.</p> : <div className="version-list">{[...plans].reverse().map((plan) => <button className={`version-item${plan.version === activePlan?.version ? ' selected' : ''}`} type="button" key={plan.id} onClick={() => setViewVersion(plan.version)}><span>Phiên bản {plan.version}</span><small>{new Date(plan.created_at).toLocaleDateString('vi-VN')}</small></button>)}</div>}
+        <span>Các phiên bản đã lưu vẫn được giữ cùng lịch sử nghiên cứu.</span>
       </details>
-      <details className="research-panel research-run-section" aria-labelledby="project-runs-title">
-        <summary className="panel-heading"><div><span className="state-label">ADVANCED</span><h2 id="project-runs-title">Saved research sessions</h2></div></summary>
+      <details className="research-panel research-run-section" aria-labelledby="project-runs-title" open>
+        <summary className="panel-heading"><div><span className="state-label">CHI TIẾT</span><h2 id="project-runs-title">Lịch sử lượt nghiên cứu</h2></div></summary>
         {error && <ErrorNotice error={error} onRetry={() => void reload()} />}
         {runNotice && <div className="research-success" role="status">{runNotice}</div>}
         <div className="run-create-controls">
-          <label className="field-label" htmlFor="run-plan-version">Plan version for new run</label>
+          <label className="field-label" htmlFor="run-plan-version">Dùng phiên bản yêu cầu</label>
           <select id="run-plan-version" value={runPlanVersion} onChange={(event) => setRunPlanVersion(event.target.value)} disabled={!plans.length || creatingRun}>
-            {plans.length === 0 && <option value="">Save a plan before creating a run</option>}
-            {[...plans].reverse().map((plan) => <option value={plan.version} key={plan.id}>Version {plan.version} · {new Date(plan.created_at).toLocaleDateString()}</option>)}
+            {plans.length === 0 && <option value="">Lưu yêu cầu trước khi tạo lượt nghiên cứu</option>}
+            {[...plans].reverse().map((plan) => <option value={plan.version} key={plan.id}>Phiên bản {plan.version} · {new Date(plan.created_at).toLocaleDateString('vi-VN')}</option>)}
           </select>
-          <button type="button" className="primary-action" disabled={!plans.length || creatingRun || !runPlanVersion} onClick={() => void createRun()}>{creatingRun ? 'Creating…' : 'Create run'}</button>
+          <button type="button" className="primary-action" disabled={!plans.length || creatingRun || !runPlanVersion} onClick={() => void createRun()}>{creatingRun ? 'Đang tạo…' : 'Tạo lượt nghiên cứu'}</button>
         </div>
-        {runs.length === 0 ? <p className="state-message">No runs yet. Creating a run records the selected plan version; no research is started automatically.</p> : <div className="research-run-list">
+        {runs.length === 0 ? <p className="state-message">Chưa có lượt nghiên cứu. Tạo lượt sẽ lưu phiên bản yêu cầu đã chọn; ứng dụng không tự chạy nghiên cứu.</p> : <div className="research-run-list">
           {[...runs].sort((left, right) => right.created_at.localeCompare(left.created_at)).map((run) => <article className="research-run-row" key={run.id}>
-            <div><strong>{run.state.replaceAll('_', ' ')}</strong><span>Plan version {run.plan_version} · {new Date(run.created_at).toLocaleString()}</span></div>
-            <a className="text-button" href={`/research/runs?runId=${encodeURIComponent(run.id)}&projectId=${encodeURIComponent(projectId)}`}>View run →</a>
+            <div><strong>{{ queued: 'Đang chờ', collecting: 'Đang thu thập', validating: 'Đang kiểm tra', synthesizing: 'Đang tổng hợp', completed: 'Hoàn tất', completed_with_gaps: 'Hoàn tất, còn thiếu dữ liệu', partial: 'Hoàn tất một phần', failed: 'Thất bại', cancelled: 'Đã hủy' }[run.state]}</strong><span>Phiên bản yêu cầu {run.plan_version} · {new Date(run.created_at).toLocaleString('vi-VN')}</span></div>
+            <a className="text-button" href={`/research/runs?runId=${encodeURIComponent(run.id)}&projectId=${encodeURIComponent(projectId)}`}>Mở lượt nghiên cứu →</a>
           </article>)}
         </div>}
       </details>

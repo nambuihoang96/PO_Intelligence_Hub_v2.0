@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DataFirstWorkspace } from './DataFirstWorkspace';
+import { DataFirstWorkspace, followHashAnchorWhenReady } from './DataFirstWorkspace';
 import { researchApi, type ResearchProject } from './api';
 import { reportApi } from '../reports/api';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
-  return { ...original, researchApi: { ...original.researchApi, getProject: vi.fn(), updateWorkspaceState: vi.fn() } };
+  return { ...original, researchApi: { ...original.researchApi, getProject: vi.fn(), updateWorkspaceState: vi.fn(), listSavedInformation: vi.fn(), listSubjects: vi.fn(), listBenchmarkCollections: vi.fn() } };
 });
 
 vi.mock('../reports/api', async (importOriginal) => {
@@ -47,6 +47,9 @@ describe('DataFirstWorkspace', () => {
     vi.clearAllMocks();
     savedProject = project;
     vi.mocked(researchApi.getProject).mockImplementation(async () => savedProject as never);
+    vi.mocked(researchApi.listSavedInformation).mockResolvedValue({ items: [], next_cursor: null, limit: 50 } as never);
+    vi.mocked(researchApi.listSubjects).mockResolvedValue({ items: [], next_cursor: null, limit: 100 } as never);
+    vi.mocked(researchApi.listBenchmarkCollections).mockResolvedValue({ items: [], next_cursor: null, limit: 100 } as never);
     vi.mocked(researchApi.updateWorkspaceState).mockImplementation(async (_id, selected_app_ids, selected_app_criterion, selected_app_context) => {
       savedProject = { ...project, workspace_state_json: { selected_app_ids, selected_app_criterion, ...(selected_app_context ? { selected_app_context } : {}) } };
       return savedProject as never;
@@ -59,31 +62,59 @@ describe('DataFirstWorkspace', () => {
     vi.mocked(reportApi.linkReportToProject).mockResolvedValue({ ...report, project_id: 'workspace-1' } as never);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
   });
-  afterEach(() => cleanup());
+  afterEach(() => { cleanup(); window.history.replaceState({}, '', '/'); });
 
   it('explores workspace-owned CSV, saves product selection, creates a manual ChatGPT prompt, and links the report', async () => {
     render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    expect(screen.getByText(/CSV datasets/)).toBeTruthy();
+    expect(screen.getByText(/Tệp dữ liệu CSV/)).toBeTruthy();
     expect(screen.getAllByText(/Unified/).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByLabelText('Select Alpha for ChatGPT research'));
+    fireEvent.click(screen.getByLabelText('Chọn Alpha để nghiên cứu bằng ChatGPT'));
     await waitFor(() => expect(researchApi.updateWorkspaceState).toHaveBeenCalledWith('workspace-1', ['st-alpha'], null, expect.objectContaining({ dataset_id: 'dataset-1', selection_type: 'manual', source_entity_ids: ['st-alpha'] })));
-    fireEvent.click(screen.getByRole('button', { name: 'Research these apps with ChatGPT' }));
-    await waitFor(() => expect(screen.getByDisplayValue(/Selected source data/)).toBeTruthy());
-    expect(screen.getByDisplayValue(/treat as unverified estimates/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Nghiên cứu các sản phẩm này bằng ChatGPT' }));
+    await waitFor(() => expect(screen.getByDisplayValue(/Dữ liệu nguồn đã chọn/)).toBeTruthy());
+    expect(screen.getByDisplayValue(/coi là số liệu chưa xác minh/)).toBeTruthy();
     expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText('Add an existing report'), { target: { value: 'report-1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add to workspace' }));
+    fireEvent.change(screen.getByLabelText('Thêm báo cáo đã lưu'), { target: { value: 'report-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào dự án' }));
     await waitFor(() => expect(reportApi.linkReportToProject).toHaveBeenCalledWith('workspace-1', 'report-1'));
   });
 
   it('opens CSV import in the active workspace without requiring a report', async () => {
     render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    fireEvent.click(screen.getByRole('button', { name: 'Import CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập CSV' }));
     expect(await screen.findByText('CSV importer for workspace-1')).toBeTruthy();
+  });
+
+  it('opens the explicitly selected project dataset from a Project Home deep link', async () => {
+    const otherDataset = { ...dataset, id: 'dataset-2', filename: 'second-export.csv', content_sha256: 'second-hash' };
+    const otherCatalog = { ...catalog, id: 'dataset-2', filename: 'second-export.csv', content_sha256: 'second-hash' };
+    vi.mocked(reportApi.listComparisonDatasets).mockResolvedValue({ items: [catalog, otherCatalog], next_cursor: null, limit: 50 } as never);
+    vi.mocked(reportApi.getProjectQuantitativeDataset).mockImplementation(async (_id, datasetId) =>
+      (datasetId === 'dataset-2' ? otherDataset : dataset) as never);
+    window.history.replaceState({}, '', '/research?projectId=workspace-1&view=data&datasetId=dataset-2#project-csv-data');
+
+    render(<DataFirstWorkspace projectId="workspace-1" />);
+
+    await screen.findByText('second-export.csv');
+    expect((screen.getByLabelText('Tệp dữ liệu cần xem') as HTMLSelectElement).value).toBe('dataset-2');
+    expect(reportApi.getProjectQuantitativeDataset).toHaveBeenCalledWith('workspace-1', 'dataset-2');
+  });
+
+  it('follows a deep link when its section is inserted after the workspace loads', async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    window.history.replaceState({}, '', '/research#project-subject-profiles');
+    const stopFollowing = followHashAnchorWhenReady();
+    const anchor = document.createElement('section');
+    anchor.id = 'project-subject-profiles';
+    document.body.append(anchor);
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+    stopFollowing();
+    anchor.remove();
   });
 
   it('selects five products by the highest exact values in the selected CSV and carries the criterion into the ChatGPT prompt', async () => {
@@ -101,20 +132,20 @@ describe('DataFirstWorkspace', () => {
 
     const { unmount } = render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    fireEvent.click(screen.getByRole('button', { name: 'Select 5 highest values in this CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn 5 giá trị cao nhất trong CSV này' }));
     await waitFor(() => expect(researchApi.updateWorkspaceState).toHaveBeenCalledWith(
-      'workspace-1', ['st-6', 'st-5', 'st-4', 'st-3', 'st-2'], expect.stringContaining('Five highest supplied values'),
-      expect.objectContaining({ dataset_id: 'dataset-1', selection_type: 'rule_based', measurement: expect.objectContaining({ geo: 'Worldwide', platform: 'Unified', period_start: '2026-09-01' }) }),
+      'workspace-1', ['st-6', 'st-5', 'st-4', 'st-3', 'st-2'], expect.stringContaining('Năm giá trị cao nhất được cung cấp'),
+      expect.objectContaining({ dataset_id: 'dataset-1', dataset_filename: 'sensor-export.csv', selection_type: 'rule_based', measurement: expect.objectContaining({ geo: 'Worldwide', platform: 'Unified', period_start: '2026-09-01', period_end: '2026-09-30', metric_id: 'downloads_absolute' }) }),
     ));
     unmount();
     render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    expect(screen.getByText(/5 selected · sensor-export.csv/)).toBeTruthy();
-    expect((screen.getByLabelText('Select Game 1 for ChatGPT research') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByLabelText('Select Game 6 for ChatGPT research') as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Research these apps with ChatGPT' }));
-    await waitFor(() => expect(screen.getByDisplayValue(/Selection criterion: Five highest supplied values/)).toBeTruthy());
-    expect(screen.getByDisplayValue(/Saved source dataset: sensor-export.csv/)).toBeTruthy();
+    expect(screen.getByText(/5 sản phẩm đã chọn/)).toBeTruthy();
+    expect((screen.getByLabelText('Chọn Game 1 để nghiên cứu bằng ChatGPT') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText('Chọn Game 6 để nghiên cứu bằng ChatGPT') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Nghiên cứu các sản phẩm này bằng ChatGPT' }));
+    await waitFor(() => expect(screen.getByDisplayValue(/Tiêu chí chọn: Năm giá trị cao nhất/)).toBeTruthy());
+    expect(screen.getByDisplayValue(/Tệp dữ liệu nguồn đã lưu: sensor-export.csv/)).toBeTruthy();
   });
 
   it('reopens a saved shortlist with its dataset context and does not reinterpret it after switching datasets', async () => {
@@ -131,17 +162,17 @@ describe('DataFirstWorkspace', () => {
 
     const { unmount } = render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    expect((screen.getByLabelText('Select Alpha for ChatGPT research') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Chọn Alpha để nghiên cứu bằng ChatGPT') as HTMLInputElement).checked).toBe(true);
     unmount();
     render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    fireEvent.change(screen.getByLabelText('Dataset to explore'), { target: { value: 'dataset-2' } });
+    fireEvent.change(screen.getByLabelText('Tệp dữ liệu cần xem'), { target: { value: 'dataset-2' } });
     await screen.findByText('other-export.csv');
-    expect(screen.getByText(/Shortlist này thuộc dataset “sensor-export.csv”/)).toBeTruthy();
-    expect((screen.getByLabelText('Select Beta for ChatGPT research') as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Copy research prompt from saved shortlist' }));
+    expect(screen.getByText(/Danh sách đã lưu thuộc tệp dữ liệu “sensor-export.csv”/)).toBeTruthy();
+    expect((screen.getByLabelText('Chọn Beta để nghiên cứu bằng ChatGPT') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Nghiên cứu các sản phẩm này bằng ChatGPT' }));
     await waitFor(() => expect(reportApi.getProjectQuantitativeDataset).toHaveBeenCalledWith('workspace-1', 'dataset-1'));
-    await waitFor(() => expect(screen.getByDisplayValue(/Saved source dataset: sensor-export.csv/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByDisplayValue(/Tệp dữ liệu nguồn đã lưu: sensor-export.csv/)).toBeTruthy());
   });
 
   it('keeps approximate or incomplete values out of automatic selection while leaving app selection available', async () => {
@@ -153,8 +184,8 @@ describe('DataFirstWorkspace', () => {
     vi.mocked(reportApi.listComparisonDatasets).mockResolvedValue({ items: [catalog], next_cursor: null, limit: 50 } as never);
     render(<DataFirstWorkspace projectId="workspace-1" />);
     await screen.findByText('sensor-export.csv');
-    expect(screen.getByText(/Automatic candidate selection is unavailable/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Select 5 highest values in this CSV' })).toBeNull();
-    expect((screen.getByLabelText('Select Game 0 for ChatGPT research') as HTMLInputElement).disabled).toBe(false);
+    expect(screen.getByText(/Chưa thể tự chọn sản phẩm/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Chọn 5 giá trị cao nhất trong CSV này' })).toBeNull();
+    expect((screen.getByLabelText('Chọn Game 0 để nghiên cứu bằng ChatGPT') as HTMLInputElement).disabled).toBe(false);
   });
 });

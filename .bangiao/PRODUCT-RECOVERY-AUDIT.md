@@ -304,3 +304,34 @@ Các ảnh cho thấy trạng thái thực tế, gồm nội dung report hiện 
 - **Decision:** **NEEDS FIX**. Không tuyên bố PRODUCT PASS hay release-ready.
 
 **Audit status:** hoàn tất trong phạm vi khả dụng; không có code sửa, commit, push hay merge. Dừng chờ PO duyệt kết quả và thứ tự phục hồi.
+
+---
+
+## 13. Unified Recovery refresh — 2026-10-27
+
+Addendum này cập nhật trạng thái repository và bổ sung yêu cầu TW-01; các kết quả kiểm thử/UAT trong Mục 6–12 vẫn là kết quả của lần chạy đã ghi, **không phải lần chạy mới**.
+
+### Snapshot hiện tại
+
+- Branch `feat/ux-recovery-01-research-results`; local HEAD và remote HEAD: `3f4eacb666b353820183baa26a76df2335f3bd11` (commit bổ sung báo cáo và screenshots). `master`/`origin/master`: `57b7167ae60729fd3221e283c7ff2433e22454a4`.
+- Feature branch hiện **86 commits ahead, 0 behind** master; merge-base diff **158 paths, +15,098 / -151 lines**. Đây là rủi ro tích hợp lớn cần review theo nhóm tính năng.
+- Working tree đang có 6 file modified và 19 đường dẫn untracked. Phần Project/Report gồm `frontend/src/reports/ReportResults.tsx`, `ResearchIntake.tsx`, `ResearchIntake.test.tsx`, `style.css`, `tests/test_workspace_data_first.py`; `scripts/setup.ps1` là thay đổi launcher riêng, không trộn vào recovery slice. Các thư mục untracked và scratch được giữ nguyên. Không stage/reset trong lần cập nhật này.
+- `.bangiao/P0-PROJECT-REPORT-UNIFICATION.md` vẫn là tài liệu untracked tại thời điểm kiểm tra. Nó ghi lại thiết kế và test trước đây; current dirty diff cần review/test riêng trước khi được coi là phần tích hợp ổn định.
+- 13 screenshots thật đã được commit trong `.bangiao/screenshots/product-recovery-audit/`; commit chỉ tài liệu/ảnh, không chứa các thay đổi code đang dang dở.
+- Production SQLite không bị sửa. Các kết quả test mới nhất có trong audit trước đó: frontend 167 tests, typecheck/build PASS; backend 15 workspace tests PASS; full/report backend suite NOT VERIFIED. Không chạy lại suite trong planning refresh này.
+
+### TW-01 — Trend Intelligence trong cùng Research Project
+
+Yêu cầu được thêm vào backlog hợp nhất: từ Project hiện tại PO lưu một Trend Update có source attribution → xác định/tạo Research Subject tường minh → thêm vào Benchmark Collection → mở Subject Profile → ghi các phân tích Core Loop / Level Design / Ad Placement → gắn image evidence → lưu PO Decision → refresh/reopen → thêm cập nhật mới và xem lịch sử.
+
+Đây là **luồng acceptance mới, chưa phải capability đã triển khai**. Source model hiện không có Research Subject, Benchmark Collection, Trend Update hoặc image attachment. `Evidence`/`SourceRecord` hiện bị ràng buộc vào Research Run, nên phải có thiết kế liên kết additive nếu trend/report/CSV evidence cùng cần dùng. Không được tạo app “Trend Watch” song song, không suy diễn publisher country thành GEO, không biến `11,1 triệu lượt tải` thành số đã kiểm chứng hoặc tính tăng trưởng khi thiếu kỳ/định nghĩa/phạm vi.
+
+Ví dụ `Rotate Rings vượt 11,1 triệu lượt tải`, source note ngày 2026-10-21 mới là test scenario do PO nêu. Trong audit/repository chưa có source note/link/image tương ứng; vì thế fact-check và browser UAT với source thật là **NOT VERIFIED**.
+
+### Ưu tiên và blocker sau khi thêm TW-01
+
+- **P0:** Project context/report worktree candidate cần review; persistent Subject + reusable Benchmark Collection; Trend Update + image evidence; decision continuity giữa report/subject/project; history/Tracking; genuine-data acceptance cho long report, trend và updates.
+- **P1:** giải thích cụ thể lý do quantitative readiness, mobile tab/matrix usability, full backend regression, review branch 86 commits/158 paths, production-history backup/restore.
+- **P2 (deferred có lý do):** automatic crawling/monitoring, paid/AI API và source auto-verification do chưa có source access/policy được duyệt.
+
+Architecture, consolidated backlog, design direction, milestone Oct 27–31 và ba acceptance scenarios nằm trong [Unified Product Recovery — October 2026](UNIFIED-PRODUCT-RECOVERY-OCT-2026.md), được link từ Master Implementation Plan. Kết luận audit chưa đổi: **NEEDS FIX / RELEASE PENDING VERIFICATION**; không có Product PASS, merge hay push được thực hiện trong lần lập kế hoạch này.

@@ -5,11 +5,11 @@ import './SavedInformationPanel.css';
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('The image could not be read.'));
+    reader.onerror = () => reject(new Error('Không thể đọc tệp ảnh.'));
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : '';
       const comma = result.indexOf(',');
-      if (comma < 0) reject(new Error('The image could not be read.'));
+      if (comma < 0) reject(new Error('Không thể đọc tệp ảnh.'));
       else resolve(result.slice(comma + 1));
     };
     reader.readAsDataURL(file);
@@ -64,7 +64,7 @@ export function SavedInformationPanel({ projectId }: { projectId: string }) {
       setCollections(collectionPage.items);
       setLinkDrafts(Object.fromEntries(page.items.map((item) => [item.id, item.subject_id || ''])));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load saved information.');
+      setError(cause instanceof Error ? cause.message : 'Không tải được thông tin đã lưu.');
     } finally { setLoading(false); }
   }
 
@@ -105,14 +105,14 @@ export function SavedInformationPanel({ projectId }: { projectId: string }) {
       setContent(''); setSourceContext(''); setSourceTitle(''); setSourceUrl(''); setCapturedOn(''); setSubjectId(''); setCollectionId(''); setNewSubjectName(''); setCreateSubject(false); setImage(null);
       const picker = document.getElementById('saved-information-image') as HTMLInputElement | null;
       if (picker) picker.value = '';
-      setNotice('Information saved with its original wording. It is marked source-reported and unverified.');
+      setNotice('Đã lưu nguyên văn nội dung. Thông tin được ghi nhận theo nguồn cung cấp và chưa xác minh độc lập.');
     } catch (cause) {
       if (createdSubject) {
         setSubjects((current) => [createdSubject!, ...current.filter((item) => item.id !== createdSubject!.id)]);
         setSubjectId(createdSubject.id);
         setCreateSubject(false);
       }
-      setError(`${createdSubject ? `“${createdSubject.name}” was created and selected, so retrying will not create it again. ` : ''}${cause instanceof Error ? cause.message : 'Could not save this information. Your text is still here.'}`);
+      setError(`${createdSubject ? `Đã tạo và chọn hồ sơ “${createdSubject.name}”; thao tác lưu lại sẽ không tạo hồ sơ trùng. ` : ''}${cause instanceof Error ? cause.message : 'Không thể lưu thông tin. Nội dung bạn nhập vẫn được giữ lại.'}`);
     } finally { savingRef.current = false; setSaving(false); }
   }
 
@@ -125,42 +125,42 @@ export function SavedInformationPanel({ projectId }: { projectId: string }) {
       });
       setItems((current) => current.map((row) => row.id === item.id ? updated : row));
       notifySavedInformationChanged(projectId);
-      setNotice('The saved information is now linked to the selected product or topic.');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update this link.'); }
+      setNotice('Đã liên kết thông tin với sản phẩm hoặc chủ đề đã chọn.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không cập nhật được liên kết này.'); }
   }
 
   return <section className="research-panel saved-information-panel" id="project-saved-information" aria-labelledby="saved-information-title">
-    <header className="trend-updates-heading"><div><span className="state-label">SAVE SOMETHING YOU FOUND</span><h3 id="saved-information-title">Save new information</h3>
-      <p>Paste the original note, announcement, or observation. You can save it now and connect a product or topic later.</p></div></header>
+    <header className="trend-updates-heading"><div><span className="state-label">GHI NHẬN ĐIỀU BẠN PHÁT HIỆN</span><h3 id="saved-information-title">Ghi nhận xu hướng hoặc bằng chứng</h3>
+      <p>Lưu nguyên văn bản tin, ghi chú hoặc quan sát. Bạn có thể gắn với hồ sơ sản phẩm ngay hoặc bổ sung sau.</p></div></header>
     {error && <div role="alert" className="research-alert">{error}</div>}
     {notice && <div role="status" className="research-success">{notice}</div>}
     <form className="saved-information-form" onSubmit={(event) => void save(event)}>
-      <label htmlFor="saved-information-content">Paste content <span className="optional-label">Required</span></label>
-      <textarea id="saved-information-content" required maxLength={200000} rows={7} value={content} onChange={(event) => setContent(event.target.value)} placeholder="Paste the full information as you received it. It will be saved as written." />
-      <details className="saved-information-context"><summary>Add an optional image or source context</summary>
+      <label htmlFor="saved-information-content">Nội dung cần lưu <span className="optional-label">Bắt buộc</span></label>
+      <textarea id="saved-information-content" required maxLength={200000} rows={7} value={content} onChange={(event) => setContent(event.target.value)} placeholder="Dán nguyên văn nội dung bạn nhận được. Nội dung sẽ được lưu đúng như đã nhập." />
+      <details className="saved-information-context"><summary>Thêm ảnh hoặc thông tin nguồn (không bắt buộc)</summary>
         <div className="saved-information-fields">
-          <label>Image attachment <span className="optional-label">Optional · JPG, PNG, or WebP · up to 10 MB</span><input id="saved-information-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setImage(event.target.files?.[0] || null)} /></label>
-          {image && <p className="saved-information-file">{image.name} · {(image.size / 1024).toFixed(0)} KB <button className="text-button" type="button" onClick={() => { setImage(null); const picker = document.getElementById('saved-information-image') as HTMLInputElement | null; if (picker) picker.value = ''; }}>Remove</button></p>}
-          <label>Where did you find it? <span className="optional-label">Optional</span><textarea rows={2} maxLength={10000} value={sourceContext} onChange={(event) => setSourceContext(event.target.value)} placeholder="For example, a store listing, article, or your own observation." /></label>
-          <div className="saved-information-grid"><label>Source title <span className="optional-label">Optional</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label><label>Source link <span className="optional-label">Optional</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label><label>Date, if known <span className="optional-label">Optional</span><input type="date" value={capturedOn} onChange={(event) => setCapturedOn(event.target.value)} /></label></div>
-          <div className="saved-information-grid"><label>Connect to a product or topic <span className="optional-label">Optional</span><select value={subjectId} disabled={createSubject} onChange={(event) => setSubjectId(event.target.value)}><option value="">Not linked yet</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>
-            <label>Connect to a comparison group <span className="optional-label">Optional</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="">Not linked</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label></div>
-          <label className="saved-information-create-subject"><input type="checkbox" checked={createSubject} onChange={(event) => setCreateSubject(event.target.checked)} /> Create a product or topic profile for this item</label>
-          {createSubject && <label>Product or topic name <input required maxLength={500} value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="Enter the name you want to use" /></label>}
+          <label>Tệp ảnh <span className="optional-label">Không bắt buộc · JPG, PNG hoặc WebP · tối đa 10 MB</span><input id="saved-information-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setImage(event.target.files?.[0] || null)} /></label>
+          {image && <p className="saved-information-file">{image.name} · {(image.size / 1024).toFixed(0)} KB <button className="text-button" type="button" onClick={() => { setImage(null); const picker = document.getElementById('saved-information-image') as HTMLInputElement | null; if (picker) picker.value = ''; }}>Gỡ ảnh</button></p>}
+          <label>Bạn tìm thấy thông tin này ở đâu? <span className="optional-label">Không bắt buộc</span><textarea rows={2} maxLength={10000} value={sourceContext} onChange={(event) => setSourceContext(event.target.value)} placeholder="Ví dụ: trang cửa hàng, bài viết hoặc quan sát của bạn." /></label>
+          <div className="saved-information-grid"><label>Tên nguồn <span className="optional-label">Không bắt buộc</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label><label>Đường dẫn nguồn <span className="optional-label">Không bắt buộc</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label><label>Ngày ghi nhận, nếu biết <span className="optional-label">Không bắt buộc</span><input type="date" value={capturedOn} onChange={(event) => setCapturedOn(event.target.value)} /></label></div>
+          <div className="saved-information-grid"><label>Gắn với sản phẩm hoặc chủ đề <span className="optional-label">Không bắt buộc</span><select value={subjectId} disabled={createSubject} onChange={(event) => setSubjectId(event.target.value)}><option value="">Chưa liên kết</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>
+            <label>Gắn với bộ so sánh <span className="optional-label">Không bắt buộc</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="">Chưa liên kết</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label></div>
+          <label className="saved-information-create-subject"><input type="checkbox" checked={createSubject} onChange={(event) => setCreateSubject(event.target.checked)} /> Tạo hồ sơ sản phẩm hoặc chủ đề cho nội dung này</label>
+          {createSubject && <label>Tên sản phẩm hoặc chủ đề <input required maxLength={500} value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="Nhập tên bạn muốn dùng" /></label>}
         </div>
       </details>
-      <div className="saved-information-actions"><small>Original wording is preserved. No source is opened or marked verified.</small><button type="submit" className="primary-action" disabled={saving || !content.trim()}>{saving ? 'Saving…' : 'Save information'}</button></div>
+      <div className="saved-information-actions"><small>Nội dung gốc được giữ nguyên. Ứng dụng không tự mở hoặc xác minh nguồn.</small><button type="submit" className="primary-action" disabled={saving || !content.trim()}>{saving ? 'Đang lưu…' : 'Lưu thông tin'}</button></div>
     </form>
-    <div className="saved-information-history"><div className="panel-heading"><h4>Saved in this project</h4><button className="text-button" type="button" onClick={() => void load()} disabled={loading}>Refresh</button></div>
-      {loading && <p role="status">Loading saved information…</p>}
-      {!loading && items.length === 0 && <p className="project-home-empty">Nothing saved yet. Your original notes will appear here.</p>}
+    <div className="saved-information-history"><div className="panel-heading"><h4>Thông tin đã lưu trong dự án</h4><button className="text-button" type="button" onClick={() => void load()} disabled={loading}>Tải lại</button></div>
+      {loading && <p role="status">Đang tải thông tin đã lưu…</p>}
+      {!loading && items.length === 0 && <p className="project-home-empty">Chưa có nội dung nào. Ghi chú gốc của bạn sẽ xuất hiện tại đây.</p>}
       {items.map((item) => <article className="saved-information-item" key={item.id}>
-        <div className="saved-information-item-meta"><span>{new Date(item.created_at).toLocaleString()}</span><span>Source-reported · unverified</span>{item.subject_name && <span>{item.subject_name}</span>}{item.collection_name && <span>{item.collection_name}</span>}</div>
+        <div className="saved-information-item-meta"><span>{new Date(item.created_at).toLocaleString('vi-VN')}</span><span>Theo nguồn cung cấp · chưa xác minh</span>{item.subject_name && <span>{item.subject_name}</span>}{item.collection_name && <span>{item.collection_name}</span>}</div>
         <p className="saved-information-original">{item.original_content}</p>
         {item.source_title && <p><strong>{item.source_title}</strong></p>}{item.source_context && <p className="saved-information-source-context">{item.source_context}</p>}
-        {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer">Open supplied source link</a>}
-        {item.image_url && <figure className="saved-information-image"><img src={item.image_url} alt={`Image attached to saved information${item.subject_name ? ` about ${item.subject_name}` : ''}`} /><figcaption>{item.image_filename} · Local attachment · Not verified</figcaption></figure>}
-        {!item.subject_id && <div className="saved-information-link-row"><label>Link this to a product or topic<select aria-label={`Link saved information from ${item.created_at} to a product or topic`} value={linkDrafts[item.id] || ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: event.target.value }))}><option value="">Leave unlinked</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label><button type="button" className="secondary-action" disabled={!linkDrafts[item.id]} onClick={() => void linkSubject(item)}>Save link</button></div>}
+        {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer">Mở liên kết nguồn đã cung cấp</a>}
+        {item.image_url && <figure className="saved-information-image"><img src={item.image_url} alt={`Ảnh đính kèm${item.subject_name ? ` về ${item.subject_name}` : ''}`} /><figcaption>{item.image_filename} · Tệp lưu cục bộ · Chưa xác minh</figcaption></figure>}
+        {!item.subject_id && <div className="saved-information-link-row"><label>Gắn với sản phẩm hoặc chủ đề<select aria-label={`Gắn thông tin từ ${item.created_at} với sản phẩm hoặc chủ đề`} value={linkDrafts[item.id] || ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: event.target.value }))}><option value="">Chưa liên kết</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label><button type="button" className="secondary-action" disabled={!linkDrafts[item.id]} onClick={() => void linkSubject(item)}>Lưu liên kết</button></div>}
       </article>)}
     </div>
   </section>;

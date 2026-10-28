@@ -1,5 +1,7 @@
 # PO INTELLIGENCE HUB V2 — MASTER IMPLEMENTATION PLAN
 
+> **Unified recovery update — 2026-10-27:** The original P01–P08 sequence below is retained as historical implementation guidance. Planning for the October 27–31 recovery target is consolidated in [Unified Product Recovery — October 2026](../.bangiao/UNIFIED-PRODUCT-RECOVERY-OCT-2026.md) and supersedes the old “implement P01 only” sequencing for planning. This is a planning artifact, not approval to modify code, merge, or push. Each implementation slice still requires the PO’s explicit direction.
+
 Role: Principal Product Architect + Senior Full-stack Engineer + UX Architect + QA Lead.
 
 Workspace: D:\AI\PO Analysis\PO_Intelligence_Hub_v2.0

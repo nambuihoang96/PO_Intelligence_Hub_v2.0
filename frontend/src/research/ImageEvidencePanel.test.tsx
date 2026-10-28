@@ -27,17 +27,17 @@ describe('ImageEvidencePanel', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     render(<ImageEvidencePanel projectId={projectId} />);
 
-    fireEvent.change(await screen.findByLabelText('Confirmed subject'), { target: { value: subject.id } });
-    fireEvent.change(screen.getByLabelText(/Related saved update/), { target: { value: update.id } });
+    fireEvent.change(await screen.findByLabelText('Hồ sơ đã xác nhận'), { target: { value: subject.id } });
+    fireEvent.change(screen.getByLabelText(/Cập nhật liên quan/), { target: { value: update.id } });
     expect(screen.getByText(update.source_note)).toBeTruthy();
     const file = new File([new Uint8Array([1, 2, 3])], 'evidence.png', { type: 'image/png' });
-    fireEvent.change(screen.getByLabelText(/Image file/), { target: { files: [file] } });
-    fireEvent.submit(screen.getByRole('button', { name: 'Save image evidence' }).closest('form')!);
+    fireEvent.change(screen.getByLabelText(/Tệp ảnh/), { target: { files: [file] } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Lưu ảnh chứng cứ' }).closest('form')!);
 
     await waitFor(() => expect(saved).toHaveBeenCalledWith(projectId, subject.id, file, { trend_update_id: update.id }));
-    expect(await screen.findByText('Image saved with its source context. It remains marked as source-reported and unverified.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu ảnh kèm bối cảnh nguồn. Ảnh vẫn được đánh dấu là do nguồn cung cấp và chưa xác minh.')).toBeTruthy();
     expect(await screen.findByText('evidence.png · 0 KB')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open original image evidence.png' }).getAttribute('href')).toBe(image.content_url);
+    expect(screen.getByRole('link', { name: 'Mở ảnh gốc evidence.png' }).getAttribute('href')).toBe(image.content_url);
     expect(screen.getByText(image.content_sha256)).toBeTruthy();
   });
 
@@ -47,11 +47,11 @@ describe('ImageEvidencePanel', () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     render(<ImageEvidencePanel projectId={projectId} />);
-    fireEvent.change(await screen.findByLabelText('Confirmed subject'), { target: { value: subject.id } });
-    const input = screen.getByLabelText(/Image file/) as HTMLInputElement;
+    fireEvent.change(await screen.findByLabelText('Hồ sơ đã xác nhận'), { target: { value: subject.id } });
+    const input = screen.getByLabelText(/Tệp ảnh/) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File(['not an image'], 'unsafe.svg', { type: 'image/svg+xml' })] } });
-    expect((await screen.findByRole('alert')).textContent).toContain('Choose a PNG, JPEG, or WebP image.');
+    expect((await screen.findByRole('alert')).textContent).toContain('Hãy chọn ảnh PNG, JPEG hoặc WebP.');
     expect(saved).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Where did this image come from?')).toBeTruthy();
+    expect(screen.getByLabelText('Ảnh này được lấy từ đâu?')).toBeTruthy();
   });
 });

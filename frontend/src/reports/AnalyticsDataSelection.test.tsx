@@ -25,9 +25,9 @@ describe('AnalyticsDataSelection', () => {
   it('shows a useful zero-data state and offers the report-scoped CSV import action', () => {
     const importCsv = vi.fn();
     render(<AnalyticsDataSelection reportId="report-1" observations={[]} datasets={[]} onViewEvidence={() => undefined} onImportCsv={importCsv} />);
-    expect(screen.getByText('No quantitative observations are linked to this report.')).toBeTruthy();
-    expect(screen.getByText('Qualitative research remains usable on its own. When quantitative observations are supplied, they will appear here; a CSV is optional.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Link a CSV dataset to this report' }));
+    expect(screen.getByText('Chưa có số liệu định lượng liên kết với báo cáo này.')).toBeTruthy();
+    expect(screen.getByText('Nghiên cứu định tính vẫn sử dụng độc lập được. Số liệu sẽ xuất hiện tại đây khi được cung cấp; không bắt buộc phải có CSV.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Liên kết tệp CSV với báo cáo' }));
     expect(importCsv).toHaveBeenCalledTimes(1);
   });
 
@@ -38,11 +38,11 @@ describe('AnalyticsDataSelection', () => {
     expect(container.querySelectorAll('.analytics-observation')).toHaveLength(1);
     expect(container.querySelector('.analytics-observation')?.textContent).toContain('App B');
     expect(container.querySelector('.analytics-observation')?.textContent).not.toContain('App A');
-    fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bằng chứng' }));
     expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ source: 'research_report', index: 1 }));
-    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xóa bộ lọc' }));
     expect(container.querySelectorAll('.analytics-observation')).toHaveLength(2);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Period' }), { target: { value: '2025-03-01|2025-03-31' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kỳ' }), { target: { value: '2025-03-01|2025-03-31' } });
     expect(container.querySelectorAll('.analytics-observation')).toHaveLength(1);
   });
 
@@ -50,25 +50,25 @@ describe('AnalyticsDataSelection', () => {
     const openEvidence = vi.fn();
     const imported = observation({ observation_type: 'imported', provenance_type: 'csv_dataset', provenance_id: 'csv-1', entity_id: 'app-b', entity_name: 'App B' });
     render(<AnalyticsDataSelection reportId="report-1" observations={[observation()]} datasets={[csvDataset([imported])]} onViewEvidence={openEvidence} onImportCsv={() => undefined} />);
-    expect(screen.getAllByText(/ChatGPT research/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/CSV imported/).length).toBeGreaterThan(0);
-    expect(screen.getByText('1 compatible comparison group')).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Data source' }), { target: { value: 'csv_dataset' } });
-    expect(screen.getAllByRole('button', { name: 'View evidence record' })).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
+    expect(screen.getAllByText(/Do báo cáo cung cấp/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Nhập từ CSV/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/1 nhóm so sánh tương thích/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Nguồn dữ liệu' }), { target: { value: 'csv_dataset' } });
+    expect(screen.getAllByRole('button', { name: 'Xem bằng chứng' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bằng chứng' }));
     expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ source: 'csv_dataset', sourceId: 'csv-1', index: 0 }));
   });
 
   it('keeps incomplete and out-of-scope rows visible and exposes why they are excluded', () => {
-    const incomplete = observation({ entity_id: 'app-b', entity_name: 'App B', value: null, complete_observation: false, comparison_ready: false, validation_reasons: ['Missing exact numeric value.'] });
+    const incomplete = observation({ entity_id: 'app-b', entity_name: 'App B', value: null, complete_observation: false, comparison_ready: false, validation_reasons: ['Thiếu giá trị số chính xác.'] });
     const { container } = render(<AnalyticsDataSelection reportId="report-1" observations={[observation(), incomplete]} datasets={[]} onViewEvidence={() => undefined} onImportCsv={() => undefined} />);
     const cards = container.querySelectorAll('.analytics-observation');
     expect(cards).toHaveLength(2);
     expect(cards[1].textContent).toContain('App B');
-    expect(cards[1].textContent).toContain('Unknown');
-    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Measurement details, source & validation/));
-    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Why this cannot be compared/));
-    expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
+    expect(cards[1].textContent).toContain('Chưa có dữ liệu');
+    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Chi tiết phép đo, nguồn và kiểm tra/));
+    fireEvent.click(within(cards[1] as HTMLElement).getByText(/Lý do chưa thể so sánh/));
+    expect(screen.getAllByText('Thiếu giá trị số chính xác.').length).toBeGreaterThan(0);
   });
 
   it('lets a PO select a source-only CSV app and inspect its source evidence', () => {
@@ -80,9 +80,9 @@ describe('AnalyticsDataSelection', () => {
       provenance_type: 'csv_dataset', provenance_id: 'csv-1',
     });
     render(<AnalyticsDataSelection reportId="report-1" observations={[]} datasets={[csvDataset([sourceOnly])]} onViewEvidence={openEvidence} onImportCsv={() => undefined} />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Entity' }), { target: { value: 'source:sensor_tower:source-3' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Đối tượng' }), { target: { value: 'source:sensor_tower:source-3' } });
     expect(screen.getAllByText('Source-only App 3')).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bằng chứng' }));
     expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ source: 'csv_dataset', sourceId: 'csv-1', index: 0 }));
   });
 
@@ -94,13 +94,13 @@ describe('AnalyticsDataSelection', () => {
     });
     const peer = { ...worldwide, source_entity_id: 'sensor:b', source_entity_name: 'Worldwide B' };
     render(<AnalyticsDataSelection reportId="report-1" observations={[]} datasets={[csvDataset([worldwide, peer])]} onViewEvidence={() => undefined} onImportCsv={() => undefined} />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Data readiness' }), { target: { value: 'scope_mismatch' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Mức độ sẵn sàng' }), { target: { value: 'scope_mismatch' } });
     expect(screen.getAllByText('Worldwide A')).toHaveLength(2);
-    expect(screen.getAllByText('Valid in CSV scope · differs from report')).toHaveLength(2);
-    expect(screen.getByText('1 dataset-scope compatible comparison group')).toBeTruthy();
-    expect(screen.getByText(/do not represent the linked report scope/)).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Data readiness' }), { target: { value: 'needs_review' } });
-    expect(screen.getByText('No observations match these filters. Change or reset the filters to see the report-linked data.')).toBeTruthy();
+    expect(screen.getAllByText('Hợp lệ trong CSV · khác phạm vi báo cáo')).toHaveLength(2);
+    expect(screen.getByText(/1 nhóm so sánh tương thích/)).toBeTruthy();
+    expect(screen.getByText(/không đại diện cho phạm vi báo cáo đã liên kết/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Mức độ sẵn sàng' }), { target: { value: 'needs_review' } });
+    expect(screen.getByText('Không có quan sát khớp bộ lọc. Hãy đổi hoặc xóa bộ lọc để xem số liệu liên kết với báo cáo.')).toBeTruthy();
   });
 
   it('renders a compact searchable preview for 225 observations and keeps evidence navigation', () => {
@@ -108,10 +108,10 @@ describe('AnalyticsDataSelection', () => {
     const openEvidence = vi.fn();
     const { container } = render(<AnalyticsDataSelection reportId="report-1" observations={rows} datasets={[]} onViewEvidence={openEvidence} onImportCsv={() => undefined} />);
     expect(container.querySelectorAll('.analytics-observation')).toHaveLength(20);
-    expect(screen.getByText('225 match the current filters')).toBeTruthy();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search selected data' }), { target: { value: 'App 220' } });
+    expect(screen.getByText('225 số liệu khớp bộ lọc hiện tại')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Tìm trong số liệu' }), { target: { value: 'App 220' } });
     expect(container.querySelectorAll('.analytics-observation')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'View evidence record' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bằng chứng' }));
     expect(openEvidence).toHaveBeenCalledWith(expect.objectContaining({ index: 220, observation: expect.objectContaining({ entity_name: 'App 220' }) }));
   });
 });

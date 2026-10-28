@@ -58,7 +58,7 @@ const clean = (value: string | null | undefined) => value?.trim() || '';
 const normalized = (value: string | null | undefined) => clean(value).toLocaleLowerCase();
 const periodKey = (row: QuantitativeObservation) => `${clean(row.period_start)}|${clean(row.period_end)}`;
 const periodLabel = (row: QuantitativeObservation) => row.period_start && row.period_end
-  ? `${row.period_start} – ${row.period_end}` : 'Period incomplete';
+  ? `${row.period_start} – ${row.period_end}` : 'Chưa đủ thông tin kỳ';
 
 /** Stable analytical identity. Report links are used only when an explicit mapping exists. */
 export function analyticalEntityIdentity(row: QuantitativeObservation, source: AnalyticsRecord['source']): string | null {
@@ -115,16 +115,16 @@ function makeRecord(args: {
     : sourceValid && reportCompatible === true && Boolean(row.methodology?.trim());
   const duplicate = args.duplicate || row.validation_reasons.some((reason) => /duplicate observation/i.test(reason));
   const reasons = [...(row.source_validation_reasons ?? row.validation_reasons ?? [])];
-  if (!args.importedSuccessfully) reasons.push('Dataset import is not confirmed.');
-  if (!sourceValid && !reasons.length) reasons.push('Source measurement is incomplete or invalid.');
+  if (!args.importedSuccessfully) reasons.push('Chưa xác nhận nhập bộ dữ liệu.');
+  if (!sourceValid && !reasons.length) reasons.push('Phép đo nguồn chưa đầy đủ hoặc không hợp lệ.');
   if (row.report_compatibility_reasons?.length) reasons.push(...row.report_compatibility_reasons);
-  if (reportCompatible === false && !reasons.some((reason) => /scope|GEO|platform/i.test(reason))) reasons.push('Measurement scope differs from the linked report.');
-  if (reportCompatible === null && source === 'csv_dataset') reasons.push('Compatibility with the linked report is unknown.');
-  if (duplicate && !reasons.some((reason) => /duplicate observation/i.test(reason))) reasons.push('Duplicate measurement for the same source identity and measurement scope.');
-  if (sourceValid && !comparisonReady) reasons.push('No compatible comparison group is confirmed for the current selection; the measurement remains displayable.');
+  if (reportCompatible === false && !reasons.some((reason) => /scope|GEO|platform/i.test(reason))) reasons.push('Phạm vi phép đo khác với báo cáo được liên kết.');
+  if (reportCompatible === null && source === 'csv_dataset') reasons.push('Chưa xác định độ tương thích với báo cáo được liên kết.');
+  if (duplicate && !reasons.some((reason) => /duplicate observation/i.test(reason))) reasons.push('Phép đo trùng lặp theo định danh nguồn và phạm vi đo.');
+  if (sourceValid && !comparisonReady) reasons.push('Chưa xác nhận nhóm so sánh tương thích trong lựa chọn hiện tại; phép đo vẫn có thể xem riêng.');
   return {
     key: `${args.source}:${args.sourceId}:${args.index}`, observation: row, source,
-    sourceLabel: source === 'research_report' ? 'ChatGPT research · report-supplied' : 'CSV imported · not automatically verified',
+    sourceLabel: source === 'research_report' ? 'Nghiên cứu ChatGPT · do báo cáo cung cấp' : 'Đã nhập CSV · chưa tự động xác minh',
     sourceId: args.sourceId, sourceName: args.sourceName, index: args.index,
     entityIdentity: entityIdentity ?? `unresolved:${source}:${args.sourceId}:${args.index}`,
     comparisonEntityIdentity: comparisonEntityIdentity ?? entityIdentity ?? `unresolved:${source}:${args.sourceId}:${args.index}`,
@@ -196,7 +196,7 @@ function createComparisonGroups(records: AnalyticsRecord[]): AnalyticsComparison
       if (periods.length < 2 || !nonOverlapping) continue;
       result.push({
         key: `${identity}:entity:${entity}`,
-        label: `${compatibleGroupLabel(points[0].observation)} · ${points[0].observation.source_entity_name || points[0].observation.entity_name || entity} · ${periods.length} reported periods`,
+        label: `${compatibleGroupLabel(points[0].observation)} · ${points[0].observation.source_entity_name || points[0].observation.entity_name || entity} · ${periods.length} kỳ được báo cáo`,
         observations: sorted, entities: [entity], periods,
       });
     }
@@ -211,7 +211,7 @@ export function buildAnalyticsSelection(
   filters: AnalyticsFilters = emptyAnalyticsFilters,
 ): AnalyticsSelectionContract {
   const reportRecords = reportObservations.flatMap((row, index) => row.observation_type === 'reported'
-    ? [makeRecord({ row, source: 'research_report', sourceId: reportId, sourceName: 'Research report', index, importedSuccessfully: true, duplicate: false })] : []);
+    ? [makeRecord({ row, source: 'research_report', sourceId: reportId, sourceName: 'Báo cáo nghiên cứu', index, importedSuccessfully: true, duplicate: false })] : []);
   const datasetRecords = datasets.flatMap((dataset) => dataset.observations.map((row, index) => makeRecord({
     row, source: 'csv_dataset', sourceId: dataset.id, sourceName: dataset.filename, index,
     importedSuccessfully: dataset.imported_successfully !== false, duplicate: false,
@@ -263,10 +263,10 @@ export function buildAnalyticsSelection(
   const excludedObservations = filterSelected.flatMap((record) => {
     const reasons = [...record.exclusionReasons];
     if (record.sourceValid && !record.duplicate && !baselineGroupedKeys.has(record.key)) {
-      reasons.push('No compatible comparison partner in the current selection. The measurement remains available as a standalone sourced fact.');
+      reasons.push('Không có phép đo tương thích để so sánh trong lựa chọn hiện tại. Số liệu vẫn có thể xem riêng kèm nguồn.');
     }
     return passesReadiness(record, 'excluded') || (record.sourceValid && !record.duplicate && !baselineGroupedKeys.has(record.key))
-      ? [{ record, reasons: [...new Set(reasons.length ? reasons : ['No compatible comparison partner in the current selection.'])] }]
+      ? [{ record, reasons: [...new Set(reasons.length ? reasons : ['Không có phép đo tương thích để so sánh trong lựa chọn hiện tại.'])] }]
       : [];
   });
   const selected = filters.readiness === 'excluded'
@@ -280,15 +280,15 @@ export function buildAnalyticsSelection(
   const standaloneLimitations = selectedWithGroupState.filter((record) => record.sourceValid && !record.duplicate && !groupedKeys.has(record.key));
   const limitations = [...new Set([
     ...excludedObservations.flatMap(({ reasons }) => reasons),
-    ...(standaloneLimitations.length ? ['Some valid measurements have no compatible peer in the current selection. They remain available as standalone sourced facts.'] : []),
+    ...(standaloneLimitations.length ? ['Một số phép đo hợp lệ chưa có số liệu tương thích để đối chiếu trong lựa chọn hiện tại; vẫn có thể xem riêng kèm nguồn.'] : []),
   ])];
-  if (!compatibleComparisonGroups.length && selected.length && filters.readiness !== 'excluded') limitations.unshift('No compatible multi-observation group is available with the current filters.');
+  if (!compatibleComparisonGroups.length && selected.length && filters.readiness !== 'excluded') limitations.unshift('Chưa có nhóm gồm nhiều quan sát tương thích với bộ lọc hiện tại.');
 
   return {
     selectedFilters: { ...filters },
     availableDimensions: {
       metrics, geos, platforms, periods, entities: availableEntities,
-      sources: [{ key: 'all', label: 'All sources' }, { key: 'research_report', label: 'ChatGPT research' }, { key: 'csv_dataset', label: 'Linked CSV' }],
+      sources: [{ key: 'all', label: 'Tất cả nguồn' }, { key: 'research_report', label: 'Báo cáo ChatGPT' }, { key: 'csv_dataset', label: 'CSV đã liên kết' }],
     },
     selectedObservations: selectedWithGroupState, compatibleComparisonGroups, excludedObservations,
     sourceProvenance: { report: reportRecords.length, csvDatasets: datasetRecords.length, datasets: datasets.map(({ id, filename }) => ({ id, name: filename })) },

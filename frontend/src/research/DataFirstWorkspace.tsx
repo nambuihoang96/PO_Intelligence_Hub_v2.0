@@ -9,6 +9,39 @@ import { TrendUpdatesPanel } from './TrendUpdatesPanel';
 import { ImageEvidencePanel } from './ImageEvidencePanel';
 import { SavedInformationPanel } from './SavedInformationPanel';
 
+export function followHashAnchorWhenReady(hash = window.location.hash): () => void {
+  if (!hash) return () => undefined;
+  const anchorId = decodeURIComponent(hash.slice(1));
+  let handled = false;
+  let frame = 0;
+  let timeout = 0;
+  let observer: MutationObserver | null = null;
+  const scrollWhenReady = () => {
+    if (handled) return;
+    const target = document.getElementById(anchorId);
+    if (!target) return;
+    target.scrollIntoView?.({ block: 'start' });
+    handled = true;
+    observer?.disconnect();
+    window.clearTimeout(timeout);
+  };
+  observer = new MutationObserver(scrollWhenReady);
+  observer.observe(document.body, { childList: true, subtree: true });
+  frame = window.requestAnimationFrame(scrollWhenReady);
+  timeout = window.setTimeout(() => observer?.disconnect(), 5000);
+  return () => {
+    window.cancelAnimationFrame(frame);
+    window.clearTimeout(timeout);
+    observer?.disconnect();
+  };
+}
+
+function displayReportScope(geo: string, environment: string, period?: string | null) {
+  const visibleGeo = geo === 'Global / not specified' ? 'Toàn cầu · chưa chỉ định' : geo;
+  const visibleEnvironment = environment === 'Unknown' ? 'Chưa xác định môi trường' : environment;
+  return `${visibleGeo} · ${visibleEnvironment} · ${period || 'Chưa có kỳ nghiên cứu'}`;
+}
+
 type AppObservation = QuantitativeDataset['observations'][number];
 type AppGroup = { id: string; name: string; rows: AppObservation[] };
 type RankingOption = { key: string; label: string; rows: Map<string, AppObservation>; ambiguous: Set<string> };
@@ -76,21 +109,21 @@ function buildPrompt(project: ResearchProject, dataset: QuantitativeDataset, con
     status: row.verification_status, limitations: row.validation_reasons,
   })));
   return [
-    `Research question: Investigate the product and market context for the selected products in “${project.name}”.`,
-    `Saved source dataset: ${dataset.filename} (dataset reference ${context.dataset_id}; content ${context.dataset_content_sha256}).`,
-    context.selection_criterion ? `Selection criterion: ${context.selection_criterion}` : 'Selection context: The PO selected these products manually; do not describe them as market-wide top products.',
-    context.measurement ? `Selection measurement: ${context.measurement.metric_definition} (${context.measurement.metric_id}); ${context.measurement.unit}; GEO ${context.measurement.geo}; platform ${context.measurement.platform}; ${context.measurement.snapshot_date || `${context.measurement.period_start} to ${context.measurement.period_end}`}; ${context.measurement.methodology}.` : 'Selection measurement: Manual selection; no single measurement scope was asserted.',
-    `Source entities: ${context.source_entity_ids.join(', ')}. Observation references: ${context.observation_refs.length}.`,
-    '', 'Selected source data (local CSV observations; preserve exactly and treat as unverified estimates, not market-wide facts):',
+    `Câu hỏi nghiên cứu: Tìm hiểu bối cảnh sản phẩm và thị trường của các sản phẩm đã chọn trong “${project.name}”.`,
+    `Tệp dữ liệu nguồn đã lưu: ${dataset.filename} (mã tham chiếu ${context.dataset_id}; mã nội dung ${context.dataset_content_sha256}).`,
+    context.selection_criterion ? `Tiêu chí chọn: ${context.selection_criterion}` : 'Phạm vi lựa chọn: PO đã chọn các sản phẩm này thủ công; không mô tả chúng là các sản phẩm dẫn đầu toàn thị trường.',
+    context.measurement ? `Số liệu dùng để chọn: ${context.measurement.metric_definition} (${context.measurement.metric_id}); ${context.measurement.unit}; GEO ${context.measurement.geo}; nền tảng ${context.measurement.platform}; ${context.measurement.snapshot_date || `${context.measurement.period_start} đến ${context.measurement.period_end}`}; ${context.measurement.methodology}.` : 'Phạm vi số liệu: Chọn thủ công; chưa xác định một phạm vi đo lường chung.',
+    `Mã đối tượng nguồn: ${context.source_entity_ids.join(', ')}. Số tham chiếu quan sát: ${context.observation_refs.length}.`,
+    '', 'Dữ liệu nguồn đã chọn (quan sát từ CSV tại máy; giữ nguyên và coi là số liệu chưa xác minh, không đại diện toàn thị trường):',
     JSON.stringify(observations, null, 2),
-    '', 'Keep these source types separate:',
-    '- Local CSV observations above are measurements from the supplied exports only; do not present them as independently verified.',
-    '- Public web evidence must include working source URLs and dates. Do not claim the local CSV was searched or uploaded to the web.',
-    '- ChatGPT interpretation must be labeled as interpretation, not as observed fact.',
-    '- Growth or causal explanations are hypotheses unless independently supported by compatible evidence.',
-    '', 'For each selected product, research core gameplay/features, user motivation, retention mechanisms, monetization, differentiation, market context and evidence-backed growth hypotheses. Identify research gaps and useful PO next steps.',
-    'Only use observations listed above, which are selected from the saved source dataset. Preserve GEO, platform, period, unit and methodology distinctions. Do not infer missing metrics or equate records only by display name.',
-    'Return Markdown with an executive summary, findings, entities, evidence references, quantitative observations (only exact sourced measurements), research gaps and PO recommendations.',
+    '', 'Tách biệt rõ các loại nguồn sau:',
+    '- Quan sát CSV phía trên chỉ là số đo từ các tệp đã cung cấp; không trình bày như dữ liệu đã được xác minh độc lập.',
+    '- Bằng chứng công khai trên web phải có URL hoạt động và ngày. Không nói rằng CSV trên máy đã được tìm kiếm hoặc tải lên web.',
+    '- Diễn giải của ChatGPT phải được ghi rõ là diễn giải, không phải dữ kiện quan sát.',
+    '- Giải thích tăng trưởng hoặc quan hệ nhân quả là giả thuyết nếu chưa có bằng chứng tương thích hỗ trợ độc lập.',
+    '', 'Với mỗi sản phẩm đã chọn, nghiên cứu lối chơi/tính năng, động lực người dùng, cơ chế duy trì, kiếm tiền, khác biệt, bối cảnh thị trường và giả thuyết tăng trưởng có bằng chứng. Nêu khoảng trống nghiên cứu và bước tiếp theo hữu ích cho PO.',
+    'Chỉ dùng các quan sát liệt kê phía trên trong bộ dữ liệu đã lưu. Giữ riêng GEO, nền tảng, kỳ, đơn vị và phương pháp. Không suy ra chỉ số còn thiếu hoặc ghép bản ghi chỉ dựa trên tên hiển thị.',
+    'Trả về Markdown gồm tóm tắt điều hành, phát hiện, đối tượng, tham chiếu bằng chứng, quan sát định lượng (chỉ dùng số đo chính xác có nguồn), khoảng trống nghiên cứu và đề xuất cho PO.',
   ].join('\n');
 }
 
@@ -148,8 +181,10 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
       selectedContextRef.current = savedContext;
       setSelectedContext(savedContext);
       const preferredDatasetId = savedContext?.dataset_id;
-      setSelectedDatasetId((current) => allDatasets.some((item) => item.id === current) ? current :
-        (preferredDatasetId && allDatasets.some((item) => item.id === preferredDatasetId) ? preferredDatasetId : allDatasets[0]?.id ?? ''));
+      const requestedDatasetId = new URLSearchParams(window.location.search).get('datasetId');
+      setSelectedDatasetId((current) => requestedDatasetId && allDatasets.some((item) => item.id === requestedDatasetId) ? requestedDatasetId :
+        allDatasets.some((item) => item.id === current) ? current :
+          (preferredDatasetId && allDatasets.some((item) => item.id === preferredDatasetId) ? preferredDatasetId : allDatasets[0]?.id ?? ''));
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không tải được workspace.'); }
     finally { setLoading(false); }
   }
@@ -157,8 +192,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (loading || !window.location.hash) return;
-    const frame = window.requestAnimationFrame(() => document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView({ block: 'start' }));
-    return () => window.cancelAnimationFrame(frame);
+    return followHashAnchorWhenReady();
   }, [loading]);
 
   async function loadMoreReports() {
@@ -246,7 +280,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
       .slice(0, 5);
     if (top.length === 0) return;
     const next = top.map(([id]) => id);
-    const criterion = `Five highest supplied values in the selected CSV for ${rankingOption.label}; this is not a market-wide ranking.`;
+    const criterion = `Năm giá trị cao nhất được cung cấp trong CSV đã chọn cho ${rankingOption.label}; đây không phải thứ hạng toàn thị trường.`;
     const context = makeSelectionContext(dataset, next, apps, 'rule_based', criterion, rankingOption);
     const revision = ++selectionRevision.current;
     selectedAppsRef.current = next;
@@ -297,39 +331,39 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
     void saveOperation.then(() => { if (revision === selectionRevision.current) setSelectionSaveFailed(false); }).catch((cause) => { if (revision === selectionRevision.current) { setSelectionSaveFailed(true); setError(cause instanceof Error ? cause.message : 'Không lưu được shortlist mới.'); } }).finally(() => { if (selectionQueue.current === saveOperation) setSavingSelection(false); });
   }
 
-  if (loading) return <section className="research-panel"><p role="status">Đang mở workspace…</p></section>;
-  if (!project) return <section className="research-panel"><div className="research-alert" role="alert">{error || 'Không tìm thấy workspace.'}</div><a href="/research">Quay lại Research</a></section>;
+  if (loading) return <section className="research-panel"><p role="status">Đang mở dự án…</p></section>;
+  if (!project) return <section className="research-panel"><div className="research-alert" role="alert">{error || 'Không tìm thấy dự án.'}</div><a href="/research">Quay lại trang Nghiên cứu</a></section>;
 
   return <div className="data-first-workspace">
     <ProjectJourneyNav projectId={projectId} active="research" />
-    <section className="research-panel data-workspace-heading"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Back to project</a><span className="state-label">PROJECT RESEARCH</span><h2>{project.name}</h2><p>Saved reports, research updates, and project data stay together here.</p></div></section>
+    <section className="research-panel data-workspace-heading"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Về trang dự án</a><span className="state-label">NGHIÊN CỨU TRONG DỰ ÁN</span><h2>{project.name}</h2><p>Báo cáo, cập nhật nghiên cứu và dữ liệu được lưu cùng một nơi.</p></div></section>
     <SavedInformationPanel projectId={projectId} />
     <ResearchSubjectsPanel projectId={projectId} />
-    <details className="saved-information-legacy"><summary>Earlier trend update and image records</summary><p>These records were saved using the previous workflow. They remain available and unchanged.</p><TrendUpdatesPanel projectId={projectId} /><ImageEvidencePanel projectId={projectId} /></details>
+    <details className="saved-information-legacy"><summary>Các cập nhật xu hướng và ảnh đã lưu trước đây</summary><p>Các nội dung này được lưu theo quy trình trước. Chúng vẫn được giữ nguyên và có thể xem tại đây.</p><TrendUpdatesPanel projectId={projectId} /><ImageEvidencePanel projectId={projectId} /></details>
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     <div className="workspace-source-grid">
-      <section className="research-panel" id="project-csv-data"><div className="panel-heading"><div><span className="state-label">MARKET DATA</span><h3>CSV datasets</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Close import' : 'Import CSV'}</button></div><p>{datasets.length ? `${datasets.length} dataset${datasets.length === 1 ? '' : 's'} saved` : 'You can add a dataset before or after importing a research report.'}</p>
-        {datasets.length > 0 && <label className="field-label">Dataset to explore<select value={selectedDatasetId} onChange={(event) => { setSelectedDatasetId(event.target.value); setVisibleApps(50); setPrompt(''); }}><option value="">Select a dataset</option>{datasets.map((item) => <option value={item.id} key={item.id}>{item.filename} · {item.source_apps ?? 0} apps</option>)}</select></label>}
+      <section className="research-panel" id="project-csv-data"><div className="panel-heading"><div><span className="state-label">SỐ LIỆU THỊ TRƯỜNG</span><h3>Tệp dữ liệu CSV</h3></div><button className="primary-action" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Đóng phần nhập' : 'Nhập CSV'}</button></div><p>{datasets.length ? `Đã lưu ${datasets.length} bộ dữ liệu` : 'Bạn có thể thêm tệp dữ liệu trước hoặc sau khi nhập báo cáo nghiên cứu.'}</p>
+        {datasets.length > 0 && <label className="field-label">Tệp dữ liệu cần xem<select value={selectedDatasetId} onChange={(event) => { setSelectedDatasetId(event.target.value); setVisibleApps(50); setPrompt(''); }}><option value="">Chọn tệp dữ liệu</option>{datasets.map((item) => <option value={item.id} key={item.id}>{item.filename} · {item.source_apps ?? 0} sản phẩm</option>)}</select></label>}
         {showImport && <QuantitativeDatasetImport projectId={projectId} onImported={(item) => { setSelectedDatasetId(item.id); setDataset(item); setShowImport(false); setVisibleApps(50); void (async () => { const all: ComparisonDataset[] = []; let cursor: string | undefined; do { const page = await reportApi.listComparisonDatasets(cursor, projectId); all.push(...page.items.filter((row) => !all.some((existing) => existing.id === row.id))); cursor = page.next_cursor ?? undefined; } while (cursor); setDatasets(all); })().catch((cause) => setError(cause instanceof Error ? cause.message : 'CSV đã lưu nhưng danh sách chưa làm mới. Hãy bấm Refresh.')); }} />}
       </section>
-      <section className="research-panel" id="workspace-reports"><div className="panel-heading"><div><span className="state-label">CHATGPT FINDINGS</span><h3>Reports in this workspace</h3></div><a className="secondary-action" href={`/reports?projectId=${encodeURIComponent(projectId)}`}>Open Reports library</a></div><p>{reports.length ? `${reports.length} report${reports.length === 1 ? '' : 's'} linked` : 'Import a report here after researching in ChatGPT Plus.'}</p><div className="workspace-report-list">{reports.map((report) => <a key={report.id} href={`/reports/${encodeURIComponent(report.id)}`}><strong>{report.question}</strong><small>{report.geo} · {report.os} · {report.research_period || 'Period not specified'}</small></a>)}</div>
-        {allReports.filter((report) => !reports.some((linked) => linked.id === report.id)).length > 0 && <div className="workspace-link-report"><label className="field-label">Add an existing report<select value={linkReportId} onChange={(event) => setLinkReportId(event.target.value)}><option value="">Choose report…</option>{allReports.filter((report) => !reports.some((linked) => linked.id === report.id)).map((report) => <option key={report.id} value={report.id}>{report.question}</option>)}</select></label><button className="secondary-action" type="button" disabled={!linkReportId} onClick={() => void linkReport()}>Add to workspace</button></div>}
-        {(reportsCursor || allReportsCursor) && <button type="button" className="secondary-action" disabled={loadingMoreReports} onClick={() => void loadMoreReports()}>{loadingMoreReports ? 'Loading reports…' : 'Load more reports'}</button>}
+      <section className="research-panel" id="workspace-reports"><div className="panel-heading"><div><span className="state-label">KẾT QUẢ CHATGPT</span><h3>Báo cáo trong dự án</h3></div><a className="secondary-action" href={`/reports?projectId=${encodeURIComponent(projectId)}`}>Mở thư viện báo cáo</a></div><p>{reports.length ? `Đã liên kết ${reports.length} báo cáo` : 'Nhập báo cáo tại đây sau khi nghiên cứu bằng ChatGPT Plus.'}</p><div className="workspace-report-list">{reports.map((report) => <a key={report.id} href={`/reports/${encodeURIComponent(report.id)}`}><strong>{report.question}</strong><small>{displayReportScope(report.geo, report.os, report.research_period)}</small></a>)}</div>
+        {allReports.filter((report) => !reports.some((linked) => linked.id === report.id)).length > 0 && <div className="workspace-link-report"><label className="field-label">Thêm báo cáo đã lưu<select value={linkReportId} onChange={(event) => setLinkReportId(event.target.value)}><option value="">Chọn báo cáo…</option>{allReports.filter((report) => !reports.some((linked) => linked.id === report.id)).map((report) => <option key={report.id} value={report.id}>{report.question}</option>)}</select></label><button className="secondary-action" type="button" disabled={!linkReportId} onClick={() => void linkReport()}>Thêm vào dự án</button></div>}
+        {(reportsCursor || allReportsCursor) && <button type="button" className="secondary-action" disabled={loadingMoreReports} onClick={() => void loadMoreReports()}>{loadingMoreReports ? 'Đang tải báo cáo…' : 'Tải thêm báo cáo'}</button>}
       </section>
     </div>
-    {selectedContext && <section className="research-panel workspace-saved-shortlist"><div className="panel-heading"><div><span className="state-label">SAVED CANDIDATES</span><h3>{selectedApps.length} selected · {selectedContext.dataset_filename || 'Legacy selection'}</h3></div><span role="status">{savingSelection ? 'Saving…' : selectionSaveFailed ? 'Save failed' : 'Saved'}</span></div><p>{selectedContext.selection_type === 'legacy' ? 'This older shortlist has no saved dataset provenance. Its original source is unknown.' : selectedContext.selection_criterion || 'Selected manually from the saved source file.'}</p>{selectedContext.measurement && <p>{selectedContext.measurement.metric_definition} · {selectedContext.measurement.unit} · {selectedContext.measurement.geo} · {selectedContext.measurement.platform} · {selectedContext.measurement.snapshot_date || `${selectedContext.measurement.period_start} – ${selectedContext.measurement.period_end}`}</p>}<button type="button" className="primary-action" onClick={() => void createPrompt()} disabled={selectedApps.length === 0 || savingSelection || selectionSaveFailed}>Copy research prompt from saved shortlist</button></section>}
-    {dataset && <section className="research-panel workspace-explorer"><div className="panel-heading"><div><span className="state-label">DATA EXPLORER</span><h3>{dataset.filename}</h3></div><span className="data-scope-pill">{dataset.source_rows ?? dataset.observations.length} CSV rows · {dataset.source_apps ?? apps.length} source apps</span></div><p className="field-help">Rows retain their supplied GEO, platform, metric, period and source. Values are not independently verified by importing.</p>
-      {!activeSelectionMatchesDataset && <div className="research-alert" role="status">Shortlist này thuộc dataset “{selectedContext?.dataset_filename || 'nguồn cũ chưa biết'}”. Chọn “Start new shortlist…” để bắt đầu từ file đang mở; shortlist cũ vẫn giữ nguyên cho đến khi bạn xác nhận hành động đó.</div>}
-      {activeSelectionMatchesDataset && selectedApps.length === 0 && selectedContext && <p className="field-help">Shortlist mới đã mở từ dataset này. Chọn ứng dụng bên dưới để lưu candidates.</p>}
-      {!activeSelectionMatchesDataset && <button type="button" className="secondary-action" onClick={startNewShortlist} disabled={savingSelection}>Start new shortlist from this dataset (replace current shortlist)</button>}
-      {apps.length === 0 ? <p>No app rows were detected in this dataset.</p> : <div className="workspace-app-table-scroll"><table className="workspace-app-table"><thead><tr><th>Select</th><th>App / source identity</th><th>Metric observations</th><th>Scope and period</th></tr></thead><tbody>{apps.slice(0, visibleApps).map((app) => <tr key={app.id}><td><input type="checkbox" aria-label={`Select ${app.name} for ChatGPT research`} checked={activeSelectionMatchesDataset && selectedApps.includes(app.id)} disabled={!activeSelectionMatchesDataset || savingSelection} onChange={() => void toggleApp(app.id)} /></td><th scope="row">{app.name}<small>{app.id}</small></th><td>{[...new Set(app.rows.map((row) => row.metric_definition || row.metric_id || 'Unidentified metric'))].join(', ')}</td><td>{[...new Set(app.rows.map((row) => `${row.geo || 'GEO unknown'} · ${row.platform || 'platform unknown'} · ${row.snapshot_date || `${row.period_start || '?'}–${row.period_end || '?'}`}`))].join('; ')}</td></tr>)}</tbody></table></div>}
-      {apps.length > visibleApps && <button type="button" className="secondary-action" onClick={() => setVisibleApps((current) => current + 50)}>Load more apps</button>}
-      {rankingOption && <div className="workspace-selection-criterion"><label className="field-label">Select candidates by observed data<select value={rankingOption.key} onChange={(event) => setRankingKey(event.target.value)}>{rankingOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label><button type="button" className="secondary-action" disabled={!activeSelectionMatchesDataset || savingSelection || rankingOption.rows.size < 5} onClick={() => void selectFiveHighest()}>Select 5 highest values in this CSV</button><span>Uses five exact, complete observations with one scope from this file. This is not a market ranking.</span></div>}
-      {rankingOptions.length === 0 && <p className="field-help">Automatic candidate selection is unavailable because no group of five exact, complete observations has a shared metric, unit, GEO, platform, methodology and period. You can still select products manually after starting a shortlist for this dataset.</p>}
+    {selectedContext && <section className="research-panel workspace-saved-shortlist"><div className="panel-heading"><div><span className="state-label">SẢN PHẨM ĐÃ CHỌN</span><h3>{selectedApps.length} sản phẩm · {selectedContext.dataset_filename || 'Lựa chọn cũ'}</h3></div><span role="status">{savingSelection ? 'Đang lưu…' : selectionSaveFailed ? 'Lưu thất bại' : 'Đã lưu'}</span></div><p>{selectedContext.selection_type === 'legacy' ? 'Danh sách cũ này không lưu nguồn dữ liệu; không xác định được nguồn ban đầu.' : selectedContext.selection_criterion || 'Đã chọn thủ công từ tệp nguồn đã lưu.'}</p>{selectedContext.measurement && <p>{selectedContext.measurement.metric_definition} · {selectedContext.measurement.unit} · {selectedContext.measurement.geo} · {selectedContext.measurement.platform} · {selectedContext.measurement.snapshot_date || `${selectedContext.measurement.period_start} – ${selectedContext.measurement.period_end}`}</p>}<button type="button" className="primary-action" onClick={() => void createPrompt()} disabled={selectedApps.length === 0 || savingSelection || selectionSaveFailed}>Tạo yêu cầu nghiên cứu từ danh sách đã lưu</button></section>}
+    {dataset && <section className="research-panel workspace-explorer"><div className="panel-heading"><div><span className="state-label">KHÁM PHÁ DỮ LIỆU</span><h3>{dataset.filename}</h3></div><span className="data-scope-pill">{dataset.source_rows ?? dataset.observations.length} dòng CSV · {dataset.source_apps ?? apps.length} sản phẩm nguồn</span></div><p className="field-help">Các dòng giữ nguyên thị trường, nền tảng, chỉ số, kỳ và nguồn được cung cấp. Nhập dữ liệu không đồng nghĩa với xác minh độc lập.</p>
+      {!activeSelectionMatchesDataset && <div className="research-alert" role="status">Danh sách đã lưu thuộc tệp dữ liệu “{selectedContext?.dataset_filename || 'nguồn cũ chưa biết'}”, không phải tệp đang xem. Chọn “Tạo danh sách mới…” để bắt đầu từ tệp này; danh sách cũ vẫn được giữ cho đến khi bạn xác nhận hành động đó.</div>}
+      {activeSelectionMatchesDataset && selectedApps.length === 0 && selectedContext && <p className="field-help">Danh sách mới đã mở từ tệp này. Chọn sản phẩm bên dưới để lưu vào danh sách.</p>}
+      {!activeSelectionMatchesDataset && <button type="button" className="secondary-action" onClick={startNewShortlist} disabled={savingSelection}>Tạo danh sách mới từ tệp này (thay danh sách hiện tại)</button>}
+      {apps.length === 0 ? <p>Không tìm thấy dòng sản phẩm trong tệp dữ liệu này.</p> : <div className="workspace-app-table-scroll"><table className="workspace-app-table"><thead><tr><th>Chọn</th><th>Sản phẩm / danh tính nguồn</th><th>Các chỉ số</th><th>Phạm vi và kỳ</th></tr></thead><tbody>{apps.slice(0, visibleApps).map((app) => <tr key={app.id}><td><input type="checkbox" aria-label={`Chọn ${app.name} để nghiên cứu bằng ChatGPT`} checked={activeSelectionMatchesDataset && selectedApps.includes(app.id)} disabled={!activeSelectionMatchesDataset || savingSelection} onChange={() => void toggleApp(app.id)} /></td><th scope="row">{app.name}<small>{app.id}</small></th><td>{[...new Set(app.rows.map((row) => row.metric_definition || row.metric_id || 'Chưa xác định chỉ số'))].join(', ')}</td><td>{[...new Set(app.rows.map((row) => `${row.geo || 'Chưa có thị trường'} · ${row.platform || 'chưa có nền tảng'} · ${row.snapshot_date || `${row.period_start || '?'}–${row.period_end || '?'}`}`))].join('; ')}</td></tr>)}</tbody></table></div>}
+      {apps.length > visibleApps && <button type="button" className="secondary-action" onClick={() => setVisibleApps((current) => current + 50)}>Tải thêm sản phẩm</button>}
+      {rankingOption && <div className="workspace-selection-criterion"><label className="field-label">Chọn sản phẩm theo số liệu đã ghi nhận<select value={rankingOption.key} onChange={(event) => setRankingKey(event.target.value)}>{rankingOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label><button type="button" className="secondary-action" disabled={!activeSelectionMatchesDataset || savingSelection || rankingOption.rows.size < 5} onClick={() => void selectFiveHighest()}>Chọn 5 giá trị cao nhất trong CSV này</button><span>Dùng 5 quan sát chính xác, đầy đủ và cùng phạm vi trong tệp này. Đây không phải thứ hạng thị trường.</span></div>}
+      {rankingOptions.length === 0 && <p className="field-help">Chưa thể tự chọn sản phẩm vì không có nhóm 5 quan sát chính xác, đầy đủ cùng chỉ số, đơn vị, thị trường, nền tảng, phương pháp và kỳ. Bạn vẫn có thể tự chọn sản phẩm sau khi tạo danh sách từ tệp này.</p>}
       {selectedCriterion && <p className="field-help">{selectedCriterion}</p>}
-      <div className="workspace-followup"><span>{activeSelectionMatchesDataset ? `${selected.length} app${selected.length === 1 ? '' : 's'} selected` : 'Saved shortlist belongs to another dataset'}{savingSelection ? ' · saving…' : selectionSaveFailed ? ' · not saved' : ' · saved'}</span>{selectionSaveFailed && <button type="button" className="secondary-action" onClick={() => void retrySaveSelection()}>Retry saving selection</button>}<button type="button" className="primary-action" disabled={!activeSelectionMatchesDataset || selected.length === 0 || savingSelection || selectionSaveFailed} onClick={() => void createPrompt()}>Research these apps with ChatGPT</button></div>
-      {prompt && <label className="workspace-prompt"><span className="field-label">Copy-ready research prompt</span><textarea readOnly rows={16} value={prompt} onFocus={(event) => event.currentTarget.select()} /></label>}
+      <div className="workspace-followup"><span>{activeSelectionMatchesDataset ? `${selected.length} sản phẩm đã chọn` : 'Danh sách đã lưu thuộc một tệp dữ liệu khác'}{savingSelection ? ' · đang lưu…' : selectionSaveFailed ? ' · chưa lưu' : ' · đã lưu'}</span>{selectionSaveFailed && <button type="button" className="secondary-action" onClick={() => void retrySaveSelection()}>Thử lưu lại lựa chọn</button>}<button type="button" className="primary-action" disabled={!selectedContext || selectedContext.source_entity_ids.length === 0 || savingSelection || selectionSaveFailed} onClick={() => void createPrompt()}>Nghiên cứu các sản phẩm này bằng ChatGPT</button></div>
+      {prompt && <label className="workspace-prompt"><span className="field-label">Yêu cầu nghiên cứu sẵn sàng sao chép</span><textarea readOnly rows={16} value={prompt} onFocus={(event) => event.currentTarget.select()} /></label>}
     </section>}
-    {datasets.length > 1 && <section className="research-panel"><div className="panel-heading"><div><span className="state-label">NEXT STEP</span><h3>Compare compatible periods</h3></div><a className="primary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>Compare periods</a></div><p>Only compatible metric definitions, measurement windows and source scopes are compared.</p></section>}
+    {datasets.length > 1 && <section className="research-panel"><div className="panel-heading"><div><span className="state-label">BƯỚC TIẾP THEO</span><h3>So sánh các kỳ phù hợp</h3></div><a className="primary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`}>So sánh các kỳ</a></div><p>Chỉ so sánh các định nghĩa chỉ số, khoảng đo và phạm vi nguồn tương thích.</p></section>}
   </div>;
 }

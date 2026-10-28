@@ -26,11 +26,11 @@ export function selectQuantitativeState(
     ...datasetRows.flatMap((row) => row.source_validation_reasons ?? row.validation_reasons),
   ])];
   if (reportScopeMismatch) {
-    const datasetGeo = [...new Set(datasetRows.map((row) => row.geo).filter(Boolean))].join(', ') || 'unknown GEO';
-    const datasetPlatform = [...new Set(datasetRows.map((row) => row.platform).filter(Boolean))].join(', ') || 'unknown platform';
-    const reportGeo = reportScope?.geo || 'unknown GEO';
-    const reportPlatform = reportScope?.platform || 'unknown platform';
-    reasons.unshift(`CSV data is available for ${datasetGeo} / ${datasetPlatform} analysis. It cannot be used directly as ${reportGeo} / ${reportPlatform} measurements.`);
+    const datasetGeo = [...new Set(datasetRows.map((row) => row.geo).filter(Boolean))].join(', ') || 'chưa rõ GEO';
+    const datasetPlatform = [...new Set(datasetRows.map((row) => row.platform).filter(Boolean))].join(', ') || 'chưa rõ nền tảng';
+    const reportGeo = reportScope?.geo || 'chưa rõ GEO';
+    const reportPlatform = reportScope?.platform || 'chưa rõ nền tảng';
+    reasons.unshift(`Có dữ liệu CSV trong phạm vi ${datasetGeo} / ${datasetPlatform}. Không thể dùng trực tiếp các số liệu này cho phạm vi ${reportGeo} / ${reportPlatform} của báo cáo.`);
   }
   if (incompleteReport || incompleteDataset) {
     return { state: reportScopeMismatch ? 'partial_with_report_scope_mismatch' : 'partial_or_incompatible', reasons, observationCount: reportRows.length + datasetRows.length };
@@ -45,11 +45,11 @@ export function selectQuantitativeState(
 }
 
 export const quantitativeStateLabels: Record<QuantitativeDataState, string> = {
-  no_data: 'Qualitative research · No quantitative dataset linked',
-  research_supplied: 'Research-supplied quantitative observations',
-  csv_linked: 'CSV dataset linked to this report',
-  mixed_compatible: 'Compatible report and CSV observations',
-  report_scope_mismatch: 'CSV data is usable in its original scope; it differs from this report scope',
-  partial_with_report_scope_mismatch: 'CSV data has incomplete observations and differs from this report scope',
-  partial_or_incompatible: 'Quantitative data has incomplete or incompatible coverage',
+  no_data: 'Nghiên cứu định tính · Chưa liên kết bộ dữ liệu định lượng',
+  research_supplied: 'Có số liệu định lượng do báo cáo cung cấp',
+  csv_linked: 'Đã liên kết dữ liệu CSV với báo cáo này',
+  mixed_compatible: 'Số liệu từ báo cáo và CSV có thể kết hợp',
+  report_scope_mismatch: 'CSV dùng được trong phạm vi gốc nhưng khác phạm vi báo cáo',
+  partial_with_report_scope_mismatch: 'CSV có số liệu chưa đầy đủ và khác phạm vi báo cáo',
+  partial_or_incompatible: 'Dữ liệu định lượng chưa đầy đủ hoặc không tương thích',
 };

@@ -24,24 +24,24 @@ describe('TrendUpdatesPanel', () => {
     const create = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(saved);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([saved]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.click(await screen.findByText('Use a saved product or topic'));
-    fireEvent.change(screen.getByLabelText('Product or topic'), { target: { value: subject.id } });
-    fireEvent.change(screen.getByLabelText(/Benchmark collection/), { target: { value: collection.id } });
-    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: '2026-10-21' } });
-    fireEvent.click(screen.getByText('More source details'));
-    fireEvent.change(screen.getByLabelText(/Source title/), { target: { value: 'Source report' } });
-    fireEvent.change(screen.getByLabelText(/Source link/), { target: { value: 'https://example.org/source' } });
-    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
-    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    fireEvent.click(await screen.findByText('Dùng hồ sơ đã lưu'));
+    fireEvent.change(screen.getByLabelText('Sản phẩm hoặc chủ đề'), { target: { value: subject.id } });
+    fireEvent.change(screen.getByLabelText(/Bộ so sánh/), { target: { value: collection.id } });
+    fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: '2026-10-21' } });
+    fireEvent.click(screen.getByText('Thêm chi tiết nguồn'));
+    fireEvent.change(screen.getByLabelText(/Tên nguồn/), { target: { value: 'Source report' } });
+    fireEvent.change(screen.getByLabelText(/Liên kết nguồn/), { target: { value: 'https://example.org/source' } });
+    fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Bạn thấy thông tin ở đâu?'), { target: { value: saved.source_note } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu cập nhật xu hướng' }));
     await waitFor(() => expect(create).toHaveBeenCalledWith(projectId, {
       subject_id: subject.id, collection_id: collection.id, exact_claim: saved.exact_claim, source_note: saved.source_note,
       source_title: saved.source_title, source_url: saved.source_url, published_on: saved.published_on,
     }));
     expect(await screen.findByText(saved.exact_claim)).toBeTruthy();
-    expect(screen.getByText('Source-reported · unverified')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open supplied source link' }).getAttribute('href')).toBe(saved.source_url);
-    const decisionLink = screen.getByRole('link', { name: 'Review PO decision' });
+    expect(screen.getByText('Theo nguồn cung cấp · chưa xác minh')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở liên kết nguồn đã cung cấp' }).getAttribute('href')).toBe(saved.source_url);
+    const decisionLink = screen.getByRole('link', { name: 'Xem quyết định PO' });
     expect(decisionLink.getAttribute('href')).toContain('decisionKind=trend_update');
     expect(decisionLink.getAttribute('href')).toContain('decisionTargetId=update-1');
   });
@@ -50,15 +50,15 @@ describe('TrendUpdatesPanel', () => {
     mockReads();
     vi.spyOn(researchApi, 'createTrendUpdate').mockRejectedValue(new Error('Could not save update.'));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.click(await screen.findByText('Use a saved product or topic'));
-    fireEvent.change(screen.getByLabelText('Product or topic'), { target: { value: subject.id } });
-    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: '2026-10-21' } });
-    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: 'Keep this exact draft.' } });
-    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: 'Keep this attribution.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    fireEvent.click(await screen.findByText('Dùng hồ sơ đã lưu'));
+    fireEvent.change(screen.getByLabelText('Sản phẩm hoặc chủ đề'), { target: { value: subject.id } });
+    fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: '2026-10-21' } });
+    fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: 'Keep this exact draft.' } });
+    fireEvent.change(screen.getByLabelText('Bạn thấy thông tin ở đâu?'), { target: { value: 'Keep this attribution.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu cập nhật xu hướng' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Could not save update.');
-    expect((screen.getByLabelText('What did you observe?') as HTMLTextAreaElement).value).toBe('Keep this exact draft.');
-    expect((screen.getByLabelText('Where did you see it?') as HTMLTextAreaElement).value).toBe('Keep this attribution.');
+    expect((screen.getByLabelText('Bạn đã quan sát thấy gì?') as HTMLTextAreaElement).value).toBe('Keep this exact draft.');
+    expect((screen.getByLabelText('Bạn thấy thông tin ở đâu?') as HTMLTextAreaElement).value).toBe('Keep this attribution.');
   });
 
   it('does not submit duplicate trend updates on rapid repeated clicks', async () => {
@@ -66,12 +66,12 @@ describe('TrendUpdatesPanel', () => {
     const create = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(saved);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([saved]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.click(await screen.findByText('Use a saved product or topic'));
-    fireEvent.change(screen.getByLabelText('Product or topic'), { target: { value: subject.id } });
-    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: saved.published_on } });
-    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
-    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
-    const save = screen.getByRole('button', { name: 'Save trend update' });
+    fireEvent.click(await screen.findByText('Dùng hồ sơ đã lưu'));
+    fireEvent.change(screen.getByLabelText('Sản phẩm hoặc chủ đề'), { target: { value: subject.id } });
+    fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: saved.published_on } });
+    fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Bạn thấy thông tin ở đâu?'), { target: { value: saved.source_note } });
+    const save = screen.getByRole('button', { name: 'Lưu cập nhật xu hướng' });
     fireEvent.click(save);
     fireEvent.click(save);
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
@@ -85,17 +85,17 @@ describe('TrendUpdatesPanel', () => {
     const createUpdate = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(updateForNewSubject);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([updateForNewSubject]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.change(await screen.findByLabelText('Product or topic name'), { target: { value: createdSubject.name } });
-    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: saved.published_on } });
-    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
-    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    fireEvent.change(await screen.findByLabelText('Tên sản phẩm hoặc chủ đề'), { target: { value: createdSubject.name } });
+    fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: saved.published_on } });
+    fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Bạn thấy thông tin ở đâu?'), { target: { value: saved.source_note } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu cập nhật xu hướng' }));
     await waitFor(() => expect(createSubject).toHaveBeenCalledWith(projectId, {
       name: createdSubject.name, subject_type: null, aliases: [], external_ids: [], provenance: { created_via: 'trend_update' },
     }));
     await waitFor(() => expect(createUpdate).toHaveBeenCalledWith(projectId, expect.objectContaining({ subject_id: createdSubject.id })));
     expect(await screen.findByText(saved.exact_claim)).toBeTruthy();
-    expect(screen.getByText('Source-reported · unverified')).toBeTruthy();
+    expect(screen.getByText('Theo nguồn cung cấp · chưa xác minh')).toBeTruthy();
   });
 
   it('does not create a duplicate subject when an update save fails and is retried', async () => {
@@ -106,13 +106,13 @@ describe('TrendUpdatesPanel', () => {
     const createUpdate = vi.spyOn(researchApi, 'createTrendUpdate').mockRejectedValueOnce(new Error('Temporary network issue.')).mockResolvedValue(updateForNewSubject);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([updateForNewSubject]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.change(await screen.findByLabelText('Product or topic name'), { target: { value: createdSubject.name } });
-    fireEvent.change(screen.getByLabelText('Source publication date'), { target: { value: saved.published_on } });
-    fireEvent.change(screen.getByLabelText('What did you observe?'), { target: { value: saved.exact_claim } });
-    fireEvent.change(screen.getByLabelText('Where did you see it?'), { target: { value: saved.source_note } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('“Retry Topic” is saved as a subject. Temporary network issue.');
-    fireEvent.click(screen.getByRole('button', { name: 'Save trend update' }));
+    fireEvent.change(await screen.findByLabelText('Tên sản phẩm hoặc chủ đề'), { target: { value: createdSubject.name } });
+    fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: saved.published_on } });
+    fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: saved.exact_claim } });
+    fireEvent.change(screen.getByLabelText('Bạn thấy thông tin ở đâu?'), { target: { value: saved.source_note } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu cập nhật xu hướng' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Đã lưu hồ sơ “Retry Topic”. Temporary network issue.');
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu cập nhật xu hướng' }));
     await waitFor(() => expect(createUpdate).toHaveBeenCalledTimes(2));
     expect(createSubject).toHaveBeenCalledTimes(1);
     expect(createUpdate.mock.calls[1][1].subject_id).toBe(createdSubject.id);

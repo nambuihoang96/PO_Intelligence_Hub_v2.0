@@ -40,13 +40,13 @@ export function defaultComparisonSort(type: ComparisonChartType): ComparisonChar
 
 export function comparisonSortLabel(sort: ComparisonChartSort, unit: string | null): string {
   switch (sort) {
-    case 'name': return 'alphabetical by app name';
-    case 'current_desc': return `highest current value${unit ? ` (${unit})` : ''}`;
-    case 'baseline_desc': return `highest baseline value${unit ? ` (${unit})` : ''}`;
-    case 'increase_desc': return `largest increase${unit ? ` (${unit})` : ''}`;
-    case 'decrease_asc': return `largest decrease${unit ? ` (${unit})` : ''}`;
-    case 'percentage_desc': return 'highest valid percentage change';
-    case 'percentage_asc': return 'lowest valid percentage change';
+    case 'name': return 'tên sản phẩm theo thứ tự A–Z';
+    case 'current_desc': return `giá trị kỳ hiện tại cao nhất${unit ? ` (${unit})` : ''}`;
+    case 'baseline_desc': return `giá trị kỳ trước cao nhất${unit ? ` (${unit})` : ''}`;
+    case 'increase_desc': return `mức tăng lớn nhất${unit ? ` (${unit})` : ''}`;
+    case 'decrease_asc': return `mức giảm lớn nhất${unit ? ` (${unit})` : ''}`;
+    case 'percentage_desc': return 'phần trăm thay đổi hợp lệ cao nhất';
+    case 'percentage_asc': return 'phần trăm thay đổi hợp lệ thấp nhất';
   }
 }
 

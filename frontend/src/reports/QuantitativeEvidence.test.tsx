@@ -23,13 +23,13 @@ describe('QuantitativeEvidence', () => {
     render(<QuantitativeEvidence observations={[
       observation(), observation({ entity_id: 'game-b', entity_name: 'Game B', value: 850 }), observation({ entity_id: 'game-c', entity_name: 'Game C', value: 740 }),
     ]} onViewEvidence={openEvidence} />);
-    expect(screen.getByRole('heading', { name: 'Entity comparison' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Market Data & Charts' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'So sánh hồ sơ' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Số liệu và biểu đồ' })).toBeTruthy();
     expect(screen.getByText('Game A')).toBeTruthy();
     expect(screen.getByText('Game B')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Game A.*View evidence/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Game A.*Xem bằng chứng/i }));
     expect(openEvidence).toHaveBeenCalledWith(0);
-    expect(screen.getByRole('button', { name: /Game A.*View evidence/i }).textContent).toContain('Exact as reported · unverified');
+    expect(screen.getByRole('button', { name: /Game A.*Xem bằng chứng/i }).textContent).toContain('Chính xác theo báo cáo · chưa xác minh');
   });
 
   it('labels two compatible periods as a two-point comparison, never a continuous trend', () => {
@@ -37,9 +37,9 @@ describe('QuantitativeEvidence', () => {
       observation({ period_start: '2025-01-01', period_end: '2025-03-31' }),
       observation({ period_start: '2025-04-01', period_end: '2025-06-30', value: 800 }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Two reported time points' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Observed time series' })).toBeNull();
-    expect(screen.getByLabelText(/not a continuous trend/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Hai thời điểm được báo cáo' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Chuỗi số liệu quan sát' })).toBeNull();
+    expect(screen.getByLabelText(/không phải xu hướng liên tục/i)).toBeTruthy();
   });
 
   it('uses observed dates only for three or more chronological points', () => {
@@ -48,9 +48,9 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: 'game-a', period_start: '2025-02-01', period_end: '2025-02-28', value: 900 }),
       observation({ entity_id: 'game-a', period_start: '2025-04-01', period_end: '2025-04-30', value: 780 }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Observed time series' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: /observations placed by actual date/i })).toBeTruthy();
-    expect(screen.getByText(/spaced chronologically/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Chuỗi số liệu quan sát' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /quan sát được sắp theo ngày thực tế/i })).toBeTruthy();
+    expect(screen.getByText(/sắp theo thời gian thực/i)).toBeTruthy();
     const path = document.querySelector('.quant-time-series polyline')?.getAttribute('points') || '';
     const x = path.split(' ').map((point) => Number(point.split(',')[0]));
     expect(x).toHaveLength(3);
@@ -66,12 +66,12 @@ describe('QuantitativeEvidence', () => {
       observation({ period_start: '2025-05-01', period_end: '2025-05-07', granularity: 'week', value: 850 }),
     ];
     render(<QuantitativeEvidence observations={rows} onViewEvidence={openEvidence} />);
-    expect(screen.getByRole('heading', { name: 'Observed time series' })).toBeTruthy();
-    const points = screen.getAllByRole('button', { name: /View evidence/i });
+    expect(screen.getByRole('heading', { name: 'Chuỗi số liệu quan sát' })).toBeTruthy();
+    const points = screen.getAllByRole('button', { name: /Xem bằng chứng/i });
     expect(points).toHaveLength(4);
     points.forEach((point) => fireEvent.click(point));
     expect(openEvidence.mock.calls.map(([index]) => index).sort()).toEqual([0, 1, 2, 3]);
-    expect(screen.getByText(/not represent intermediate measurements/i)).toBeTruthy();
+    expect(screen.getByText(/không biểu thị số đo ở các thời điểm trung gian/i)).toBeTruthy();
   });
 
   it('renders three entities across two periods as a clickable matrix, not separate entity series', () => {
@@ -81,11 +81,11 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: entity, entity_name: `Game ${entityIndex + 1}`, period_start: '2025-04-01', period_end: '2025-06-30', value: 80 + entityIndex }),
     ]);
     render(<QuantitativeEvidence observations={rows} onViewEvidence={openEvidence} />);
-    expect(screen.getByRole('heading', { name: 'Entity comparison' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /view evidence for/i })).toHaveLength(6);
-    for (const button of screen.getAllByRole('button', { name: /view evidence for/i })) fireEvent.click(button);
+    expect(screen.getByRole('heading', { name: 'So sánh hồ sơ' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /xem bằng chứng của/i })).toHaveLength(6);
+    for (const button of screen.getAllByRole('button', { name: /xem bằng chứng của/i })) fireEvent.click(button);
     expect(openEvidence.mock.calls.map(([index]) => index).sort()).toEqual([0, 1, 2, 3, 4, 5]);
-    expect(screen.queryByRole('heading', { name: 'Observed time series' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Chuỗi số liệu quan sát' })).toBeNull();
   });
 
   it('shows two-period multi-game data as grouped period bars and keeps missing points visible', () => {
@@ -98,14 +98,14 @@ describe('QuantitativeEvidence', () => {
     render(<QuantitativeEvidence observations={rows} onViewEvidence={openEvidence} />);
     expect(screen.getByText('Game A')).toBeTruthy();
     expect(screen.getByText('Game B')).toBeTruthy();
-    expect(screen.getByText('No observation')).toBeTruthy();
-    expect(screen.getByText(/no intermediate values or growth rates/i)).toBeTruthy();
-    const valueButtons = screen.getAllByRole('button', { name: /view evidence for/i });
+    expect(screen.getByText('Chưa có quan sát')).toBeTruthy();
+    expect(screen.getByText(/không tính giá trị trung gian hoặc tốc độ tăng trưởng/i)).toBeTruthy();
+    const valueButtons = screen.getAllByRole('button', { name: /xem bằng chứng của/i });
     expect(valueButtons).toHaveLength(3);
     fireEvent.click(valueButtons[1]);
     expect(openEvidence).toHaveBeenCalledWith(1);
-    fireEvent.click(screen.getByRole('button', { name: 'View table' }));
-    expect(screen.getByRole('region', { name: 'Exact reported values by entity and period' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bảng' }));
+    expect(screen.getByRole('region', { name: 'Giá trị được báo cáo theo đối tượng và kỳ' })).toBeTruthy();
   });
 
   it('labels approximate report values and preserves original wording in details', () => {
@@ -113,7 +113,7 @@ describe('QuantitativeEvidence', () => {
       observation({ value: 24000, value_precision: 'approximate', reported_value_text: 'approximately 24,000 weekly downloads' }),
     ]} onViewEvidence={() => undefined} />);
     expect(screen.getByText(/^≈24[,.]000 downloads$/)).toBeTruthy();
-    expect(screen.getAllByText(/Approximate · source-reported · unverified/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Xấp xỉ · do nguồn cung cấp · chưa xác minh/).length).toBeGreaterThan(0);
     expect(screen.getByText(/approximately 24,000 weekly downloads/)).toBeTruthy();
   });
 
@@ -123,8 +123,8 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: entity, entity_name: `Game ${index + 1}`, granularity: null, period_start: '2025-02-01', period_end: '2025-02-28', value: 90 + index }),
     ]);
     render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Entity comparison' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /View evidence for/i })).toHaveLength(6);
+    expect(screen.getByRole('heading', { name: 'So sánh hồ sơ' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Xem bằng chứng của/i })).toHaveLength(6);
     expect(screen.getAllByText('2025-01-01 – 2025-01-31').length).toBeGreaterThan(1);
     expect(screen.getAllByText('2025-02-01 – 2025-02-28').length).toBeGreaterThan(1);
   });
@@ -135,10 +135,10 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: 'game-a', period_start: '2025-02-01', period_end: '2025-02-28', granularity: null, value: 900 }),
       observation({ entity_id: 'game-a', period_start: '2025-03-01', period_end: '2025-03-31', granularity: 'week', value: 800 }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.queryByRole('heading', { name: 'Two reported time points' })).toBeNull();
-    expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(3);
-    fireEvent.click(screen.getByText(/Data limitations/));
-    expect(screen.getByText(/Known granularity is inconsistent or missing/)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Hai thời điểm được báo cáo' })).toBeNull();
+    expect(screen.getAllByRole('heading', { name: 'Quan sát được báo cáo' })).toHaveLength(3);
+    fireEvent.click(screen.getByText(/Giới hạn dữ liệu/));
+    expect(screen.getByText(/Chu kỳ đo không nhất quán hoặc còn thiếu/)).toBeTruthy();
   });
 
   it('shows overlapping windows as dated observations instead of a connected time series', () => {
@@ -147,9 +147,9 @@ describe('QuantitativeEvidence', () => {
       observation({ period_start: '2025-01-15', period_end: '2025-02-15', granularity: null, value: 800 }),
       observation({ period_start: '2025-03-01', period_end: '2025-03-31', granularity: null, value: 700 }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.queryByRole('heading', { name: 'Observed time series' })).toBeNull();
-    expect(screen.getByText(/Measurement windows overlap\. These values are shown as separate dated observations/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /View evidence/i })).toHaveLength(3);
+    expect(screen.queryByRole('heading', { name: 'Chuỗi số liệu quan sát' })).toBeNull();
+    expect(screen.getByText(/Các kỳ đo bị chồng lấn. Giá trị được hiển thị thành từng quan sát có ngày riêng/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Xem bằng chứng/i })).toHaveLength(3);
   });
 
   it('uses a dated table for overlapping windows across multiple entities', () => {
@@ -158,9 +158,9 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: entity, entity_name: `Game ${index + 1}`, granularity: null, period_start: '2025-01-15', period_end: '2025-02-15', value: 90 + index }),
     ]);
     render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Entity and period comparison' })).toBeTruthy();
-    expect(screen.getByText(/Measurement windows overlap\. Exact dates are shown in a table/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /View evidence for/i })).toHaveLength(4);
+    expect(screen.getByRole('heading', { name: 'Đối chiếu hồ sơ theo kỳ' })).toBeTruthy();
+    expect(screen.getByText(/Các kỳ đo bị chồng lấn. Ngày chính xác được hiển thị trong bảng/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Xem bằng chứng của/i })).toHaveLength(4);
   });
 
   it('uses a dated table when entities do not share the same two date windows', () => {
@@ -173,9 +173,9 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: `game-${index}`, entity_name: `Game ${index + 1}`, period_start, period_end, value: 100 - periodIndex * 10 - index }),
     ));
     render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Entity and period comparison' })).toBeTruthy();
-    expect(screen.getByText(/do not share one compatible pair of period windows/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /View evidence for/i })).toHaveLength(6);
+    expect(screen.getByRole('heading', { name: 'Đối chiếu hồ sơ theo kỳ' })).toBeTruthy();
+    expect(screen.getByText(/không có cùng một cặp kỳ tương thích/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Xem bằng chứng của/i })).toHaveLength(6);
   });
 
   it('does not draw a positive-width bar for a true zero', () => {
@@ -194,9 +194,9 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: 'game-a', period_start: '2025-01-01', period_end: '2025-01-31', value: -10 }),
       observation({ entity_id: 'game-a', period_start: '2025-02-01', period_end: '2025-02-28', value: 5 }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.getByText(/Signed values are shown in a table/)).toBeTruthy();
+    expect(screen.getByText(/Giá trị có dấu được hiển thị trong bảng/)).toBeTruthy();
     expect(screen.getByText('-10 downloads')).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Two reported time points' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Hai thời điểm được báo cáo' })).toBeNull();
   });
 
   it('keeps irregular periods categorical and shows missing observations without filling values', () => {
@@ -210,9 +210,9 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: 'c', entity_name: 'Game C', period_start: '2025-09-01', period_end: '2025-09-30', value: 550 }),
     ];
     render(<QuantitativeEvidence observations={rows} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Entity and period comparison' })).toBeTruthy();
-    expect(screen.getAllByText('No observation')).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /view evidence for/i })).toHaveLength(7);
+    expect(screen.getByRole('heading', { name: 'Đối chiếu hồ sơ theo kỳ' })).toBeTruthy();
+    expect(screen.getAllByText('Chưa có quan sát')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /xem bằng chứng của/i })).toHaveLength(7);
   });
 
   it('keeps observations with different metric definitions in separate views', () => {
@@ -220,7 +220,7 @@ describe('QuantitativeEvidence', () => {
       observation({ entity_id: 'game-a', metric_definition: 'Downloads', value: 10 }),
       observation({ entity_id: 'game-b', metric_definition: 'Estimated downloads', value: 20 }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(2);
+    expect(screen.getAllByRole('heading', { name: 'Quan sát được báo cáo' })).toHaveLength(2);
     expect(screen.getByText('Downloads')).toBeTruthy();
     expect(screen.getByText('Estimated downloads')).toBeTruthy();
   });
@@ -231,9 +231,9 @@ describe('QuantitativeEvidence', () => {
       observation({ metric_id: 'store_ranking_position', metric_definition: 'US Top Free Casual ranking', entity_id: 'game-b', entity_name: 'Game B', value: 12, unit: 'position' }),
       observation({ metric_id: 'store_ranking_position', metric_definition: 'US Top Free Casual ranking', entity_id: 'game-c', entity_name: 'Game C', value: 28, unit: 'position' }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Reported ranking positions' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Thứ hạng được báo cáo' })).toBeTruthy();
     expect(screen.getAllByText('US Top Free Casual ranking').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('heading', { name: 'Entity comparison' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'So sánh hồ sơ' })).toBeNull();
   });
 
   it('preserves ranking observations from periods that do not have a comparable peer', () => {
@@ -242,15 +242,15 @@ describe('QuantitativeEvidence', () => {
       observation({ metric_id: 'store_ranking_position', metric_definition: 'Store ranking', unit: 'position', entity_id: 'b', entity_name: 'Game B', value: 12, period_start: '2025-01-01', period_end: '2025-01-31' }),
       observation({ metric_id: 'store_ranking_position', metric_definition: 'Store ranking', unit: 'position', entity_id: 'a', entity_name: 'Game A', value: 4, period_start: '2025-03-01', period_end: '2025-03-31' }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.getByRole('heading', { name: 'Reported ranking positions' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Reported observation' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /view evidence/i })).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'Thứ hạng được báo cáo' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Quan sát được báo cáo' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /xem bằng chứng/i })).toHaveLength(3);
   });
 
   it('shows an insufficient-data explanation and exact validation reason without drawing a chart', () => {
     render(<QuantitativeEvidence observations={[observation({ value: null, period_start: null, complete_observation: false, comparison_ready: false, scope_compatible: null, validation_reasons: ['Missing exact numeric value.', 'Missing period start.'] })]} onViewEvidence={() => undefined} />);
-    expect(screen.getByText('No compatible chart can be shown yet.')).toBeTruthy();
-    fireEvent.click(screen.getByText(/Data limitations/));
+    expect(screen.getByText('Chưa thể hiển thị biểu đồ tương thích.')).toBeTruthy();
+    fireEvent.click(screen.getByText(/Giới hạn dữ liệu/));
     expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Missing period start.').length).toBeGreaterThan(0);
     expect(screen.queryByRole('img')).toBeNull();
@@ -260,15 +260,15 @@ describe('QuantitativeEvidence', () => {
     render(<QuantitativeEvidence observations={[
       observation({ period_start: 'not-a-date', period_end: '2025-01-31', validation_reasons: ['Invalid period start; use YYYY-MM-DD.'] }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.queryByRole('heading', { name: 'Reported observation' })).toBeNull();
-    expect(screen.getByText('No compatible chart can be shown yet.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Quan sát được báo cáo' })).toBeNull();
+    expect(screen.getByText('Chưa thể hiển thị biểu đồ tương thích.')).toBeTruthy();
     expect(screen.getAllByText('Invalid period start; use YYYY-MM-DD.').length).toBeGreaterThan(0);
   });
 
   it('offers the existing ChatGPT structuring workflow for a qualitative-only report', () => {
     const prepare = vi.fn();
     render(<QuantitativeEvidence observations={[]} onViewEvidence={() => undefined} onPrepareChartData={prepare} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare chart data from this report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chuẩn bị dữ liệu biểu đồ từ báo cáo này' }));
     expect(prepare).toHaveBeenCalledOnce();
   });
 
@@ -276,15 +276,15 @@ describe('QuantitativeEvidence', () => {
     render(<QuantitativeEvidence observations={[
       observation(), observation({ entity_id: 'game-b', entity_name: 'Game B', metric_definition: 'Estimated weekly downloads', platform: 'iOS', period_start: '2025-04-01', period_end: '2025-06-30' }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.queryByRole('heading', { name: 'Entity comparison' })).toBeNull();
-    expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(2);
+    expect(screen.queryByRole('heading', { name: 'So sánh hồ sơ' })).toBeNull();
+    expect(screen.getAllByRole('heading', { name: 'Quan sát được báo cáo' })).toHaveLength(2);
   });
 
   it('does not compare otherwise similar observations when supplied methodologies differ', () => {
     render(<QuantitativeEvidence observations={[
       observation(), observation({ entity_id: 'game-b', entity_name: 'Game B', methodology: 'Panel survey estimate' }),
     ]} onViewEvidence={() => undefined} />);
-    expect(screen.queryByRole('heading', { name: 'Entity comparison' })).toBeNull();
-    expect(screen.getAllByRole('heading', { name: 'Reported observation' })).toHaveLength(2);
+    expect(screen.queryByRole('heading', { name: 'So sánh hồ sơ' })).toBeNull();
+    expect(screen.getAllByRole('heading', { name: 'Quan sát được báo cáo' })).toHaveLength(2);
   });
 });

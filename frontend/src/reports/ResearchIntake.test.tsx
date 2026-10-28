@@ -9,7 +9,7 @@ const report = {
   imported_at: '2026-10-17T10:00:00Z', verification_status: 'unverified' as const,
   parse_status: 'PARTIAL' as const, extraction_error: null, benchmark_selections: [], benchmark_workspace: { custom_dimensions: [], entries: [] },
   research_data: { sections: [], entities: [], findings: [], evidence_references: [], benchmark_dimensions: [], research_gaps: [], po_recommendations: [] },
-  content: '# Executive summary\n\nA sourced finding [Source](https://example.com).\n\n## Research gaps\n\nNot available.\n\n<script>alert(1)</script>',
+  content: '# Executive summary\n\nA sourced finding [Source](https://example.com).\n\n## Câu hỏi còn mở\n\nNot available.\n\n<script>alert(1)</script>',
 };
 
 function mockFetch(resolve: (url: string, init: RequestInit) => unknown) {
@@ -54,12 +54,12 @@ describe('ChatGPT research intake', () => {
     });
     render(<ReportHistory />);
     expect(await screen.findByText('How do learning apps engage children?')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Workspace decisions · Learning apps/ })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Search reports'), { target: { value: 'utility' } });
+    expect(screen.getByRole('link', { name: /Quyết định của dự án · Learning apps/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Tìm báo cáo'), { target: { value: 'utility' } });
     expect(screen.getByText('Unlinked utility research')).toBeTruthy();
     expect(screen.queryByText('How do learning apps engage children?')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-1' } });
-    expect(screen.getByText('No reports match these filters.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-1' } });
+    expect(screen.getByText('Không có báo cáo phù hợp với bộ lọc này.')).toBeTruthy();
   });
 
   it('shows the same five reports from the shared library and filters three for Project A and two for Project B', async () => {
@@ -79,17 +79,17 @@ describe('ChatGPT research intake', () => {
       throw new Error(`Unexpected request ${url}`);
     });
     render(<ReportHistory />);
-    expect(await screen.findByText('5 reports')).toBeTruthy();
+    expect(await screen.findByText('5 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Project A report 1/ }).getAttribute('href')).toBe('/reports/a-1');
 
-    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-a' } });
-    expect(await screen.findByText('3 reports')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-a' } });
+    expect(await screen.findByText('3 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Project A report 1/ }).getAttribute('href')).toBe('/reports/a-1');
     expect(screen.getByRole('link', { name: /Project A report 3/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Project B report 1/ })).toBeNull();
 
-    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-b' } });
-    expect(await screen.findByText('2 reports')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-b' } });
+    expect(await screen.findByText('2 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Project B report 2/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Project A report 1/ })).toBeNull();
   });
@@ -107,18 +107,18 @@ describe('ChatGPT research intake', () => {
       throw new Error(`Unexpected request ${url}`);
     });
     render(<ReportHistory />);
-    expect(await screen.findByText('1 report')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'unassigned' } });
-    expect(await screen.findByText('1 report')).toBeTruthy();
-    expect(screen.getByText('Not linked to a project workspace')).toBeTruthy();
+    expect(await screen.findByText('1 báo cáo')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'unassigned' } });
+    expect(await screen.findByText('1 báo cáo')).toBeTruthy();
+    expect(screen.getAllByText('Chưa gắn với dự án')[0]).toBeTruthy();
     expect(screen.getByRole('link', { name: /Historical report without a project/ }).getAttribute('href')).toBe('/reports/legacy-unassigned?from=unassigned');
-    fireEvent.change(screen.getByLabelText('Choose project for Historical report without a project'), { target: { value: 'project-a' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Link to project' }));
-    expect(await screen.findByText(/is now linked to Project A/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Chọn dự án cho Historical report without a project'), { target: { value: 'project-a' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gắn vào dự án' }));
+    expect(await screen.findByText(/Đã gắn .* vào Project A/)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-a/reports/legacy-unassigned', expect.objectContaining({ method: 'PUT' }));
-    expect(screen.getByText('No reports match these filters.')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'project-a' } });
-    expect(await screen.findByText('1 report')).toBeTruthy();
+    expect(screen.getByText('Không có báo cáo phù hợp với bộ lọc này.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-a' } });
+    expect(await screen.findByText('1 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Historical report without a project/ }).getAttribute('href')).toBe('/reports/legacy-unassigned');
   });
 
@@ -132,8 +132,8 @@ describe('ChatGPT research intake', () => {
     });
     render(<ReportViewer reportId="saved-report" />);
     await screen.findByRole('heading', { name: report.question });
-    expect(screen.getByRole('link', { name: '← Back to Reports' }).getAttribute('href')).toBe('/reports?projectId=project-a');
-    expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports?projectId=project-a');
+    expect(screen.getByRole('link', { name: '← Về thư viện báo cáo' }).getAttribute('href')).toBe('/reports?projectId=project-a');
+    expect(screen.getByRole('link', { name: 'Báo cáo' }).getAttribute('href')).toBe('/reports?projectId=project-a');
   });
 
   it('copies the prompt for ChatGPT without calling an AI service', async () => {
@@ -143,7 +143,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Compare kids learning apps' } });
-    fireEvent.click(screen.getByRole('button', { name: /Copy prompt for ChatGPT/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Sao chép yêu cầu cho ChatGPT/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText.mock.calls[0][0]).toContain('do not assume an industry or taxonomy');
     expect(await screen.findByText(/Prompt đã được sao chép/)).toBeTruthy();
@@ -170,9 +170,9 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     expect((screen.getByLabelText('Bạn muốn nghiên cứu gì?') as HTMLTextAreaElement).value).toBe('How do players use creative tools?');
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
     expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST')).toBe(true);
   });
@@ -185,8 +185,8 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/?projectId=project-1&question=New%20research&geo=&environment=&period=');
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    expect(screen.getByRole('button', { name: 'GEO' }).textContent).toContain('Global / not specified');
-    expect(screen.getByRole('button', { name: 'Environment' }).textContent).toContain('Unknown');
+    expect(screen.getByRole('button', { name: 'Thị trường (GEO)' }).textContent).toContain('Toàn cầu · chưa chỉ định');
+    expect(screen.getByRole('button', { name: 'Môi trường' }).textContent).toContain('Chưa xác định');
   });
 
   it('accepts a Markdown file and fills the import preview', async () => {
@@ -198,7 +198,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     const file = new File([report.content], 'market-report.md', { type: 'text/markdown' });
     fireEvent.change(screen.getByLabelText('Chọn file .md, .txt hoặc .json'), { target: { files: [file] } });
     expect(await screen.findByText('market-report.md')).toBeTruthy();
@@ -209,7 +209,7 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     const content = JSON.stringify({ sections: [], entities: [], findings: [] });
     fireEvent.change(screen.getByLabelText('Chọn file .md, .txt hoặc .json'), { target: { files: [new File([content], 'research.json', { type: 'application/json' })] } });
     expect(await screen.findByText('research.json')).toBeTruthy();
@@ -231,10 +231,10 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
-    expect(await screen.findByText(/2 heading.*Định dạng: Markdown/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    expect(await screen.findByText(/2 tiêu đề.*Định dạng: Markdown/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
     expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST')).toBe(true);
   });
@@ -247,9 +247,9 @@ describe('ChatGPT research intake', () => {
     cleanup();
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Full Report' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Báo cáo đầy đủ' }));
     expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Research gaps' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Câu hỏi còn mở' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Source' }).getAttribute('href')).toBe('https://example.com/');
     expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Mục lục' })).toBeTruthy();
@@ -275,40 +275,40 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => structured);
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'Research conclusion' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' })).toBeTruthy();
     expect(screen.getByText('Players value quick creative sessions and visible progress.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Key findings' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Key takeaways' })).toBeTruthy();
-    expect(screen.getByText('Research snapshot')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Phát hiện chính' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Điểm chính' })).toBeTruthy();
+    expect(screen.getByText('Tổng quan nghiên cứu')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Research source' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Research map' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Bản đồ nghiên cứu' })).toBeTruthy();
     expect(document.querySelector('.research-map-entities')?.textContent).toContain('Product A');
     expect(document.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
     expect(document.querySelector('.finding-icon-frame svg')).toBeTruthy();
-    expect(screen.getByText('1 source reference')).toBeTruthy();
-    expect(screen.getAllByText(/No quantitative dataset linked/).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'View all 5 takeaways' })).toBeTruthy();
+    expect(screen.getAllByText('1 nguồn tham khảo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Chưa liên kết bộ dữ liệu định lượng/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Xem cả 5 điểm chính' })).toBeTruthy();
     expect(screen.queryByText('Takeaway four.')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'View all 5 takeaways' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem cả 5 điểm chính' }));
     expect(screen.getByText('Takeaway five.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Show fewer takeaways' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Thu gọn điểm chính' }).getAttribute('aria-expanded')).toBe('true');
     expect((document.querySelector('.results-fact-strip') as HTMLDetailsElement).open).toBe(false);
-    expect(screen.getByRole('button', { name: 'Read full summary' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Read full summary' }));
-    expect(screen.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Đọc toàn bộ kết luận' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Đọc toàn bộ kết luận' }));
+    expect(screen.getByRole('button', { name: 'Thu gọn' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByText(/retention|revenue|market size/i)).toBeNull();
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Overview' }), { key: 'ArrowRight' });
-    expect(screen.getByRole('tab', { name: 'Insights' }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
-    fireEvent.click(screen.getByRole('button', { name: 'View Insight: Creative control supports engagement' }));
-    expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Tổng quan' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Phát hiện' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Tổng quan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: Creative control supports engagement' }));
+    expect(await screen.findAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
     expect(document.querySelector('.insight-list-item.active')?.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText('Test whether customization is discoverable.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Research source' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'View support in original report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem đoạn hỗ trợ trong báo cáo gốc' }));
     expect(screen.getByText(/line:3: A sourced finding/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'View support in original report' }).getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('heading', { name: 'Insights' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Xem đoạn hỗ trợ trong báo cáo gốc' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
   });
 
   it('uses consistent report-supplied ranking, category, metric, and period highlights in Overview and Insight Detail', async () => {
@@ -320,12 +320,12 @@ describe('ChatGPT research intake', () => {
         executive_summary: 'At US Android, product reached #5 Top Free Casual; weekly downloads fell from 23.7K to 11K in Q2/2025.',
         key_takeaways: ['The product appeared at #28 Top 50 DIY.'],
         findings: [{ key: 'ranked-finding', finding_type: 'unrecognized report type', title: 'Reached #5 Top Free Casual', description: 'Downloads fell from 23.7K to 11K in Q2/2025.', related_entities: [], evidence_references: ['https://example.com/'], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }],
-        evidence_references: [{ url: 'https://example.com/', title: 'Unverified source', source_location: null, verified: false }],
+        evidence_references: [{ url: 'https://example.com/', title: 'Chưa xác minh source', source_location: null, verified: false }],
       },
     };
     mockFetch(() => text);
     render(<ReportViewer reportId="saved-report" />);
-    await screen.findByRole('heading', { name: 'Research conclusion' });
+    await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' });
     const summary = document.querySelector('.executive-summary') as HTMLElement;
     expect(summary.textContent).toBe('At US Android, product reached #5 Top Free Casual; weekly downloads fell from 23.7K to 11K in Q2/2025.');
     expect(summary.querySelectorAll('.research-highlight.is-rank')).toHaveLength(1);
@@ -334,9 +334,9 @@ describe('ChatGPT research intake', () => {
     expect(summary.querySelector('[data-highlight-kind="period"]')?.textContent).toBe('Q2/2025');
     expect(document.querySelector('.overview-takeaways .takeaway-number')?.textContent).toBe('1');
     expect(document.querySelector('.overview-takeaways .takeaway-copy')?.textContent).toContain('Top 50 DIY');
-    expect(document.querySelector('.finding-card-evidence')?.textContent).toContain('unverified');
-    fireEvent.click(screen.getByRole('button', { name: 'View Insight: Reached #5 Top Free Casual' }));
-    expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
+    expect(document.querySelector('.finding-card-evidence')?.textContent).toContain('chưa xác minh');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: Reached #5 Top Free Casual' }));
+    expect(await screen.findAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
     expect(document.querySelector('.insight-detail-panel [data-highlight-kind="rank"]')?.textContent).toBe('#5');
     expect(document.querySelector('.insight-detail-panel [data-highlight-kind="category"]')?.textContent).toBe('Top Free Casual');
     expect(document.querySelectorAll('.insight-detail-panel .research-highlight.is-metric.is-decrease')).toHaveLength(2);
@@ -363,39 +363,39 @@ describe('ChatGPT research intake', () => {
     });
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    await screen.findByRole('heading', { name: 'Research conclusion' });
-    fireEvent.click(screen.getByText('Related context and actions'));
-    fireEvent.click(screen.getByRole('button', { name: 'Record PO decision' }));
-    expect(screen.getByRole('tab', { name: 'PO Assessment' }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.change(screen.getByLabelText('PO Assessment for A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
-    fireEvent.change(screen.getByLabelText('Next Action for A report-supplied insight'), { target: { value: 'Plan a small usability study.' } });
-    expect(screen.getByText('Unsaved changes · edits are only on this page until saved.')).toBeTruthy();
-    expect(screen.getByText('No PO decision yet')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO assessment' }));
-    await screen.findByText('Đã lưu PO Assessment, Notes và Next Action.');
-    expect(await screen.findByText('PO decision saved')).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' });
+    fireEvent.click(screen.getByText('Thông tin và thao tác liên quan'));
+    fireEvent.click(screen.getByRole('button', { name: 'Ghi quyết định PO' }));
+    expect(screen.getByRole('tab', { name: 'Đánh giá của PO' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.change(screen.getByLabelText('Đánh giá của PO cho A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
+    fireEvent.change(screen.getByLabelText('Việc tiếp theo cho A report-supplied insight'), { target: { value: 'Plan a small usability study.' } });
+    expect(screen.getByText('Chưa lưu · thay đổi mới chỉ có trên trang này.')).toBeTruthy();
+    expect(screen.getByText('Chưa có quyết định')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá PO' }));
+    await screen.findByText('Đã lưu đánh giá của PO, ghi chú và việc tiếp theo.');
+    expect(await screen.findByText('Đã lưu đánh giá của PO, ghi chú và việc tiếp theo.')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/benchmark-state') && init?.method === 'PUT')).toBe(true);
     view.unmount();
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'PO Assessment' }));
-    expect((await screen.findByLabelText('PO Assessment for A report-supplied insight') as HTMLTextAreaElement).value).toBe('Test the hypothesis before prioritizing.');
-    expect((screen.getByLabelText('Next Action for A report-supplied insight') as HTMLTextAreaElement).value).toBe('Plan a small usability study.');
+    fireEvent.click(await screen.findByRole('tab', { name: 'Đánh giá của PO' }));
+    expect((await screen.findByLabelText('Đánh giá của PO cho A report-supplied insight') as HTMLTextAreaElement).value).toBe('Test the hypothesis before prioritizing.');
+    expect((screen.getByLabelText('Việc tiếp theo cho A report-supplied insight') as HTMLTextAreaElement).value).toBe('Plan a small usability study.');
   });
 
   it('keeps a sparse structured report useful without filling absent sections with placeholders', async () => {
     const sparse = { ...report, research_status: 'STRUCTURED_PARTIAL' as const, research_data: { ...report.research_data, executive_summary: 'A short research summary.', findings: [{ key: 'one-finding', finding_type: 'observation', title: 'One supplied finding', description: 'A limited observation.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }] } };
     mockFetch(() => sparse);
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('heading', { name: 'Research conclusion' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'View Insight: One supplied finding' })).toBeTruthy();
-    expect(document.querySelector('.results-fact-strip')?.textContent).toContain('1 findings');
+    expect(await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Xem phát hiện: One supplied finding' })).toBeTruthy();
+    expect(document.querySelector('.results-fact-strip')?.textContent).toContain('1 phát hiện');
     expect(document.querySelectorAll('.research-map-row')).toHaveLength(1);
-    expect(screen.getByText('No entity link supplied')).toBeTruthy();
-    expect(screen.getByText('No PO implication supplied')).toBeTruthy();
+    expect(screen.getByText('Báo cáo chưa liên kết đối tượng')).toBeTruthy();
+    expect(screen.getByText('Báo cáo chưa nêu gợi ý cho PO')).toBeTruthy();
     expect(document.querySelector('.research-map-connector.is-connected')).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
-    expect(screen.getByText('Research snapshot')).toBeTruthy();
-    expect(screen.getByText('No source references · unverified')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Câu hỏi còn mở' })).toBeNull();
+    expect(screen.getByText('Tổng quan nghiên cứu')).toBeTruthy();
+    expect(screen.getByText('Chưa có nguồn tham khảo · chưa xác minh')).toBeTruthy();
   });
 
   it('keeps finding actions available on demand and lets the PO focus and expand explicit map relationships', async () => {
@@ -421,18 +421,18 @@ describe('ChatGPT research intake', () => {
     };
     mockFetch(() => structured);
     render(<ReportViewer reportId="saved-report" />);
-    await screen.findByRole('heading', { name: 'Key findings' });
-    const details = screen.getAllByText('Related context and actions')[0];
+    await screen.findByRole('heading', { name: 'Phát hiện chính' });
+    const details = screen.getAllByText('Thông tin và thao tác liên quan')[0];
     expect(details.closest('details')?.open).toBe(false);
     fireEvent.click(details);
-    expect(screen.getAllByRole('button', { name: 'Record PO decision' }).length).toBe(5);
+    expect(screen.getAllByRole('button', { name: 'Ghi quyết định PO' }).length).toBe(5);
     expect(screen.getByRole('link', { name: 'Supplied source' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Add to Benchmark: Supplied finding 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Thêm vào so sánh: Supplied finding 1' })).toBeTruthy();
 
     const map = document.querySelector('.research-map-board[role="list"]') as HTMLElement;
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(3);
-    expect(screen.getByRole('button', { name: 'Show all relationships · 5' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Show all relationships/ }));
+    expect(screen.getByRole('button', { name: 'Xem tất cả mối liên hệ · 5' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Xem tất cả mối liên hệ/ }));
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(5);
     expect(map.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
 
@@ -440,12 +440,12 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(focusButton);
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(1);
     expect(focusButton.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Focused on: Supplied finding 4')).toBeTruthy();
+    expect(screen.getByText(/Đang xem: Supplied finding 4/)).toBeTruthy();
     expect(map.querySelector('.research-map-row')?.classList.contains('is-unlinked')).toBe(true);
     expect(map.querySelector('.research-map-row .research-map-connector.is-connected')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear focus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ chọn' }));
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(5);
-    fireEvent.click(screen.getByRole('button', { name: 'Show fewer relationships' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn mối liên hệ' }));
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(3);
   });
 
@@ -453,11 +453,11 @@ describe('ChatGPT research intake', () => {
     const textOnly = { ...report, research_status: 'TEXT_ONLY' as const };
     mockFetch(() => textOnly);
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('TEXT_ONLY · Structure this report')).toBeTruthy();
-    fireEvent.click(screen.getByText('TEXT_ONLY · Structure this report'));
-    expect(screen.getByRole('button', { name: 'Prepare ChatGPT prompt' })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: 'Insights' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Research gaps' })).toBeNull();
+    expect(await screen.findByText('Báo cáo văn bản · Bổ sung kết quả có cấu trúc')).toBeTruthy();
+    fireEvent.click(screen.getByText('Báo cáo văn bản · Bổ sung kết quả có cấu trúc'));
+    expect(screen.getByRole('button', { name: 'Tạo prompt cho ChatGPT' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Phát hiện' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Câu hỏi còn mở' })).toBeNull();
   });
 
   it('shows saved PO work in the Overview after reopening an existing report', async () => {
@@ -470,13 +470,13 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => saved);
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Saved PO decision')).toBeTruthy();
+    expect(await screen.findByText('Quyết định PO đã lưu')).toBeTruthy();
     expect(screen.getByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
     view.unmount();
 
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open Benchmark · 1 selected' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mở so sánh · đã chọn 1' })).toBeTruthy();
   });
 
   it('keeps insight and comparison targets independent and preserves PO notes across remove, refresh, and restore', async () => {
@@ -511,60 +511,60 @@ describe('ChatGPT research intake', () => {
     });
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Insights' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark: Daily habit and reward loop' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Phát hiện' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào so sánh: Daily habit and reward loop' }));
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]));
-    fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
-    expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mở bảng so sánh' }));
+    expect(await screen.findByRole('heading', { name: 'Đánh giá phát hiện' })).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Add to Benchmark: Learning App A' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào so sánh: Learning App A' }));
     await waitFor(() => expect(persisted.benchmark_selections).toHaveLength(2));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Xem Benchmark' }).at(-1)!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mở bảng so sánh' }).at(-1)!);
     const table = await screen.findByRole('table');
     expect(table.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(table.textContent).toContain('Learning App A');
     expect(table.textContent).not.toContain('Streak mechanic');
     expect(table.textContent).not.toContain('Reward system');
-    expect(screen.getAllByText('No confirmed supporting insight.')).toHaveLength(2);
+    expect(screen.getAllByText('Chưa có phát hiện hỗ trợ được xác nhận.')).toHaveLength(2);
 
-    const speakingLink = screen.getByLabelText('Confirm supporting insight for Learning App A / Speaking feedback');
+    const speakingLink = screen.getByLabelText('Xác nhận phát hiện hỗ trợ cho Learning App A / Speaking feedback');
     expect((speakingLink as HTMLSelectElement).value).toBe('');
-    fireEvent.change(screen.getByLabelText('Confirm supporting insight for Learning App A / Daily practice'), { target: { value: 'finding-a' } });
+    fireEvent.change(screen.getByLabelText('Xác nhận phát hiện hỗ trợ cho Learning App A / Daily practice'), { target: { value: 'finding-a' } });
     await waitFor(() => expect(persisted.benchmark_workspace.entries.find((entry: { item_key: string }) => entry.item_key === 'learning-app-a')?.observation_finding_links?.['daily-practice']).toEqual(['finding-a']));
-    expect((screen.getByLabelText('Confirm supporting insight for Learning App A / Speaking feedback') as HTMLSelectElement).value).toBe('');
-    expect(screen.getByText('PO-confirmed insight: Daily habit and reward loop')).toBeTruthy();
-    expect(screen.getAllByText('No confirmed supporting insight.')).toHaveLength(1);
+    expect((screen.getByLabelText('Xác nhận phát hiện hỗ trợ cho Learning App A / Speaking feedback') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByText('Phát hiện được PO xác nhận: Daily habit and reward loop')).toBeTruthy();
+    expect(screen.getAllByText('Chưa có phát hiện hỗ trợ được xác nhận.')).toHaveLength(1);
 
-    fireEvent.change(screen.getByLabelText('PO Assessment for Daily habit and reward loop'), { target: { value: 'Worth validating' } });
-    fireEvent.change(screen.getByLabelText('Next Action for Daily habit and reward loop'), { target: { value: 'Test the reminder timing' } });
-    fireEvent.change(screen.getByLabelText('PO dimension'), { target: { value: 'Evidence quality' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add dimension' }));
-    const customValue = await screen.findByLabelText('Evidence quality assessment for Daily habit and reward loop') as HTMLTextAreaElement;
+    fireEvent.change(screen.getByLabelText('Đánh giá của PO cho Daily habit and reward loop'), { target: { value: 'Worth validating' } });
+    fireEvent.change(screen.getByLabelText('Việc tiếp theo cho Daily habit and reward loop'), { target: { value: 'Test the reminder timing' } });
+    fireEvent.change(screen.getByLabelText('Khía cạnh do PO xác định'), { target: { value: 'Evidence quality' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm khía cạnh' }));
+    const customValue = await screen.findByLabelText('Đánh giá Evidence quality cho Daily habit and reward loop') as HTMLTextAreaElement;
     fireEvent.change(customValue, { target: { value: 'Moderate confidence for PO use' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
-    expect(await screen.findByText('Đã lưu PO Assessment, Notes và Next Action.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá và việc tiếp theo' }));
+    expect(await screen.findByText('Đã lưu đánh giá của PO, ghi chú và việc tiếp theo.')).toBeTruthy();
     await waitFor(() => expect(persisted.benchmark_workspace.entries.find((entry: { item_key: string }) => entry.item_key === 'finding-a')?.po_assessment).toBe('Worth validating'));
-    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Daily habit and reward loop' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: Daily habit and reward loop' }));
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'entity', item_key: 'learning-app-a' }]));
     cleanup();
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
     expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(1);
-    expect((screen.getByLabelText('Confirm supporting insight for Learning App A / Daily practice') as HTMLSelectElement).value).toBe('finding-a');
-    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Restore to Benchmark: Daily habit and reward loop' }));
+    expect((screen.getByLabelText('Xác nhận phát hiện hỗ trợ cho Learning App A / Daily practice') as HTMLSelectElement).value).toBe('finding-a');
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Khôi phục vào so sánh: Daily habit and reward loop' }));
     await waitFor(() => expect(persisted.benchmark_selections).toHaveLength(2));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Xem Benchmark' }).at(-1)!);
-    expect((await screen.findByLabelText('PO Assessment for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Worth validating');
-    expect((screen.getByLabelText('Next Action for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Test the reminder timing');
-    expect((screen.getByLabelText('Evidence quality assessment for Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove from Benchmark: Learning App A' }).at(-1)!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mở bảng so sánh' }).at(-1)!);
+    expect((await screen.findByLabelText('Đánh giá của PO cho Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Worth validating');
+    expect((screen.getByLabelText('Việc tiếp theo cho Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Test the reminder timing');
+    expect((screen.getByLabelText('Đánh giá Evidence quality cho Daily habit and reward loop') as HTMLTextAreaElement).value).toBe('Moderate confidence for PO use');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gỡ khỏi so sánh: Learning App A' }).at(-1)!);
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]));
     expect(screen.queryByRole('table')).toBeNull();
-    expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Đánh giá phát hiện' })).toBeTruthy();
   });
 
   it('serializes rapid Add → Add and ends with both confirmed memberships', async () => {
@@ -584,8 +584,8 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Entities' }));
-    const [addSubjectA, addSubjectB] = screen.getAllByRole('button', { name: 'Add to Benchmark' });
+    fireEvent.click(await screen.findByRole('tab', { name: 'Đối tượng' }));
+    const [addSubjectA, addSubjectB] = screen.getAllByRole('button', { name: 'Thêm vào so sánh' });
     fireEvent.click(addSubjectA);
     fireEvent.click(addSubjectB);
     await waitFor(() => expect(requestBodies).toHaveLength(1));
@@ -613,13 +613,13 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('button', { name: 'View Insight: An observed pattern' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem phát hiện: An observed pattern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh: An observed pattern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: An observed pattern' }));
     await waitFor(() => expect(submittedSelections).toHaveLength(2));
     expect(submittedSelections).toEqual([[{ item_type: 'finding', item_key: 'finding-a' }], []]);
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([]));
-    expect(await screen.findByText('Removed from Benchmark. PO notes are preserved and can be restored.')).toBeTruthy();
+    expect(await screen.findByText('Đã gỡ khỏi bảng so sánh. Ghi chú PO vẫn được giữ và có thể khôi phục.')).toBeTruthy();
   });
 
   it('saves PO notes queued during a pending membership request and does not call them saved early', async () => {
@@ -639,22 +639,22 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Entities' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Đối tượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh' }));
     await waitFor(() => expect(requestBodies).toHaveLength(1));
-    fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'So sánh' }));
     fireEvent.click(screen.getByText('Subject A').closest('summary')!);
-    fireEvent.change(await screen.findByLabelText('Notes for Subject A'), { target: { value: 'PO note added while selection is saving' } });
-    expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
-    expect(screen.getByText(/Saving · saving PO edits/)).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText('Ghi chú cho Subject A'), { target: { value: 'PO note added while selection is saving' } });
+    expect(screen.getByText(/Chưa lưu/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá và việc tiếp theo' }));
+    expect(screen.getByText(/Đang lưu thay đổi PO/)).toBeTruthy();
     const firstBody = requestBodies[0];
     persisted = { ...persisted, benchmark_selections: firstBody.selections, benchmark_workspace: { custom_dimensions: firstBody.custom_dimensions, entries: firstBody.entries } };
     releaseFirst?.(jsonResponse(persisted));
     await waitFor(() => expect(requestBodies).toHaveLength(2));
     expect(requestBodies[1].entries[0].notes).toBe('PO note added while selection is saving');
     await waitFor(() => expect(persisted.benchmark_workspace.entries[0].notes).toBe('PO note added while selection is saving'));
-    expect(await screen.findByText(/Saved · all PO edits are confirmed/)).toBeTruthy();
+    expect(await screen.findByText(/Đã lưu · mọi thay đổi PO đã được máy chủ xác nhận/)).toBeTruthy();
   });
 
   it('keeps a failed PO draft visible, warns before leaving, and supports retry', async () => {
@@ -678,22 +678,22 @@ describe('ChatGPT research intake', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
     fireEvent.click(screen.getByText('Subject A').closest('summary')!);
-    const assessment = await screen.findByLabelText('PO Assessment for Subject A') as HTMLTextAreaElement;
+    const assessment = await screen.findByLabelText('Đánh giá của PO cho Subject A') as HTMLTextAreaElement;
     fireEvent.change(assessment, { target: { value: 'Do not lose this draft' } });
-    expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+    expect(screen.getByText(/Chưa lưu/)).toBeTruthy();
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
-    fireEvent.click(screen.getByRole('link', { name: '← Back to Reports' }));
+    fireEvent.click(screen.getByRole('link', { name: '← Về thư viện báo cáo' }));
     expect(confirm).toHaveBeenCalledOnce();
     expect(window.location.pathname).toBe('/reports/saved-report');
-    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
-    expect(await screen.findByText(/Save failed · PO edits remain/)).toBeTruthy();
-    expect((screen.getByLabelText('PO Assessment for Subject A') as HTMLTextAreaElement).value).toBe('Do not lose this draft');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
-    expect(await screen.findByText(/Saved · all PO edits are confirmed/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá và việc tiếp theo' }));
+    expect(await screen.findByText(/Lưu thất bại · nội dung vẫn còn trên trang/)).toBeTruthy();
+    expect((screen.getByLabelText('Đánh giá của PO cho Subject A') as HTMLTextAreaElement).value).toBe('Do not lose this draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lưu lại' }));
+    expect(await screen.findByText(/Đã lưu · mọi thay đổi PO đã được máy chủ xác nhận/)).toBeTruthy();
     expect(persisted.benchmark_workspace.entries[0].po_assessment).toBe('Do not lose this draft');
   });
 
@@ -713,24 +713,24 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
     expect(screen.getByText('Historical dimension PO note; do not discard.')).toBeTruthy();
-    expect(screen.getByText('Stored dimension key:').parentElement?.textContent).toContain('retention-key-v1');
+    expect(screen.getByText('Khóa khía cạnh đã lưu:').parentElement?.textContent).toContain('retention-key-v1');
     fireEvent.click(screen.getByText('Retention pattern').closest('summary')!);
-    expect((screen.getByLabelText('Legacy dimension assessment Retention / old wording for Retention pattern') as HTMLTextAreaElement).value).toBe('Old dimension-specific assessment');
-    const notes = screen.getByLabelText('Notes for Retention pattern') as HTMLTextAreaElement;
+    expect((screen.getByLabelText('Đánh giá chiều dữ liệu cũ Retention / old wording cho Retention pattern') as HTMLTextAreaElement).value).toBe('Old dimension-specific assessment');
+    const notes = screen.getByLabelText('Ghi chú cho Retention pattern') as HTMLTextAreaElement;
     fireEvent.change(notes, { target: { value: 'Edited current workspace note; historical note remains separate.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá và việc tiếp theo' }));
     await waitFor(() => expect(persisted.benchmark_workspace.entries[0].notes).toBe('Edited current workspace note; historical note remains separate.'));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Retention pattern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: Retention pattern' }));
     await waitFor(() => expect(persisted.benchmark_selections).toEqual([]));
     expect(persisted.benchmark_workspace.entries[0].notes).toBe('Edited current workspace note; historical note remains separate.');
     expect(persisted.research_data.benchmark_dimensions[0].po_notes).toBe('Historical dimension PO note; do not discard.');
     view.unmount();
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
     expect(screen.getByText('Historical dimension PO note; do not discard.')).toBeTruthy();
-    expect((screen.getByLabelText('Notes for Retention pattern') as HTMLTextAreaElement).value).toBe('Edited current workspace note; historical note remains separate.');
+    expect((screen.getByLabelText('Ghi chú cho Retention pattern') as HTMLTextAreaElement).value).toBe('Edited current workspace note; historical note remains separate.');
   });
 
   it('opens an actual insight from the default Overview without inferring a KPI relationship from a shared entity', async () => {
@@ -751,19 +751,19 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Guided setup is documented; outcome impact is not measured.')).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: 'View Insight: Guidance precedes first action' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem phát hiện: Guidance precedes first action' }));
     expect(await screen.findByText('Validate the flow with first-time users.')).toBeTruthy();
     expect(screen.getByText('Guided steps are shown before the first action.')).toBeTruthy();
     expect(screen.getAllByText('The report states that setup guidance is shown before the first transfer.')).toHaveLength(1);
-    expect(screen.getByText('Region: US · Research period: 2025')).toBeTruthy();
+    expect(screen.getByText('Khu vực: US · Thời gian nghiên cứu: 2025')).toBeTruthy();
     expect(screen.queryByText(/Operating system:|source:|audience:/i)).toBeNull();
-    expect(screen.getByText('Show attributes (1)')).toBeTruthy();
+    expect(screen.getByText('Xem thuộc tính bổ sung (1)')).toBeTruthy();
     expect(screen.getByText('platform signature').closest('details')?.open).toBe(false);
-    fireEvent.click(screen.getByText('Show attributes (1)'));
+    fireEvent.click(screen.getByText('Xem thuộc tính bổ sung (1)'));
     expect(screen.getByText('platform signature')).toBeTruthy();
     expect(screen.queryByText(/Setup time reported:/)).toBeNull();
     expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
-    expect(screen.getByRole('heading', { name: /Supporting source references · needs_review · unverified/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Nguồn tham khảo hỗ trợ · needs_review · chưa xác minh/ })).toBeTruthy();
   });
 
   it('keeps the contextual assessment workflow for a non-mobile report with no comparison entities', async () => {
@@ -785,21 +785,21 @@ describe('ChatGPT research intake', () => {
     });
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByRole('button', { name: 'View Insight: Seasonal access changes' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'View Insight: Seasonal access changes' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: Seasonal access changes' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Xem Benchmark' }));
-    expect(await screen.findByRole('heading', { name: 'Insight assessment' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Xem phát hiện: Seasonal access changes' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: Seasonal access changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh: Seasonal access changes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở bảng so sánh' }));
+    expect(await screen.findByRole('heading', { name: 'Đánh giá phát hiện' })).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
-    fireEvent.change(screen.getByLabelText('PO Assessment for Seasonal access changes'), { target: { value: 'Needs local validation' } });
-    fireEvent.change(screen.getByLabelText('Next Action for Seasonal access changes'), { target: { value: 'Interview service users' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save assessments and next actions' }));
+    fireEvent.change(screen.getByLabelText('Đánh giá của PO cho Seasonal access changes'), { target: { value: 'Needs local validation' } });
+    fireEvent.change(screen.getByLabelText('Việc tiếp theo cho Seasonal access changes'), { target: { value: 'Interview service users' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá và việc tiếp theo' }));
     await waitFor(() => expect(persisted.benchmark_workspace.entries[0].po_assessment).toBe('Needs local validation'));
     cleanup();
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
-    expect((await screen.findByLabelText('PO Assessment for Seasonal access changes') as HTMLTextAreaElement).value).toBe('Needs local validation');
-    expect((screen.getByLabelText('Next Action for Seasonal access changes') as HTMLTextAreaElement).value).toBe('Interview service users');
+    fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
+    expect((await screen.findByLabelText('Đánh giá của PO cho Seasonal access changes') as HTMLTextAreaElement).value).toBe('Needs local validation');
+    expect((screen.getByLabelText('Việc tiếp theo cho Seasonal access changes') as HTMLTextAreaElement).value).toBe('Interview service users');
   });
 
   it('shows pending and inline failure feedback for the selected card and restores server state on failure', async () => {
@@ -826,23 +826,23 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    await screen.findByRole('button', { name: 'View Insight: An observed pattern' });
-    fireEvent.click(screen.getByRole('button', { name: 'View Insight: An observed pattern' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Benchmark: An observed pattern' }));
-    expect(await screen.findByText('Adding…')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }).hasAttribute('disabled')).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Xem Benchmark' }));
-    const pendingDraft = await screen.findByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement;
+    await screen.findByRole('button', { name: 'Xem phát hiện: An observed pattern' });
+    fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: An observed pattern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh: An observed pattern' }));
+    expect(await screen.findByText('Đang thêm…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: An observed pattern' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Mở bảng so sánh' }));
+    const pendingDraft = await screen.findByLabelText('Đánh giá của PO cho An observed pattern') as HTMLTextAreaElement;
     fireEvent.change(pendingDraft, { target: { value: 'Draft typed while save was pending' } });
     releaseState.current?.();
-    fireEvent.click(screen.getByRole('tab', { name: 'Benchmark' }));
-    expect((screen.getByLabelText('PO Assessment for An observed pattern') as HTMLTextAreaElement).value).toBe('Draft typed while save was pending');
-    fireEvent.click(screen.getByRole('tab', { name: 'Insights' }));
-    expect(await screen.findByText('Added to Benchmark.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'So sánh' }));
+    expect((screen.getByLabelText('Đánh giá của PO cho An observed pattern') as HTMLTextAreaElement).value).toBe('Draft typed while save was pending');
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByText('Đã thêm vào bảng so sánh.')).toBeTruthy();
     failNextState = true;
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: An observed pattern' }));
     expect((await screen.findByRole('alert')).textContent).toContain('The selection could not be saved.');
-    expect(screen.getByRole('button', { name: 'Remove from Benchmark: An observed pattern' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: An observed pattern' })).toBeTruthy();
     expect(persisted.benchmark_selections).toEqual([{ item_type: 'finding', item_key: 'finding-a' }]);
   });
 
@@ -859,16 +859,16 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Benchmark' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
     fireEvent.click(screen.getByText('Transfer service A').closest('summary')!);
-    const assessment = await screen.findByLabelText('PO Assessment for Transfer service A') as HTMLTextAreaElement;
+    const assessment = await screen.findByLabelText('Đánh giá của PO cho Transfer service A') as HTMLTextAreaElement;
     fireEvent.change(assessment, { target: { value: 'Unsaved decision draft' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from Benchmark: Transfer service A' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: Transfer service A' }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('local backend may be outdated');
     expect(alert.textContent).toContain('reopen run.bat');
-    expect((screen.getByLabelText('PO Assessment for Transfer service A') as HTMLTextAreaElement).value).toBe('Unsaved decision draft');
-    expect(screen.getByRole('button', { name: 'Remove from Benchmark: Transfer service A' })).toBeTruthy();
+    expect((screen.getByLabelText('Đánh giá của PO cho Transfer service A') as HTMLTextAreaElement).value).toBe('Unsaved decision draft');
+    expect(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: Transfer service A' })).toBeTruthy();
     const diagnostics = screen.getByText(/HTTP 404 · \/api\/v1\/reports\/saved-report\/benchmark-state/);
     expect(diagnostics.closest('details')?.open).toBe(false);
   });
@@ -882,20 +882,20 @@ describe('ChatGPT research intake', () => {
     }));
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByText('TEXT_ONLY · Structure this report'));
+    fireEvent.click(await screen.findByText('Báo cáo văn bản · Bổ sung kết quả có cấu trúc'));
     const response = '{"schema_version":"po_research_v1","research_data":{}}';
-    fireEvent.change(await screen.findByLabelText('Paste the complete ChatGPT response'), { target: { value: response } });
-    fireEvent.click(screen.getByRole('button', { name: 'Update this report' }));
+    fireEvent.change(await screen.findByLabelText('Dán toàn bộ câu trả lời ChatGPT'), { target: { value: response } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật báo cáo' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toContain('Backend local đang chạy phiên bản cũ');
-    expect((screen.getByLabelText('Paste the complete ChatGPT response') as HTMLTextAreaElement).value).toBe(response);
+    expect((screen.getByLabelText('Dán toàn bộ câu trả lời ChatGPT') as HTMLTextAreaElement).value).toBe(response);
   });
 
   it('validates missing metadata and does not send an import', async () => {
     const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: '# Report\nContent' } });
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: '   ' } });
     expect(screen.getByText('Cần có câu hỏi nghiên cứu.')).toBeTruthy();
@@ -913,10 +913,10 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Structured research intake test' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: content } });
     expect(screen.getByText(/Định dạng: JSON/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(payload?.content).toBe(content));
     expect(payload?.structured_json).toBeUndefined();
   });
@@ -925,12 +925,12 @@ describe('ChatGPT research intake', () => {
     const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     const raw = '# Research\n\n```json\n{bad json\n```';
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: raw } });
     expect((await screen.findByRole('alert')).textContent).toContain('JSON không hợp lệ tại dòng 1');
     expect((screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT') as HTMLTextAreaElement).value).toBe(raw);
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
   });
 
@@ -945,9 +945,9 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
-    const save = screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' });
+    const save = screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' });
     fireEvent.click(save);
     expect((await screen.findByRole('status')).textContent).toContain('Đang lưu báo cáo...');
     expect((screen.getByRole('button', { name: 'Đang lưu báo cáo...' }) as HTMLButtonElement).disabled).toBe(true);
@@ -965,12 +965,12 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Báo cáo không hợp lệ.');
     expect(screen.queryByText('Đang lưu báo cáo...')).toBeNull();
-    expect((screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows backend 422 field, reason and retry guidance while preserving entered content', async () => {
@@ -982,10 +982,10 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     const raw = '# Detailed research\n\nReport body stays available after a backend error.';
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: raw } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('GEO');
     expect(alert.textContent).toContain('100 ký tự');
@@ -1004,25 +1004,25 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
     expect(window.location.search).toContain('duplicate=1');
     cleanup();
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Báo cáo trùng đã mở từ History; dữ liệu gốc được giữ nguyên.')).toBeTruthy();
+    expect(await screen.findByText('Báo cáo đã tồn tại được mở từ lịch sử; dữ liệu gốc được giữ nguyên.')).toBeTruthy();
   });
 
   it('renders the default GEO with common choices in a multiselect dropdown', async () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
-    const geo = await screen.findByRole('button', { name: 'GEO' });
-    expect(geo.textContent).toContain('Global / not specified');
+    const geo = await screen.findByRole('button', { name: 'Thị trường (GEO)' });
+    expect(geo.textContent).toContain('Toàn cầu · chưa chỉ định');
     fireEvent.click(geo);
-    expect(screen.getByLabelText('United States (US)')).toBeTruthy();
-    expect(screen.getByLabelText('United Kingdom (GB)')).toBeTruthy();
-    expect(screen.getByLabelText('Other / custom')).toBeTruthy();
+    expect(screen.getByLabelText('Hoa Kỳ (US)')).toBeTruthy();
+    expect(screen.getByLabelText('Vương quốc Anh (GB)')).toBeTruthy();
+    expect(screen.getByLabelText('Khác / tự nhập')).toBeTruthy();
   });
 
   it('submits multiple GEOs and environments and supports custom values', async () => {
@@ -1035,15 +1035,15 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
-    fireEvent.click(screen.getByRole('button', { name: 'GEO' }));
-    fireEvent.click(screen.getByLabelText('Vietnam (VN)'));
-    fireEvent.click(screen.getByLabelText('United States (US)'));
-    fireEvent.click(screen.getByRole('button', { name: 'Environment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thị trường (GEO)' }));
+    fireEvent.click(screen.getByLabelText('Việt Nam (VN)'));
+    fireEvent.click(screen.getByLabelText('Hoa Kỳ (US)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Môi trường' }));
     fireEvent.click(screen.getByLabelText('iOS'));
     fireEvent.click(screen.getByLabelText('Android'));
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(submitted?.geo).toBe('VN, US'));
     expect(submitted?.os).toBe('iOS, Android');
 
@@ -1057,16 +1057,16 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
-    fireEvent.click(screen.getByRole('button', { name: 'GEO' }));
-    fireEvent.click(screen.getByLabelText('Other / custom'));
-    fireEvent.change(screen.getByLabelText('GEO tùy chỉnh'), { target: { value: 'Special Market' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Environment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thị trường (GEO)' }));
+    fireEvent.click(screen.getByLabelText('Khác / tự nhập'));
+    fireEvent.change(screen.getByLabelText('Thị trường tùy chỉnh'), { target: { value: 'Special Market' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Môi trường' }));
     fireEvent.click(screen.getByLabelText('Web'));
-    fireEvent.click(screen.getByLabelText('Other / custom'));
-    fireEvent.change(screen.getByLabelText('Environment name'), { target: { value: 'AR device' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' }));
+    fireEvent.click(screen.getByLabelText('Khác / tự nhập'));
+    fireEvent.change(screen.getByLabelText('Tên môi trường'), { target: { value: 'AR device' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(submitted?.geo).toBe('Special Market'));
     expect(submitted?.os).toBe('Web, AR device');
   });
@@ -1082,9 +1082,9 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import ChatGPT report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
-    const save = screen.getByRole('button', { name: 'Lưu báo cáo vào workspace' });
+    const save = screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' });
     fireEvent.click(save);
     fireEvent.click(save);
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1));

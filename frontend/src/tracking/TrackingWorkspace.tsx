@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { researchApi, type ResearchProject, type OpportunityWorkspace } from '../research/api';
 import { ProjectJourneyNav } from '../research/ProjectJourneyNav';
+import { opportunityDecisionHref } from '../research/decisionNavigation';
 
 const decisions: Record<string,string> = {
   investigate: 'Cần nghiên cứu thêm',
@@ -51,7 +52,7 @@ export function TrackingWorkspace({ projectId }: { projectId: string | null }) {
   }, [projectId]);
 
   if (projectId) {
-    const saved = workspace?.candidates.filter(item => item.decision !== null) ?? [];
+    const saved = (workspace?.candidates ?? []).filter(item => item.decision !== null);
     return <div className="tracking-workspace">
       <ProjectJourneyNav projectId={projectId} active="tracking" />
       <section className="research-panel">
@@ -61,7 +62,7 @@ export function TrackingWorkspace({ projectId }: { projectId: string | null }) {
         {error && <div className="research-alert" role="alert">{error}</div>}
         {loading && <p role="status">Đang tải hoạt động nghiên cứu…</p>}
         {!loading && !error && saved.length === 0 && <p>Chưa có quyết định PO nào được lưu trong dự án này.</p>}
-        {saved.length > 0 && <div className="tracking-project-list">
+        {!loading && !error && saved.length > 0 && <div className="tracking-project-list">
           {saved.map(item => {
             const decision = item.decision!;
             const status = decision.decision_status ? decisions[decision.decision_status] : 'Chưa chọn trạng thái';
@@ -73,7 +74,7 @@ export function TrackingWorkspace({ projectId }: { projectId: string | null }) {
                 {decision.next_action && <p><strong>Bước tiếp theo:</strong> {decision.next_action}</p>}
                 {decision.review_date && <small>Ngày dự kiến xem lại: {decision.review_date}</small>}
               </div>
-              <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities`}>Mở quyết định →</a>
+              <a className="secondary-action" href={opportunityDecisionHref(projectId, item)}>Mở quyết định →</a>
             </article>;
           })}
         </div>}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { researchApi, type ProjectSavedInformation, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectSource } from './api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { researchApi, type ProjectSavedInformation, type ProjectTrendUpdate, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectSource } from './api';
 import { ResearchSubjectsPanel } from './ResearchSubjectsPanel';
 
 const subject = (id = 'subject-1', name = 'Example Product'): ResearchSubject => ({
@@ -28,7 +28,8 @@ function emptyCollections() {
   vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page<ResearchBenchmarkCollection>([]));
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState({}, '', '/'); });
+beforeEach(() => { vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValue(page<ProjectTrendUpdate>([])); });
 
 describe('ResearchSubjectsPanel', () => {
   it('does not merge same-named source identities automatically and supports explicit link', async () => {
@@ -38,12 +39,12 @@ describe('ResearchSubjectsPanel', () => {
     emptyCollections();
     const map = vi.spyOn(researchApi, 'mapSubjectSource').mockResolvedValue({ ...rows[0], mapped_subject_id: 'subject-1', mapped_subject_name: 'Example Product' });
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getByText('Research subjects'));
-    await screen.findByText('Names found in this project’s sources');
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    await screen.findByText('Tên sản phẩm xuất hiện trong nguồn của dự án');
     expect(map).not.toHaveBeenCalled();
     expect(screen.getAllByText('Example Product').length).toBeGreaterThan(1);
-    fireEvent.change(screen.getAllByLabelText('Link Example Product to a saved subject')[0], { target: { value: 'subject-1' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Link subject' })[0]);
+    fireEvent.change(screen.getAllByLabelText(/Liên kết .* với hồ sơ đã lưu/)[0], { target: { value: 'subject-1' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Liên kết hồ sơ' })[0]);
     await waitFor(() => expect(map).toHaveBeenCalledWith('project-1', expect.objectContaining({
       source_kind: 'report_entity', source_id: 'report-1', source_key: 'provider:one', subject_id: 'subject-1',
     })));
@@ -56,9 +57,9 @@ describe('ResearchSubjectsPanel', () => {
     emptyCollections();
     const map = vi.spyOn(researchApi, 'mapSubjectSource').mockResolvedValue({ ...candidate, mapped_subject_id: 'new-subject', mapped_subject_name: candidate.source_name });
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getAllByText('Research subjects')[0]);
-    await screen.findByText('Names found in this project’s sources');
-    fireEvent.click(screen.getByRole('button', { name: 'Create subject from this name' }));
+    fireEvent.click(screen.getAllByText('Hồ sơ sản phẩm và chủ đề')[0]);
+    await screen.findByText('Tên sản phẩm xuất hiện trong nguồn của dự án');
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo hồ sơ từ tên này' }));
     await waitFor(() => expect(map).toHaveBeenCalledWith('project-1', expect.objectContaining({
       source_kind: 'report_entity', source_id: 'report-1', source_key: 'provider:one', create_subject_from_source: true,
     })));
@@ -70,9 +71,9 @@ describe('ResearchSubjectsPanel', () => {
     vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([historical]));
     emptyCollections();
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getAllByText('Research subjects')[0]);
-    expect(await screen.findByText('Historical link · source no longer exposes this identity')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Change link' })).toBeNull();
+    fireEvent.click(screen.getAllByText('Hồ sơ sản phẩm và chủ đề')[0]);
+    expect(await screen.findByText('Liên kết lịch sử · nguồn hiện không còn tên định danh này')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Đổi liên kết' })).toBeNull();
   });
 
   it('creates a project collection and adds/removes a subject without deleting its identity', async () => {
@@ -97,28 +98,28 @@ describe('ResearchSubjectsPanel', () => {
     const add = vi.spyOn(researchApi, 'addBenchmarkCollectionSubject').mockResolvedValue(collection([{ subject_id: saved.id, name: saved.name, subject_type: 'product', source_count: 2, report_source_count: 1, csv_source_count: 1 }]));
     const remove = vi.spyOn(researchApi, 'removeBenchmarkCollectionSubject').mockResolvedValue();
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getByText('Research subjects'));
-    await screen.findByText('Benchmark collections');
-    fireEvent.change(screen.getByLabelText('Collection name'), { target: { value: 'Shortlist' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create collection' }));
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    await screen.findByText('Bộ so sánh');
+    fireEvent.change(screen.getByLabelText('Tên bộ so sánh'), { target: { value: 'Shortlist' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo bộ so sánh' }));
     await waitFor(() => expect(create).toHaveBeenCalledWith('project-1', { name: 'Shortlist' }));
-    await screen.findByText(/0 subjects · project collection/);
-    fireEvent.change(screen.getByLabelText('Choose a project subject to add to Shortlist'), { target: { value: saved.id } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add subject' }));
+    await screen.findByText(/0 hồ sơ · thuộc dự án/);
+    fireEvent.change(screen.getByLabelText('Chọn hồ sơ của dự án để thêm vào Shortlist'), { target: { value: saved.id } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm hồ sơ' }));
     await waitFor(() => expect(add).toHaveBeenCalledWith('project-1', 'collection-1', saved.id));
-    await screen.findByText(/3 linked inputs \(1 reports, 1 CSVs, 1 trend updates\)/);
-    fireEvent.click(screen.getByText(/View source-backed comparison/));
+    await screen.findByText(/3 nguồn đã liên kết \(1 báo cáo, 1 tệp CSV, 1 cập nhật xu hướng\)/);
+    fireEvent.click(screen.getByText(/Xem đối chiếu theo nguồn/));
     expect(screen.getByText('42 downloads')).toBeTruthy();
     expect(screen.getByText('GEO: US')).toBeTruthy();
     expect(screen.getByText('CSV row 2')).toBeTruthy();
     expect(screen.getByText('Exact source claim, unchanged.')).toBeTruthy();
-    expect(screen.getByText('Source note: Source context supplied by the owner.')).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: 'Open source' }).map((link) => link.getAttribute('href'))).toEqual(['https://example.org/source', 'https://example.org/trend']);
-    const validationDetails = screen.getByText('Validation details · 2').closest('details');
+    expect(screen.getByText('Ghi chú nguồn: Source context supplied by the owner.')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Mở nguồn tham khảo' }).map((link) => link.getAttribute('href'))).toEqual(['https://example.org/source', 'https://example.org/trend']);
+    const validationDetails = screen.getByText('Lý do cần kiểm tra · 2').closest('details');
     expect(validationDetails?.open).toBe(false);
-    fireEvent.click(screen.getByText('Validation details · 2'));
+    fireEvent.click(screen.getByText('Lý do cần kiểm tra · 2'));
     expect(await screen.findByText('Original row has no confirmed period.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from collection' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi bộ so sánh' }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith('project-1', 'collection-1', saved.id));
     expect(screen.getAllByText(saved.name).length).toBeGreaterThan(0);
     expect(collectionReads).toHaveBeenCalled();
@@ -136,22 +137,22 @@ describe('ResearchSubjectsPanel', () => {
     emptyCollections();
     const update = vi.spyOn(researchApi, 'updateSubject').mockResolvedValue(updated);
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getByText('Research subjects'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở hồ sơ' }));
     expect(screen.getByText('Alias A')).toBeTruthy();
-    expect(screen.getByText('Available in source details')).toBeTruthy();
-    const poDecisionLink = screen.getByRole('link', { name: 'Review PO decision' });
+    expect(screen.getByText('Có trong chi tiết nguồn')).toBeTruthy();
+    const poDecisionLink = screen.getByRole('link', { name: 'Xem quyết định PO' });
     expect(poDecisionLink.getAttribute('href')).toContain('decisionKind=subject');
     expect(poDecisionLink.getAttribute('href')).toContain('decisionTargetId=subject-1');
     fireEvent.change(screen.getByDisplayValue('Existing PO note.'), { target: { value: 'Updated PO note, still not source verified.' } });
-    fireEvent.change(screen.getByLabelText('Custom section title'), { target: { value: 'Accessibility' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add custom section' }));
-    fireEvent.change(screen.getAllByLabelText('PO analysis')[1], { target: { value: 'Check keyboard navigation.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO analysis' }));
+    fireEvent.change(screen.getByLabelText('Tên phần tự đặt'), { target: { value: 'Accessibility' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm phần' }));
+    fireEvent.change(screen.getAllByLabelText('Phân tích của PO')[1], { target: { value: 'Check keyboard navigation.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu phân tích PO' }));
     await waitFor(() => expect(update).toHaveBeenCalledWith('project-1', saved.id, { analysis_sections: updated.analysis_sections }));
-    expect(await screen.findByText('Subject analysis saved. These are PO notes and are not independently verified.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Close profile' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Open profile' }));
+    expect(await screen.findByText('Đã lưu phần phân tích. Đây là ghi chú của bạn, chưa được xác minh độc lập.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng hồ sơ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mở hồ sơ' }));
     expect(screen.getByDisplayValue('Updated PO note, still not source verified.')).toBeTruthy();
     expect(screen.getByDisplayValue('Check keyboard navigation.')).toBeTruthy();
   });
@@ -162,11 +163,58 @@ describe('ResearchSubjectsPanel', () => {
     vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
     vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValue(page([savedInformation()]));
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getByText('Research subjects'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở hồ sơ' }));
     expect(screen.getByText('Exact source note, preserved with its original wording.')).toBeTruthy();
-    expect(screen.getByText('Source-reported · unverified')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open supplied source' }).getAttribute('href')).toBe('https://example.org/announcement');
+    expect(screen.getByText('Do nguồn cung cấp · chưa xác minh')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở nguồn đã cung cấp' }).getAttribute('href')).toBe('https://example.org/announcement');
+  });
+
+  it('shows an explicitly linked trend update in the matching subject profile', async () => {
+    const update: ProjectTrendUpdate = {
+      id: 'trend-1', project_id: 'project-1', subject_id: 'subject-1', subject_name: 'Example Product',
+      collection_id: null, collection_name: null, exact_claim: 'Exact supplied trend, without added interpretation.',
+      source_note: 'Captured from the supplied page.', source_title: 'Owner source note', source_url: 'https://example.org/trend',
+      published_on: '2026-10-21', source_status: 'source_reported_unverified', created_at: '2026-10-22T00:00:00Z',
+    };
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([subject()]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
+    const trendRead = vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValue(page([update]));
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở hồ sơ' }));
+    expect(await screen.findByText(update.exact_claim)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Cập nhật xu hướng' })).toBeTruthy();
+    expect(screen.getByText(/1 cập nhật xu hướng/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở nguồn đã cung cấp' }).getAttribute('href')).toBe(update.source_url);
+    await waitFor(() => expect(trendRead).toHaveBeenCalledWith('project-1', { subject_id: 'subject-1', limit: 100 }));
+  });
+
+  it('opens the requested subject profile from a Project Home deep link', async () => {
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([subject()]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValue(page([]));
+    window.history.replaceState({}, '', '/research?projectId=project-1&view=data&subjectId=subject-1#project-subject-profiles');
+
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+
+    expect(await screen.findByRole('region', { name: 'Hồ sơ Example Product' })).toBeTruthy();
+    expect((screen.getByText('Hồ sơ sản phẩm và chủ đề').closest('details') as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('opens and highlights the requested comparison collection from Project Home', async () => {
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([collection()]));
+    window.history.replaceState({}, '', '/research?projectId=project-1&view=data&collectionId=collection-1#project-benchmark-collections');
+
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+
+    expect(await screen.findByText('Shortlist')).toBeTruthy();
+    expect((screen.getByText('Shortlist').closest('.research-benchmark-collection') as HTMLElement).classList.contains('is-requested')).toBe(true);
+    expect((screen.getByText('Hồ sơ sản phẩm và chủ đề').closest('details') as HTMLDetailsElement).open).toBe(true);
   });
 
   it('refreshes an open project’s subject history after information is linked', async () => {
@@ -175,11 +223,11 @@ describe('ResearchSubjectsPanel', () => {
     vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
     const savedRead = vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValueOnce(page([])).mockResolvedValue(page([savedInformation()]));
     render(<ResearchSubjectsPanel projectId="project-1" />);
-    fireEvent.click(screen.getByText('Research subjects'));
-    await screen.findByText('Saved in this project');
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    await screen.findByRole('button', { name: 'Mở hồ sơ' });
     window.dispatchEvent(new CustomEvent('project-saved-information-changed', { detail: { projectId: 'project-1' } }));
     await waitFor(() => expect(savedRead).toHaveBeenCalledTimes(2));
-    fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở hồ sơ' }));
     expect(await screen.findByText('Exact source note, preserved with its original wording.')).toBeTruthy();
   });
 });

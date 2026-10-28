@@ -55,32 +55,32 @@ describe('QuantitativePeriodComparison', () => {
   it('selects original exports and displays matched and source-only app evidence without treating report mismatch as a block', async () => {
     render(<QuantitativePeriodComparison />);
     await waitFor(() => expect(screen.getAllByRole('option', { name: /October export/ })).toHaveLength(2));
-    fireEvent.change(screen.getByLabelText('Baseline dataset'), { target: { value: 'old' } });
-    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
-    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText('Tệp kỳ trước'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Tệp kỳ hiện tại'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     // The metric key is based on the exact normalized four-part identity.
     const option = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
-    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: option.value } });
-    await waitFor(() => expect((screen.getByLabelText('Baseline period') as HTMLSelectElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole('button', { name: 'Compare selected periods' }));
-    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
+    fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: option.value } });
+    await waitFor(() => expect((screen.getByLabelText('Kỳ trong tệp trước') as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     expect(reportApi.previewQuantitativeComparison).toHaveBeenCalledTimes(1);
     expect(vi.mocked(reportApi.previewQuantitativeComparison).mock.calls[0][0]).toMatchObject({
       baseline_dataset_id: 'old', current_dataset_id: 'new', geo: 'Worldwide', platform: 'Unified',
     });
     expect(screen.getByText('Example App')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Inspect evidence for Example App/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Inspect evidence for Example App/ }));
-    expect(screen.getByText('Example App · original observations')).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: 'Open original source' })).toHaveLength(2);
-    expect(screen.getAllByRole('link', { name: 'Open source report' })).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
+    expect(screen.getByRole('button', { name: /Xem bằng chứng của Example App/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Xem bằng chứng của Example App/ }));
+    expect(screen.getByText('Example App · các phép đo gốc')).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Mở nguồn gốc' })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'Mở báo cáo nguồn' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bảng đầy đủ' }));
     expect(screen.getByText('Source-only app')).toBeTruthy();
     expect(screen.getByText('Name-only app')).toBeTruthy();
     expect(screen.getByText('+25 downloads')).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: 'Open source' })).toHaveLength(4);
-    expect(screen.getAllByRole('link', { name: 'Open report' })).toHaveLength(4);
-    expect(screen.getByRole('option', { name: 'Percentage change' })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Mở nguồn' })).toHaveLength(4);
+    expect(screen.getAllByRole('link', { name: 'Mở báo cáo' })).toHaveLength(4);
+    expect(screen.getByRole('option', { name: 'Phần trăm thay đổi' })).toBeTruthy();
   });
 
   it('uses backend percentage values and retains an unavailable value in the full table', async () => {
@@ -92,16 +92,16 @@ describe('QuantitativePeriodComparison', () => {
       ],
     });
     render(<QuantitativePeriodComparison />);
-    fireEvent.change(await screen.findByLabelText('Baseline dataset'), { target: { value: 'old' } });
-    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
-    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.change(await screen.findByLabelText('Tệp kỳ trước'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Tệp kỳ hiện tại'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
-    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
-    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Chart type' }), { target: { value: 'percentage_change' } });
-    expect(screen.getByRole('button', { name: /Inspect evidence for Example App/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
+    fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: metricOption.value } });
+    fireEvent.click(await screen.findByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kiểu biểu đồ' }), { target: { value: 'percentage_change' } });
+    expect(screen.getByRole('button', { name: /Xem bằng chứng của Example App/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bảng đầy đủ' }));
     expect(screen.getByText('+25%')).toBeTruthy();
     expect(screen.getByText('Baseline is missing.')).toBeTruthy();
   });
@@ -115,35 +115,35 @@ describe('QuantitativePeriodComparison', () => {
     });
     vi.mocked(reportApi.previewQuantitativeComparison).mockResolvedValue({ ...preview, summary: { ...preview.summary, comparable_apps: 100, distinct_apps: 100 }, rows });
     render(<QuantitativePeriodComparison />);
-    fireEvent.change(await screen.findByLabelText('Baseline dataset'), { target: { value: 'old' } });
-    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
-    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.change(await screen.findByLabelText('Tệp kỳ trước'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Tệp kỳ hiện tại'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
-    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
-    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
+    fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: metricOption.value } });
+    fireEvent.click(await screen.findByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     expect(screen.getByText('App 100')).toBeTruthy();
     expect(screen.queryByText('App 090')).toBeNull();
-    expect(screen.getByText(/Showing 10 of 100 eligible apps, sorted by highest current value/)).toBeTruthy();
-    expect(screen.getByText(/not the whole market/)).toBeTruthy();
+    expect(screen.getByText(/Đang hiển thị 10\/100 sản phẩm đủ điều kiện, sắp xếp theo giá trị kỳ hiện tại cao nhất/)).toBeTruthy();
+    expect(screen.getByText(/không đại diện toàn thị trường/)).toBeTruthy();
     expect(screen.queryByText('Top 10')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Sort chart and table'), { target: { value: 'name' } });
-    expect(screen.getByText(/This is an alphabetical selection, not a performance ranking/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sắp xếp biểu đồ và bảng'), { target: { value: 'name' } });
+    expect(screen.getByText(/Đây là sắp xếp theo tên, không phải xếp hạng hiệu quả/)).toBeTruthy();
     expect(screen.queryByText(/Ranking reflects the selected exports/)).toBeNull();
-    expect(screen.getByRole('button', { name: /Inspect evidence for App 001/ })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Sort chart and table'), { target: { value: 'current_desc' } });
-    fireEvent.change(screen.getByLabelText('Apps shown'), { target: { value: 'all' } });
+    expect(screen.getByRole('button', { name: /Xem bằng chứng của App 001/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sắp xếp biểu đồ và bảng'), { target: { value: 'current_desc' } });
+    fireEvent.change(screen.getByLabelText('Số sản phẩm hiển thị'), { target: { value: 'all' } });
     expect(screen.getByText('App 100')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Apps shown'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('Find app'), { target: { value: 'App 0' } });
-    expect(await screen.findByText(/Showing 10 of 99 eligible apps matching this search \(100 chart-eligible in total\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Số sản phẩm hiển thị'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Tìm sản phẩm'), { target: { value: 'App 0' } });
+    expect(await screen.findByText(/Đang hiển thị 10\/99 sản phẩm đủ điều kiện khớp từ khóa này \(tổng cộng 100 sản phẩm đủ dữ liệu vẽ biểu đồ\)/)).toBeTruthy();
     expect(screen.queryByText('App 100')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Find app'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Apps shown'), { target: { value: 'all' } });
-    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
-    expect(screen.getByText('Showing 50 of 100 app rows. Values and unavailable calculations are returned by the comparison service.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Tìm sản phẩm'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Số sản phẩm hiển thị'), { target: { value: 'all' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bảng đầy đủ' }));
+    expect(screen.getByText('Đang hiển thị 50/100 dòng sản phẩm. Giá trị và phép tính không khả dụng do dịch vụ so sánh trả về.')).toBeTruthy();
     expect(screen.getByText('App 100')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp' }));
     expect(screen.getByText('App 001')).toBeTruthy();
   });
 
@@ -156,23 +156,23 @@ describe('QuantitativePeriodComparison', () => {
     });
     vi.mocked(reportApi.previewQuantitativeComparison).mockResolvedValue({ ...preview, summary: { ...preview.summary, comparable_apps: 20, distinct_apps: 20 }, rows: ranked });
     render(<QuantitativePeriodComparison />);
-    fireEvent.change(await screen.findByLabelText('Baseline dataset'), { target: { value: 'old' } });
-    fireEvent.change(screen.getByLabelText('Current dataset'), { target: { value: 'new' } });
-    await waitFor(() => expect((screen.getByLabelText('Metric') as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.change(await screen.findByLabelText('Tệp kỳ trước'), { target: { value: 'old' } });
+    fireEvent.change(screen.getByLabelText('Tệp kỳ hiện tại'), { target: { value: 'new' } });
+    await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
-    fireEvent.change(screen.getByLabelText('Metric'), { target: { value: metricOption.value } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Compare selected periods' }));
-    await screen.findByRole('heading', { name: /snapshot comparison · Downloads/i });
+    fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: metricOption.value } });
+    fireEvent.click(await screen.findByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     expect(screen.getByText('Zebra Highest Current')).toBeTruthy();
-    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('current_desc');
-    fireEvent.change(screen.getByLabelText('Chart type'), { target: { value: 'absolute_change' } });
-    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('increase_desc');
-    expect(screen.getByText(/sorted by largest increase/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Sort chart and table'), { target: { value: 'decrease_asc' } });
-    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('decrease_asc');
-    fireEvent.change(screen.getByLabelText('Chart type'), { target: { value: 'percentage_change' } });
-    expect((screen.getByLabelText('Sort chart and table') as HTMLSelectElement).value).toBe('percentage_desc');
-    expect(screen.getByRole('option', { name: 'Lowest percentage change' })).toBeTruthy();
+    expect((screen.getByLabelText('Sắp xếp biểu đồ và bảng') as HTMLSelectElement).value).toBe('current_desc');
+    fireEvent.change(screen.getByLabelText('Kiểu biểu đồ'), { target: { value: 'absolute_change' } });
+    expect((screen.getByLabelText('Sắp xếp biểu đồ và bảng') as HTMLSelectElement).value).toBe('increase_desc');
+    expect(screen.getByText(/sắp xếp theo mức tăng lớn nhất/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sắp xếp biểu đồ và bảng'), { target: { value: 'decrease_asc' } });
+    expect((screen.getByLabelText('Sắp xếp biểu đồ và bảng') as HTMLSelectElement).value).toBe('decrease_asc');
+    fireEvent.change(screen.getByLabelText('Kiểu biểu đồ'), { target: { value: 'percentage_change' } });
+    expect((screen.getByLabelText('Sắp xếp biểu đồ và bảng') as HTMLSelectElement).value).toBe('percentage_desc');
+    expect(screen.getByRole('option', { name: 'Phần trăm tăng thấp nhất' })).toBeTruthy();
   });
 
   it('loads all pages of the dataset catalog so older exports remain selectable', async () => {
@@ -193,7 +193,7 @@ describe('QuantitativePeriodComparison', () => {
     expect(await screen.findByTestId('dataset-import')).toBeTruthy();
     expect(screen.queryByLabelText('Báo cáo để giữ provenance')).toBeNull();
     expect(reportApi.list).not.toHaveBeenCalled();
-    expect(screen.getByRole('link', { name: '← Back to research workspace' }).getAttribute('href'))
+    expect(screen.getByRole('link', { name: '← Về dự án' }).getAttribute('href'))
       .toBe('/research?projectId=workspace-1&view=data');
   });
 
@@ -206,15 +206,15 @@ describe('QuantitativePeriodComparison', () => {
       })),
     };
     render(<QuantitativeComparisonCharts result={csvOnlyPreview} />);
-    fireEvent.click(screen.getByRole('button', { name: /Inspect evidence for Example App/ }));
-    expect(screen.getByText('Example App · original observations')).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Open source report' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Xem bằng chứng của Example App/ }));
+    expect(screen.getByText('Example App · các phép đo gốc')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Mở báo cáo nguồn' })).toBeNull();
     expect(screen.getAllByText(/October export/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/row 2/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/unverified/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/dòng 2/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Chưa xác minh độc lập/).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'View full table' }));
-    expect(screen.queryByRole('link', { name: 'Open report' })).toBeNull();
-    expect(screen.getAllByText(/October export · row 2 · unverified/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bảng đầy đủ' }));
+    expect(screen.queryByRole('link', { name: 'Mở báo cáo' })).toBeNull();
+    expect(screen.getAllByText(/October export · dòng 2 · Chưa xác minh độc lập/).length).toBeGreaterThan(0);
   });
 });

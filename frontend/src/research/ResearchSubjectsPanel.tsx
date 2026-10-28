@@ -1,5 +1,14 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { researchApi, type ProjectSavedInformation, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectAnalysisSection, type ResearchSubjectSource } from './api';
+import { researchApi, type ProjectSavedInformation, type ProjectTrendUpdate, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectAnalysisSection, type ResearchSubjectSource } from './api';
+
+function displayEvidenceStatus(value: string | null | undefined): string {
+  const key = value?.trim().toLocaleLowerCase();
+  if (key === 'source-reported · unverified' || key === 'source-reported - unverified') return 'Theo nguồn cung cấp · chưa xác minh';
+  if (key === 'unverified') return 'Chưa xác minh độc lập';
+  if (key === 'verified') return 'Đã xác minh độc lập';
+  if (key === 'reported') return 'Do nguồn cung cấp';
+  return value || 'Chưa có trạng thái xác minh';
+}
 
 function sourceKey(source: ResearchSubjectSource): string {
   return [source.source_kind, source.source_id, source.source_key].join('|');
@@ -10,12 +19,17 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   const [sources, setSources] = useState<ResearchSubjectSource[]>([]);
   const [collections, setCollections] = useState<ResearchBenchmarkCollection[]>([]);
   const [savedInformation, setSavedInformation] = useState<ProjectSavedInformation[]>([]);
+  const [profileTrendUpdates, setProfileTrendUpdates] = useState<ProjectTrendUpdate[]>([]);
+  const [profileTrendError, setProfileTrendError] = useState('');
   const [sourceCursor, setSourceCursor] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const requestedSubjectId = new URLSearchParams(window.location.search).get('subjectId');
+  const requestedCollectionId = new URLSearchParams(window.location.search).get('collectionId');
+  const [subjectsOpen, setSubjectsOpen] = useState(Boolean(requestedSubjectId || requestedCollectionId));
+  const [profileId, setProfileId] = useState<string | null>(requestedSubjectId);
   const [analysisDrafts, setAnalysisDrafts] = useState<Record<string, ResearchSubjectAnalysisSection[]>>({});
   const [customSectionLabels, setCustomSectionLabels] = useState<Record<string, string>>({});
   const [collectionName, setCollectionName] = useState('');
@@ -44,7 +58,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
         return next;
       });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load research subjects.');
+      setError(reason instanceof Error ? reason.message : 'Không tải được hồ sơ sản phẩm và chủ đề.');
     } finally { setLoading(false); }
   }
 
@@ -58,6 +72,16 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     return () => window.removeEventListener('project-saved-information-changed', refreshForProject);
   }, [projectId]);
 
+  useEffect(() => {
+    if (!profileId) { setProfileTrendUpdates([]); setProfileTrendError(''); return; }
+    let current = true;
+    setProfileTrendUpdates([]); setProfileTrendError('');
+    void researchApi.listTrendUpdates(projectId, { subject_id: profileId, limit: 100 })
+      .then((page) => { if (current) setProfileTrendUpdates(page.items); })
+      .catch((reason) => { if (current) setProfileTrendError(reason instanceof Error ? reason.message : 'Không tải được cập nhật xu hướng của hồ sơ.'); });
+    return () => { current = false; };
+  }, [projectId, profileId]);
+
   async function mapSource(source: ResearchSubjectSource, createFromSource = false) {
     const key = sourceKey(source);
     const selected = drafts[key] || '';
@@ -69,10 +93,10 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
         ...(createFromSource ? { create_subject_from_source: true } : { subject_id: selected }),
         ...(source.mapped_subject_id && source.mapped_subject_id !== selected ? { expected_subject_id: source.mapped_subject_id } : {}),
       });
-      setNotice(createFromSource ? 'Subject created from the supplied source identity and linked.' : 'Source linked to the selected subject.');
+      setNotice(createFromSource ? 'Đã tạo hồ sơ từ tên trong nguồn và liên kết.' : 'Đã liên kết nguồn với hồ sơ đã chọn.');
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save this subject link.');
+      setError(reason instanceof Error ? reason.message : 'Không lưu được liên kết hồ sơ.');
       await load();
     } finally { setBusy(null); }
   }
@@ -81,8 +105,8 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     setBusy(subject.id); setError(''); setNotice('');
     try {
       await researchApi.updateSubject(projectId, subject.id, { name: editName });
-      setEditingId(null); setNotice('Subject name saved.'); await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update subject.'); }
+      setEditingId(null); setNotice('Đã lưu tên hồ sơ.'); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không cập nhật được hồ sơ.'); }
     finally { setBusy(null); }
   }
 
@@ -102,7 +126,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     if (!cleanLabel) return;
     const sections = analysisDrafts[subject.id] ?? subject.analysis_sections ?? [];
     if (sections.some((item) => item.label.trim().toLocaleLowerCase() === cleanLabel.toLocaleLowerCase())) {
-      setError('A section with this title already exists in this subject profile.'); return;
+      setError('Hồ sơ này đã có phần phân tích cùng tên.'); return;
     }
     const key = `${cleanLabel.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-') || 'section'}-${Date.now()}`;
     setAnalysisDrafts((current) => ({ ...current, [subject.id]: [...(current[subject.id] ?? subject.analysis_sections ?? []), { key, label: cleanLabel, content: '' }] }));
@@ -116,13 +140,13 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   async function saveAnalysis(subject: ResearchSubject) {
     const sections = analysisDrafts[subject.id] ?? [];
     if (sections.some((item) => !item.label.trim() || !item.content.trim())) {
-      setError('Add content to each analysis section or remove the empty draft before saving.'); return;
+      setError('Hãy thêm nội dung cho mỗi phần hoặc bỏ phần trống trước khi lưu.'); return;
     }
     setBusy(`analysis:${subject.id}`); setError(''); setNotice('');
     try {
       await researchApi.updateSubject(projectId, subject.id, { analysis_sections: sections.map((item) => ({ ...item, label: item.label.trim(), content: item.content.trim() })) });
-      setNotice('Subject analysis saved. These are PO notes and are not independently verified.'); await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save the subject analysis. Your draft is still here.'); }
+      setNotice('Đã lưu phần phân tích. Đây là ghi chú của bạn, chưa được xác minh độc lập.'); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không lưu được phân tích. Bản nháp vẫn còn trên trang.'); }
     finally { setBusy(null); }
   }
 
@@ -131,8 +155,8 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     setBusy('new-collection'); setError(''); setNotice('');
     try {
       await researchApi.createBenchmarkCollection(projectId, { name: collectionName.trim() });
-      setCollectionName(''); setNotice('Benchmark collection created. Add only the subjects you want to compare.'); await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create this collection.'); }
+      setCollectionName(''); setNotice('Đã tạo bộ so sánh. Chỉ thêm những hồ sơ bạn muốn đối chiếu.'); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không thể tạo bộ so sánh này.'); }
     finally { setBusy(null); }
   }
 
@@ -142,10 +166,10 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     try {
       if (add) await researchApi.addBenchmarkCollectionSubject(projectId, collection.id, subjectId);
       else await researchApi.removeBenchmarkCollectionSubject(projectId, collection.id, subjectId);
-      setNotice(add ? `Subject added to ${collection.name}.` : `Subject removed from ${collection.name}. Its saved identity and source links remain.`);
+      setNotice(add ? `Đã thêm hồ sơ vào ${collection.name}.` : `Đã gỡ hồ sơ khỏi ${collection.name}. Danh tính và liên kết nguồn đã lưu vẫn được giữ.`);
       setCollectionSubjectDrafts((current) => ({ ...current, [collection.id]: '' }));
       await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update this collection.'); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không thể cập nhật bộ so sánh này.'); }
     finally { setBusy(null); }
   }
 
@@ -155,142 +179,154 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     const hasChanges = JSON.stringify(savedSections) !== JSON.stringify(sections);
     const linkedSources = sources.filter((source) => source.mapped_subject_id === subject.id);
     const savedItems = savedInformation.filter((item) => item.subject_id === subject.id);
+    const trendItems = profileTrendUpdates.filter((item) => item.subject_id === subject.id);
     const subjectCollections = collections.filter((collection) => collection.members.some((member) => member.subject_id === subject.id));
     return <article className="research-subject-item research-subject-profile-item" key={subject.id}>
       <div className="research-subject-profile-heading">
-        {editingId === subject.id ? <><label>Subject name<input value={editName} onChange={(event) => setEditName(event.target.value)} /></label>
-          <button type="button" className="secondary-action" disabled={busy === subject.id || !editName.trim()} onClick={() => void saveName(subject)}>Save name</button>
-          <button type="button" className="text-button" onClick={() => setEditingId(null)}>Cancel</button></>
-          : <><div><strong>{subject.name}</strong><small>{subject.subject_type || 'Type not specified'}{subject.aliases.length ? ` · ${subject.aliases.join(', ')}` : ''}</small></div>
-            <button type="button" className="text-button" onClick={() => { setEditingId(subject.id); setEditName(subject.name); }}>Edit name</button>
-            <button type="button" className="secondary-action" aria-expanded={profileId === subject.id} onClick={() => toggleProfile(subject)}>{profileId === subject.id ? 'Close profile' : 'Open profile'}</button></>}
+        {editingId === subject.id ? <><label>Tên hồ sơ<input value={editName} onChange={(event) => setEditName(event.target.value)} /></label>
+          <button type="button" className="secondary-action" disabled={busy === subject.id || !editName.trim()} onClick={() => void saveName(subject)}>Lưu tên</button>
+          <button type="button" className="text-button" onClick={() => setEditingId(null)}>Hủy</button></>
+          : <><div><strong>{subject.name}</strong><small>{subject.subject_type || 'Chưa phân loại'}{subject.aliases.length ? ` · ${subject.aliases.join(', ')}` : ''}</small></div>
+            <button type="button" className="text-button" onClick={() => { setEditingId(subject.id); setEditName(subject.name); }}>Sửa tên</button>
+            <button type="button" className="secondary-action" aria-expanded={profileId === subject.id} onClick={() => toggleProfile(subject)}>{profileId === subject.id ? 'Đóng hồ sơ' : 'Mở hồ sơ'}</button></>}
       </div>
-      {profileId === subject.id && <section className="research-subject-profile" aria-label={`${subject.name} profile`}>
-        <div className="research-subject-profile-summary"><div><h4>{subject.name}</h4><p>{subject.subject_type || 'Type not specified'} · {linkedSources.length} linked source{linkedSources.length === 1 ? '' : 's'} · {savedItems.length} saved item{savedItems.length === 1 ? '' : 's'} · {subjectCollections.length} collection{subjectCollections.length === 1 ? '' : 's'} · {savedSections.length} saved analysis section{savedSections.length === 1 ? '' : 's'}</p></div>
-          <nav aria-label={`${subject.name} related workspace sections`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Review PO decision</a><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=data#project-saved-information`}>Saved information</a><a href="#project-trend-updates">Trend updates</a><a href="#project-image-evidence">Image evidence</a><a href="#project-benchmark-collections">Collections</a></nav></div>
-        <div className="research-subject-profile-details"><p><strong>Aliases:</strong> {subject.aliases.length ? subject.aliases.join(', ') : 'None supplied'}</p>
-          <p><strong>External identifiers:</strong> {subject.external_ids.length ? 'Available in source details' : 'None supplied'}</p>
-          <details><summary>Source identity details</summary><ul>
+      {profileId === subject.id && <section className="research-subject-profile" aria-label={`Hồ sơ ${subject.name}`}>
+        <div className="research-subject-profile-summary"><div><h4>{subject.name}</h4><p>{subject.subject_type || 'Chưa phân loại'} · {linkedSources.length} nguồn liên kết · {trendItems.length} cập nhật xu hướng · {savedItems.length} mục đã lưu · {subjectCollections.length} bộ so sánh · {savedSections.length} phần phân tích đã lưu</p></div>
+          <nav aria-label={`Các khu vực liên quan đến ${subject.name}`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Xem quyết định PO</a><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=data#project-saved-information`}>Thông tin đã lưu</a><a href="#project-trend-updates">Cập nhật xu hướng</a><a href="#project-image-evidence">Ảnh chứng cứ</a><a href="#project-benchmark-collections">Bộ so sánh</a></nav></div>
+        <div className="research-subject-profile-details"><p><strong>Tên gọi khác:</strong> {subject.aliases.length ? subject.aliases.join(', ') : 'Chưa có thông tin'}</p>
+          <p><strong>Mã định danh ngoài:</strong> {subject.external_ids.length ? 'Có trong chi tiết nguồn' : 'Chưa có thông tin'}</p>
+          <details><summary>Chi tiết định danh từ nguồn</summary><ul>
             {subject.external_ids.map((item, index) => <li key={`${item.provider}:${item.value}:${index}`}>{item.provider}: {item.value}</li>)}
             {Object.entries(subject.provenance).map(([key, value]) => <li key={key}>{key}: {typeof value === 'string' ? value : JSON.stringify(value)}</li>)}
           </ul></details>
         </div>
-        <section className="research-subject-history" aria-label={`${subject.name} saved information history`}>
-          <div><h5>Saved information for this product or topic</h5><p>Original wording and attachments are shown as supplied; they are not independently verified.</p></div>
-          {!savedItems.length ? <p>No saved information is linked to this profile yet. You can link it later from the project’s saved information.</p> : <div className="research-subject-history-list">{savedItems.slice(0, 10).map((item) => <article key={item.id}>
-            <div><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><span>Source-reported · unverified</span></div>
+        <section className="research-subject-history" aria-label={`Thông tin đã lưu về ${subject.name}`}>
+          <div><h5>Thông tin đã lưu về sản phẩm hoặc chủ đề</h5><p>Nội dung gốc và tệp đính kèm được giữ nguyên như khi cung cấp; chưa được xác minh độc lập.</p></div>
+          {!savedItems.length ? <p>Hồ sơ này chưa có thông tin liên kết. Bạn có thể liên kết từ mục thông tin đã lưu của dự án.</p> : <div className="research-subject-history-list">{savedItems.slice(0, 10).map((item) => <article key={item.id}>
+            <div><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString('vi-VN')}</time><span>Do nguồn cung cấp · chưa xác minh</span></div>
             {item.source_title && <strong>{item.source_title}</strong>}
             <p>{item.original_content}</p>
             {item.source_context && <small>{item.source_context}</small>}
-            {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer">Open supplied source</a>}
-            {item.image_url && <figure><img src={item.image_url} alt={`Attachment for ${subject.name}: ${item.image_filename || 'saved information'}`} /><figcaption>{item.image_filename} · Local attachment · not verified</figcaption></figure>}
+            {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer">Mở nguồn đã cung cấp</a>}
+            {item.image_url && <figure><img src={item.image_url} alt={`Tệp đính kèm của ${subject.name}: ${item.image_filename || 'thông tin đã lưu'}`} /><figcaption>{item.image_filename} · Tệp lưu trên thiết bị · chưa xác minh</figcaption></figure>}
           </article>)}</div>}
         </section>
-        <section className="research-subject-analysis" aria-label={`${subject.name} optional analysis`}>
-          <div><h5>Optional PO analysis</h5><p>These are your working notes. They remain separate from source-reported research and can use any section names.</p></div>
-          <div className="research-subject-analysis-starters" aria-label="Suggested optional analysis sections">
-            {['Core Loop', 'Level Design', 'Ad Placement'].map((label) => <button type="button" className="text-button" key={label} disabled={sections.some((item) => item.label.toLocaleLowerCase() === label.toLocaleLowerCase())} onClick={() => addAnalysisSection(subject, label)}>Add {label}</button>)}
+        <section className="research-subject-history" aria-label={`Cập nhật xu hướng về ${subject.name}`}>
+          <div><h5>Cập nhật xu hướng</h5><p>Những cập nhật được gắn rõ với hồ sơ này; nội dung vẫn được giữ nguyên và chưa xác minh độc lập.</p></div>
+          {profileTrendError ? <p role="alert">{profileTrendError}</p> : trendItems.length === 0 ? <p>Chưa có cập nhật xu hướng được liên kết với hồ sơ này.</p> : <div className="research-subject-history-list">{trendItems.map((item) => <article key={item.id}>
+            <div><time dateTime={item.published_on}>{new Date(`${item.published_on}T00:00:00`).toLocaleDateString('vi-VN')}</time><span>Theo nguồn cung cấp · chưa xác minh</span></div>
+            {item.source_title && <strong>{item.source_title}</strong>}
+            <p>{item.exact_claim}</p>
+            <small>{item.source_note}</small>
+            {item.source_url && <a href={item.source_url} target="_blank" rel="noopener noreferrer">Mở nguồn đã cung cấp</a>}
+            <a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=trend_update&decisionTargetId=${encodeURIComponent(item.id)}`}>Xem quyết định PO cho cập nhật này</a>
+          </article>)}</div>}
+        </section>
+        <section className="research-subject-analysis" aria-label={`Phân tích thêm về ${subject.name}`}>
+          <div><h5>Phân tích của PO (không bắt buộc)</h5><p>Đây là ghi chú làm việc của bạn, được lưu riêng với nội dung do nguồn cung cấp. Bạn có thể tự đặt tên cho từng phần.</p></div>
+          <div className="research-subject-analysis-starters" aria-label="Gợi ý các phần phân tích">
+            {['Vòng lặp cốt lõi', 'Thiết kế màn chơi', 'Vị trí quảng cáo'].map((label) => <button type="button" className="text-button" key={label} disabled={sections.some((item) => item.label.toLocaleLowerCase() === label.toLocaleLowerCase())} onClick={() => addAnalysisSection(subject, label)}>Thêm {label}</button>)}
           </div>
           <form className="research-subject-analysis-custom" onSubmit={(event) => { event.preventDefault(); addAnalysisSection(subject, customSectionLabels[subject.id] ?? ''); }}>
-            <label htmlFor={`custom-analysis-${subject.id}`}>Custom section title</label><input id={`custom-analysis-${subject.id}`} maxLength={120} value={customSectionLabels[subject.id] ?? ''} onChange={(event) => changeCustomSectionLabel(subject.id, event)} placeholder="Use a topic relevant to this subject" />
-            <button className="secondary-action" type="submit" disabled={!(customSectionLabels[subject.id] ?? '').trim()}>Add custom section</button>
+            <label htmlFor={`custom-analysis-${subject.id}`}>Tên phần tự đặt</label><input id={`custom-analysis-${subject.id}`} maxLength={120} value={customSectionLabels[subject.id] ?? ''} onChange={(event) => changeCustomSectionLabel(subject.id, event)} placeholder="Nhập chủ đề phù hợp với hồ sơ này" />
+            <button className="secondary-action" type="submit" disabled={!(customSectionLabels[subject.id] ?? '').trim()}>Thêm phần</button>
           </form>
-          {!sections.length && <p>No optional analysis sections yet.</p>}
+          {!sections.length && <p>Chưa có phần phân tích nào.</p>}
           <div className="research-subject-analysis-list">{sections.map((section) => <article key={section.key}>
-            <label>Section title<input maxLength={120} value={section.label} onChange={(event) => editAnalysisSection(subject.id, section.key, 'label', event.target.value)} /></label>
-            <label>PO analysis<textarea rows={3} maxLength={20_000} value={section.content} onChange={(event) => editAnalysisSection(subject.id, section.key, 'content', event.target.value)} placeholder={`Add your notes for ${section.label}.`} /></label>
-            <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: (current[subject.id] ?? []).filter((item) => item.key !== section.key) }))}>Remove from draft</button>
+            <label>Tên phần<input maxLength={120} value={section.label} onChange={(event) => editAnalysisSection(subject.id, section.key, 'label', event.target.value)} /></label>
+            <label>Phân tích của PO<textarea rows={3} maxLength={20_000} value={section.content} onChange={(event) => editAnalysisSection(subject.id, section.key, 'content', event.target.value)} placeholder={`Ghi chú cho phần ${section.label}.`} /></label>
+            <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: (current[subject.id] ?? []).filter((item) => item.key !== section.key) }))}>Bỏ khỏi bản nháp</button>
           </article>)}</div>
-          <div className="research-subject-analysis-actions">{hasChanges && <span>Unsaved changes</span>}
-            <button type="button" className="primary-action" disabled={!hasChanges || busy === `analysis:${subject.id}`} onClick={() => void saveAnalysis(subject)}>{busy === `analysis:${subject.id}` ? 'Saving analysis…' : 'Save PO analysis'}</button>
-            {hasChanges && <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: savedSections.map((item) => ({ ...item })) }))}>Discard draft changes</button>}
+          <div className="research-subject-analysis-actions">{hasChanges && <span>Chưa lưu thay đổi</span>}
+            <button type="button" className="primary-action" disabled={!hasChanges || busy === `analysis:${subject.id}`} onClick={() => void saveAnalysis(subject)}>{busy === `analysis:${subject.id}` ? 'Đang lưu phân tích…' : 'Lưu phân tích PO'}</button>
+            {hasChanges && <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: savedSections.map((item) => ({ ...item })) }))}>Bỏ thay đổi</button>}
           </div>
         </section>
       </section>}
     </article>;
   }
 
-  return <details className="research-subjects-panel">
-    <summary><span>Research subjects</span><small>{subjects.length} saved · reusable identities across this project</small></summary>
+  return <details className="research-subjects-panel" open={subjectsOpen} onToggle={(event) => setSubjectsOpen(event.currentTarget.open)}>
+    <summary><span>Hồ sơ sản phẩm và chủ đề</span><small>{subjects.length} hồ sơ · dùng lại trong dự án</small></summary>
     <div className="research-subjects-content">
-      <p>Names from reports and CSVs stay source-specific until you link them. Similar names are never merged automatically.</p>
+      <p>Tên trong báo cáo và tệp CSV được giữ theo từng nguồn cho đến khi bạn liên kết. Tên tương tự không bao giờ tự động bị gộp.</p>
       {error && <div className="research-alert" role="alert">{error}</div>}
       {notice && <div className="research-success" role="status">{notice}</div>}
-      {loading && !subjects.length && !sources.length ? <p role="status">Loading subjects and source identities…</p> : <>
-        <section aria-label="Saved research subjects" className="research-subject-list">
-          <h3>Saved in this project</h3>
-          {subjects.length ? subjects.map(renderSubjectProfile) : <p>No reusable subjects saved yet.</p>}
+      {loading && !subjects.length && !sources.length ? <p role="status">Đang tải hồ sơ và định danh nguồn…</p> : <>
+        <section id="project-subject-profiles" aria-label="Hồ sơ đã lưu" className="research-subject-list">
+          <h3>Hồ sơ trong dự án</h3>
+          {subjects.length ? subjects.map(renderSubjectProfile) : <p>Chưa có hồ sơ nào được lưu để dùng lại.</p>}
         </section>
-        <section id="project-benchmark-collections" aria-label="Project benchmark collections" className="research-benchmark-collections">
-          <div className="research-collections-heading"><div><h3>Benchmark collections</h3><p>Group confirmed subjects for reuse. Source reports and CSV data remain unchanged.</p></div></div>
+        <section id="project-benchmark-collections" aria-label="Bộ so sánh của dự án" className="research-benchmark-collections">
+          <div className="research-collections-heading"><div><h3>Bộ so sánh</h3><p>Nhóm các hồ sơ đã xác nhận để dùng lại. Báo cáo nguồn và dữ liệu CSV không bị thay đổi.</p></div></div>
           <form className="research-collection-create" onSubmit={(event) => { event.preventDefault(); void createCollection(); }}>
-            <label htmlFor="new-benchmark-collection">Collection name</label>
-            <input id="new-benchmark-collection" value={collectionName} onChange={(event) => setCollectionName(event.target.value)} placeholder="e.g. Products to compare" maxLength={200} />
-            <button type="submit" className="secondary-action" disabled={!collectionName.trim() || busy === 'new-collection'}>{busy === 'new-collection' ? 'Creating…' : 'Create collection'}</button>
+            <label htmlFor="new-benchmark-collection">Tên bộ so sánh</label>
+            <input id="new-benchmark-collection" value={collectionName} onChange={(event) => setCollectionName(event.target.value)} placeholder="Ví dụ: Sản phẩm cần đối chiếu" maxLength={200} />
+            <button type="submit" className="secondary-action" disabled={!collectionName.trim() || busy === 'new-collection'}>{busy === 'new-collection' ? 'Đang tạo…' : 'Tạo bộ so sánh'}</button>
           </form>
-          {!collections.length ? <p>No collections yet. Create one, then add project subjects when ready.</p> : collections.map((collection) => {
+          {!collections.length ? <p>Chưa có bộ so sánh. Tạo bộ mới rồi thêm các hồ sơ của dự án khi bạn sẵn sàng.</p> : collections.map((collection) => {
             const memberIds = new Set(collection.members.map((member) => member.subject_id));
             const availableSubjects = subjects.filter((subject) => !memberIds.has(subject.id));
             const selectedSubject = collectionSubjectDrafts[collection.id] ?? '';
-            return <article className="research-benchmark-collection" key={collection.id}>
-              <header><div><strong>{collection.name}</strong><small>{collection.members.length} subject{collection.members.length === 1 ? '' : 's'} · project collection</small>{collection.description && <p>{collection.description}</p>}<a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=collection&decisionTargetId=${encodeURIComponent(collection.id)}`}>Review PO decision for this collection</a></div></header>
+            return <article className={`research-benchmark-collection${requestedCollectionId === collection.id ? ' is-requested' : ''}`} key={collection.id}>
+              <header><div><strong>{collection.name}</strong><small>{collection.members.length} hồ sơ · thuộc dự án</small>{collection.description && <p>{collection.description}</p>}<a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=collection&decisionTargetId=${encodeURIComponent(collection.id)}`}>Xem quyết định PO cho bộ này</a></div></header>
               {collection.members.length ? <ul>{collection.members.map((member) => <li key={member.subject_id}>
-                <div><strong>{member.name}</strong><small>{member.subject_type || 'Type not specified'} · {member.source_count} linked input{member.source_count === 1 ? '' : 's'} ({member.report_source_count} reports, {member.csv_source_count} CSVs, {member.trend_update_count} trend updates)</small></div>
-                <button type="button" className="text-button" disabled={busy === `${collection.id}:${member.subject_id}`} onClick={() => void updateCollectionMember(collection, member.subject_id, false)}>Remove from collection</button>
-              </li>)}</ul> : <p>This collection is empty. Add confirmed subjects to start organizing a comparison.</p>}
+                <div><strong>{member.name}</strong><small>{member.subject_type || 'Chưa phân loại'} · {member.source_count} nguồn đã liên kết ({member.report_source_count} báo cáo, {member.csv_source_count} tệp CSV, {member.trend_update_count} cập nhật xu hướng)</small></div>
+                <button type="button" className="text-button" disabled={busy === `${collection.id}:${member.subject_id}`} onClick={() => void updateCollectionMember(collection, member.subject_id, false)}>Gỡ khỏi bộ so sánh</button>
+              </li>)}</ul> : <p>Bộ so sánh này chưa có hồ sơ. Hãy thêm các hồ sơ đã xác nhận để bắt đầu đối chiếu.</p>}
               {collection.members.length > 0 && <details className="research-collection-matrix">
-                <summary>View source-backed comparison{collection.dimensions.length ? ` · ${collection.dimensions.length} supplied dimension${collection.dimensions.length === 1 ? '' : 's'}` : ''}</summary>
-                {collection.dimensions.length ? <div className="research-collection-matrix-scroll"><table><thead><tr><th scope="col">Subject</th>{collection.dimensions.map((dimension) => <th scope="col" key={dimension.key}>{dimension.name}<small>{dimension.source_kind === 'report_entity' ? 'Report-supplied' : dimension.source_kind === 'trend_update' ? 'Source-reported updates' : 'CSV imported'}</small></th>)}</tr></thead>
+                <summary>Xem đối chiếu theo nguồn{collection.dimensions.length ? ` · ${collection.dimensions.length} khía cạnh được cung cấp` : ''}</summary>
+                {collection.dimensions.length ? <div className="research-collection-matrix-scroll"><table><thead><tr><th scope="col">Hồ sơ</th>{collection.dimensions.map((dimension) => <th scope="col" key={dimension.key}>{dimension.name}<small>{dimension.source_kind === 'report_entity' ? 'Từ báo cáo' : dimension.source_kind === 'trend_update' ? 'Cập nhật do nguồn cung cấp' : 'Nhập từ CSV'}</small></th>)}</tr></thead>
                   <tbody>{collection.members.map((member) => <tr key={member.subject_id}><th scope="row">{member.name}</th>{collection.dimensions.map((dimension) => {
                     const values = member.observations.filter((observation) => observation.dimension_key === dimension.key);
                     return <td key={dimension.key}>{values.length ? values.map((observation, index) => <div className="research-collection-observation" key={`${observation.source_name}:${index}`}>
-                      <strong>{observation.value === null || observation.value === undefined || observation.value === '' ? 'Unknown / Not provided' : String(observation.value)}{observation.unit ? ` ${observation.unit}` : ''}</strong>
-                      <small>{observation.source_name} · {observation.source_kind === 'trend_update' ? 'Source-reported · unverified' : observation.verification_status}</small>
-                      {observation.source_note && <small>Source note: {observation.source_note}</small>}
+                      <strong>{observation.value === null || observation.value === undefined || observation.value === '' ? 'Chưa có dữ liệu' : String(observation.value)}{observation.unit ? ` ${observation.unit}` : ''}</strong>
+                      <small>{observation.source_name} · {observation.source_kind === 'trend_update' ? 'Do nguồn cung cấp · chưa xác minh' : displayEvidenceStatus(observation.verification_status)}</small>
+                      {observation.source_note && <small>Ghi chú nguồn: {observation.source_note}</small>}
                       {Object.entries(observation.scope).filter(([, value]) => value !== null && value !== undefined && value !== '').map(([label, value]) => <small key={label}>{label}: {String(value)}</small>)}
-                      {observation.evidence_status && <small>Evidence: {observation.evidence_status}</small>}
-                      {observation.uncertainty && <small>Uncertainty: {observation.uncertainty}</small>}
-                      {observation.validation_reasons.length > 0 && <details className="research-collection-validation"><summary>Validation details · {observation.validation_reasons.length}</summary><ul>{observation.validation_reasons.map((reason, reasonIndex) => <li key={`${reasonIndex}:${reason}`}>{reason}</li>)}</ul></details>}
-                      {observation.evidence_references.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer">Open source</a>)}
+                      {observation.evidence_status && <small>Trạng thái chứng cứ: {displayEvidenceStatus(observation.evidence_status)}</small>}
+                      {observation.uncertainty && <small>Điểm chưa chắc chắn: {observation.uncertainty}</small>}
+                      {observation.validation_reasons.length > 0 && <details className="research-collection-validation"><summary>Lý do cần kiểm tra · {observation.validation_reasons.length}</summary><ul>{observation.validation_reasons.map((reason, reasonIndex) => <li key={`${reasonIndex}:${reason}`}>{reason}</li>)}</ul></details>}
+                      {observation.evidence_references.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer">Mở nguồn tham khảo</a>)}
                       {observation.source_locations.map((location, locationIndex) => <small key={`${locationIndex}:${location}`}>{location}</small>)}
-                    </div>) : <span className="research-collection-unknown">Unknown / Not provided</span>}</td>;
-                  })}</tr>)}</tbody></table></div> : <p>No explicit report dimensions or mapped CSV observations are available yet. Missing information stays unknown.</p>}
+                    </div>) : <span className="research-collection-unknown">Chưa có dữ liệu</span>}</td>;
+                  })}</tr>)}</tbody></table></div> : <p>Chưa có khía cạnh từ báo cáo hoặc số liệu CSV đã liên kết. Thông tin còn thiếu sẽ được để trống, không tự suy đoán.</p>}
               </details>}
               <div className="research-collection-add">
-                <label className="sr-only" htmlFor={`collection-subject-${collection.id}`}>Choose a project subject to add to {collection.name}</label>
+                <label className="sr-only" htmlFor={`collection-subject-${collection.id}`}>Chọn hồ sơ của dự án để thêm vào {collection.name}</label>
                 <select id={`collection-subject-${collection.id}`} value={selectedSubject} onChange={(event) => setCollectionSubjectDrafts((current) => ({ ...current, [collection.id]: event.target.value }))} disabled={!availableSubjects.length}>
-                  <option value="">{availableSubjects.length ? 'Choose a confirmed subject…' : 'All saved subjects are already members'}</option>
+                  <option value="">{availableSubjects.length ? 'Chọn hồ sơ đã xác nhận…' : 'Tất cả hồ sơ đã lưu đều nằm trong bộ này'}</option>
                   {availableSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
                 </select>
-                <button type="button" className="secondary-action" disabled={!selectedSubject || busy === `${collection.id}:${selectedSubject}`} onClick={() => void updateCollectionMember(collection, selectedSubject, true)}>Add subject</button>
+                <button type="button" className="secondary-action" disabled={!selectedSubject || busy === `${collection.id}:${selectedSubject}`} onClick={() => void updateCollectionMember(collection, selectedSubject, true)}>Thêm hồ sơ</button>
               </div>
             </article>;
           })}
         </section>
-        <section aria-label="Report and CSV identities" className="research-subject-sources">
-          <h3>Names found in this project’s sources</h3>
-          {!sources.length ? <p>No structured report entities or stable CSV identities are available to link.</p> : sources.map((source) => {
+        <section aria-label="Tên sản phẩm trong báo cáo và CSV" className="research-subject-sources">
+          <h3>Tên sản phẩm xuất hiện trong nguồn của dự án</h3>
+          {!sources.length ? <p>Chưa có tên sản phẩm có cấu trúc từ báo cáo hoặc CSV để liên kết.</p> : sources.map((source) => {
             const key = sourceKey(source);
             const selected = drafts[key] ?? source.mapped_subject_id ?? '';
             return <article className="research-subject-source" key={key}>
-              <div><strong>{source.source_name}</strong><small>{source.source_kind === 'report_entity' ? 'Report' : 'CSV'} · {source.context_name}</small>
-                {source.source_state === 'stale' && <small role="status">Historical link · source no longer exposes this identity</small>}
-                {source.mapped_subject_name && <small>Linked to {source.mapped_subject_name}</small>}</div>
+              <div><strong>{source.source_name}</strong><small>{source.source_kind === 'report_entity' ? 'Báo cáo' : 'CSV'} · {source.context_name}</small>
+                {source.source_state === 'stale' && <small role="status">Liên kết lịch sử · nguồn hiện không còn tên định danh này</small>}
+                {source.mapped_subject_name && <small>Đã liên kết với {source.mapped_subject_name}</small>}</div>
               {source.source_state === 'available' && <div className="research-subject-source-actions">
-                <label className="sr-only" htmlFor={`subject-target-${encodeURIComponent(key)}`}>Link {source.source_name} to a saved subject</label>
+                <label className="sr-only" htmlFor={`subject-target-${encodeURIComponent(key)}`}>Liên kết {source.source_name} với hồ sơ đã lưu</label>
                 <select id={`subject-target-${encodeURIComponent(key)}`} value={selected} disabled={busy === key || subjects.length === 0}
                   onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}>
-                  <option value="">Choose a saved subject…</option>
+                  <option value="">Chọn hồ sơ đã lưu…</option>
                   {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
                 </select>
                 {subjects.length > 0 && <button type="button" className="secondary-action" disabled={busy === key || !selected || selected === source.mapped_subject_id}
-                  onClick={() => void mapSource(source)}>{busy === key ? 'Saving…' : source.mapped_subject_id ? 'Change link' : 'Link subject'}</button>}
+                  onClick={() => void mapSource(source)}>{busy === key ? 'Đang lưu…' : source.mapped_subject_id ? 'Đổi liên kết' : 'Liên kết hồ sơ'}</button>}
                 {!source.mapped_subject_id && <button type="button" className="text-button" disabled={busy === key}
-                  onClick={() => void mapSource(source, true)}>{busy === key ? 'Creating…' : 'Create subject from this name'}</button>}
+                  onClick={() => void mapSource(source, true)}>{busy === key ? 'Đang tạo…' : 'Tạo hồ sơ từ tên này'}</button>}
               </div>}
             </article>;
           })}
-          {sourceCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>{loading ? 'Loading…' : 'Load more source identities'}</button>}
+          {sourceCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>{loading ? 'Đang tải…' : 'Tải thêm tên sản phẩm'}</button>}
         </section>
       </>}
     </div>

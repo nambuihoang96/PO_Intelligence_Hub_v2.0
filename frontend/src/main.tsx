@@ -63,18 +63,18 @@ const secondaryPages: Page[] = [
     eyebrow: 'NGHIÊN CỨU',
     title: 'Tạo dự án nghiên cứu',
     intro: 'Tất cả câu hỏi, báo cáo và dữ liệu được lưu chung trong dự án.',
-    emptyTitle: 'Project setup is not available yet',
-    emptyCopy: 'This workspace shell is ready. Project creation and plan editing are scheduled for a later task.',
+    emptyTitle: 'Chưa thể thiết lập dự án',
+    emptyCopy: 'Không gian này đã sẵn sàng. Việc tạo dự án và chỉnh sửa kế hoạch sẽ được bổ sung sau.',
   },
   {
     path: '/research/runs',
-    label: 'Lượt nghiên cứu',
+    label: 'Lịch sử nghiên cứu',
     icon: 'runs',
     eyebrow: 'NGHIÊN CỨU',
-    title: 'Lượt nghiên cứu',
-    intro: 'Track each research session and return to its results when available.',
-    emptyTitle: 'No research runs yet',
-    emptyCopy: 'Research sessions will appear here after a project has been set up.',
+    title: 'Lịch sử nghiên cứu',
+    intro: 'Xem lại các lượt nghiên cứu và mở kết quả khi đã có.',
+    emptyTitle: 'Chưa có lượt nghiên cứu',
+    emptyCopy: 'Lịch sử nghiên cứu sẽ xuất hiện sau khi bạn tạo dự án.',
   },
 ];
 
@@ -119,12 +119,12 @@ function App() {
   const dataWorkspace = projectSelected && ['data', 'opportunities'].includes(params.get('view') ?? '');
   const projectView = params.get('view');
   const pageTitle = pathname.startsWith('/reports/') ? 'Báo cáo nghiên cứu' : pathname === '/' && projectId ? 'Nhập báo cáo nghiên cứu' : pathname === '/reports' ? 'Báo cáo đã lưu' : pathname === '/tracking' ? 'Theo dõi' : pathname === '/explorer' ? 'Danh sách ứng dụng App Store' : pathname === '/compare-periods' ? 'So sánh các kỳ' : pathname === '/sources' ? runId ? 'Bằng chứng nghiên cứu' : 'Nguồn nghiên cứu' : page.path === '/research/new' ? 'Tạo dự án'
-    : page.path === '/research/runs' ? runId ? 'Lượt nghiên cứu' : 'Lượt nghiên cứu'
+    : page.path === '/research/runs' ? 'Lịch sử nghiên cứu'
       : page.path === '/sources' && runId ? 'Bằng chứng nghiên cứu' : projectSelected && projectView === 'plan' ? 'Nghiên cứu chuyên sâu' : dataWorkspace ? 'Không gian nghiên cứu' : projectSelected ? 'Tổng quan dự án' : page.title;
   const pageIntro = pathname === '/' && projectId ? 'Lưu báo cáo ChatGPT vào dự án.' : pathname === '/reports' ? 'Tìm và mở báo cáo đã lưu, tiếp tục đánh giá từ dự án liên quan.' : pathname === '/tracking' ? 'Xem các quyết định đã lưu và những công việc cần tiếp tục.' : pathname === '/explorer' ? 'Tìm ứng dụng theo tên, nền tảng và quốc gia.' : pathname === '/compare-periods' ? 'Chỉ so sánh dữ liệu CSV có cùng định nghĩa và phạm vi phù hợp.' : pathname === '/sources' ? runId ? 'Xem bằng chứng của lượt nghiên cứu đã chọn.' : 'Xem nguồn tham khảo trong nghiên cứu.' : page.path === '/research/new'
     ? 'Tạo dự án để bắt đầu nghiên cứu từ trang tổng quan.'
-    : page.path === '/research/runs' ? runId ? 'Review the selected session and open its evidence.' : 'Xem lại các lượt nghiên cứu và yêu cầu đã lưu.'
-      : page.path === '/sources' && runId ? 'Add and review manual evidence linked to this research run.'
+    : page.path === '/research/runs' ? runId ? 'Xem lại lượt nghiên cứu đã chọn và mở bằng chứng.' : 'Xem lại các lượt nghiên cứu và yêu cầu đã lưu.'
+      : page.path === '/sources' && runId ? 'Thêm và xem bằng chứng liên kết với lượt nghiên cứu này.'
         : projectSelected && projectView === 'plan' ? 'Nhập câu hỏi và phạm vi nghiên cứu cho dự án.' : dataWorkspace ? 'Lưu thông tin, đọc báo cáo và phân tích dữ liệu trong cùng dự án.' : projectSelected ? 'Báo cáo, dữ liệu và các bước tiếp theo nằm trong cùng dự án.' : page.intro;
 
   return (
@@ -133,7 +133,7 @@ function App() {
 
       <main className="main-panel">
         <header className="topbar">
-          <div className="breadcrumb"><a href="/">Workspace</a><span aria-hidden="true">/</span>{page.label}</div>
+          <div className="breadcrumb"><a href="/">Không gian làm việc</a><span aria-hidden="true">/</span>{page.label}</div>
           <div className="local-badge"><span className="badge-dot" />Chế độ cục bộ</div>
         </header>
 
@@ -160,7 +160,7 @@ function App() {
           </>}
         </div>
 
-        <footer className="page-footer"><span>PO INTELLIGENCE HUB</span><span>VERSION 2.0 · LOCAL FIRST</span></footer>
+        <footer className="page-footer"><span>PO INTELLIGENCE HUB</span><span>PHIÊN BẢN 2.0 · ƯU TIÊN LƯU CỤC BỘ</span></footer>
       </main>
     </div>
   );

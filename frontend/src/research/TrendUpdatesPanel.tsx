@@ -71,59 +71,59 @@ export function TrendUpdatesPanel({ projectId }: { projectId: string }) {
         published_on: publishedOn,
       });
       setExactClaim(''); setSourceNote(''); setSourceTitle(''); setSourceUrl(''); setPublishedOn(''); setNewSubjectName(''); setNewSubjectType('');
-      setNotice('Update saved as source-reported and unverified. A later correction can be added as a new update.');
+      setNotice('Đã lưu cập nhật theo nội dung nguồn cung cấp và đánh dấu chưa xác minh. Nếu cần đính chính, hãy thêm một cập nhật mới.');
       await load();
     } catch (cause) {
-      setError(`${createdSubjectName ? `“${createdSubjectName}” is saved as a subject. ` : ''}${cause instanceof Error ? cause.message : 'Could not save this update. Your draft is still here.'}`);
+      setError(`${createdSubjectName ? `Đã lưu hồ sơ “${createdSubjectName}”. ` : ''}${cause instanceof Error ? cause.message : 'Không thể lưu cập nhật này. Bản nháp vẫn còn.'}`);
     } finally { savingRef.current = false; setSaving(false); }
   }
 
-  return <section id="project-trend-updates" className="research-panel trend-updates-panel" aria-label="Project trend updates">
-    <header className="trend-updates-heading"><div><span className="state-label">PROJECT INPUT</span><h3>Trend updates</h3>
-      <p>Save an exact claim with its source context. The app does not fetch or verify links, infer measurements, or overwrite earlier updates.</p></div></header>
+  return <section id="project-trend-updates" className="research-panel trend-updates-panel" aria-label="Cập nhật xu hướng của dự án">
+    <header className="trend-updates-heading"><div><span className="state-label">GHI NHẬN THÔNG TIN</span><h3>Cập nhật xu hướng</h3>
+      <p>Lưu nguyên văn quan sát kèm bối cảnh nguồn. Ứng dụng không tự mở hoặc xác minh liên kết, suy ra số liệu hay ghi đè cập nhật trước đó.</p></div></header>
     {error && <div role="alert" className="research-alert">{error}</div>}
     {notice && <div role="status" className="research-success">{notice}</div>}
     <form className="trend-update-form" onSubmit={(event) => void saveUpdate(event)}>
-      <div className="trend-update-subject-choice" role="group" aria-label="Product or topic for this update">
-        <label className={`trend-update-subject-option${subjectMode === 'new' ? ' selected' : ''}`}><input type="radio" name="trend-subject-mode" checked={subjectMode === 'new'} onChange={() => setSubjectMode('new')} /><span><strong>Create a new product or topic</strong><small>Use this when the subject is not in the list yet.</small></span></label>
-        <label className={`trend-update-subject-option${subjectMode === 'existing' ? ' selected' : ''}`}><input type="radio" name="trend-subject-mode" checked={subjectMode === 'existing'} disabled={subjects.length === 0} onChange={() => setSubjectMode('existing')} /><span><strong>Use a saved product or topic</strong><small>{subjects.length ? 'Keep this update with an existing subject.' : 'Available after a subject has been created.'}</small></span></label>
+      <div className="trend-update-subject-choice" role="group" aria-label="Sản phẩm hoặc chủ đề của cập nhật này">
+        <label className={`trend-update-subject-option${subjectMode === 'new' ? ' selected' : ''}`}><input type="radio" name="trend-subject-mode" checked={subjectMode === 'new'} onChange={() => setSubjectMode('new')} /><span><strong>Tạo hồ sơ sản phẩm hoặc chủ đề</strong><small>Dùng khi hồ sơ này chưa có trong danh sách.</small></span></label>
+        <label className={`trend-update-subject-option${subjectMode === 'existing' ? ' selected' : ''}`}><input type="radio" name="trend-subject-mode" checked={subjectMode === 'existing'} disabled={subjects.length === 0} onChange={() => setSubjectMode('existing')} /><span><strong>Dùng hồ sơ đã lưu</strong><small>{subjects.length ? 'Lưu cập nhật cùng hồ sơ hiện có.' : 'Có thể dùng sau khi tạo hồ sơ.'}</small></span></label>
       </div>
       {subjectMode === 'new' ? <div className="trend-update-form-grid trend-update-new-subject">
-        <label>Product or topic name <input required maxLength={500} value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="For example, a game, app, or market topic" /></label>
-        <label>Type <span className="optional-label">Optional</span><input maxLength={120} value={newSubjectType} onChange={(event) => setNewSubjectType(event.target.value)} placeholder="Use your own words" /></label>
+        <label>Tên sản phẩm hoặc chủ đề <input required maxLength={500} value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="Ví dụ: trò chơi, ứng dụng hoặc chủ đề thị trường" /></label>
+        <label>Loại hồ sơ <span className="optional-label">Không bắt buộc</span><input maxLength={120} value={newSubjectType} onChange={(event) => setNewSubjectType(event.target.value)} placeholder="Mô tả theo cách của bạn" /></label>
       </div> : <div className="trend-update-form-grid">
-        <label>Product or topic <select required value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
-          <option value="">Choose a saved product or topic…</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+        <label>Sản phẩm hoặc chủ đề <select required value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
+          <option value="">Chọn hồ sơ đã lưu…</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
         </select></label>
       </div>}
       <div className="trend-update-form-grid">
-        <label>Benchmark collection <span className="optional-label">Optional</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
-          <option value="">Not linked to a collection</option>{collections.filter((collection) => collection.members.some((member) => member.subject_id === (subjectMode === 'existing' ? subjectId : ''))).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+        <label>Bộ so sánh <span className="optional-label">Không bắt buộc</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+          <option value="">Chưa liên kết bộ so sánh</option>{collections.filter((collection) => collection.members.some((member) => member.subject_id === (subjectMode === 'existing' ? subjectId : ''))).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
         </select></label>
-        <label>Source publication date <input type="date" required value={publishedOn} onChange={(event) => setPublishedOn(event.target.value)} /></label>
+        <label>Ngày nguồn được đăng <input type="date" required value={publishedOn} onChange={(event) => setPublishedOn(event.target.value)} /></label>
       </div>
-      <label>What did you observe? <textarea required maxLength={20000} rows={3} value={exactClaim} onChange={(event) => setExactClaim(event.target.value)} placeholder="Record the observation as supplied. Do not add an interpretation." /></label>
-      <label>Where did you see it? <textarea required maxLength={10000} rows={2} value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Add context about where this information came from." /></label>
-      <details className="trend-update-source-details"><summary>More source details</summary><div className="trend-update-source-detail-grid">
-        <label>Source title <span className="optional-label">Optional</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label>
-        <label>Source link <span className="optional-label">Optional</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
+      <label>Bạn đã quan sát thấy gì? <textarea required maxLength={20000} rows={3} value={exactClaim} onChange={(event) => setExactClaim(event.target.value)} placeholder="Ghi lại nguyên văn thông tin được cung cấp, không thêm diễn giải." /></label>
+      <label>Bạn thấy thông tin ở đâu? <textarea required maxLength={10000} rows={2} value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Mô tả bối cảnh và nơi bạn tìm thấy thông tin." /></label>
+      <details className="trend-update-source-details"><summary>Thêm chi tiết nguồn</summary><div className="trend-update-source-detail-grid">
+        <label>Tên nguồn <span className="optional-label">Không bắt buộc</span><input maxLength={500} value={sourceTitle} onChange={(event) => setSourceTitle(event.target.value)} /></label>
+        <label>Liên kết nguồn <span className="optional-label">Không bắt buộc</span><input type="url" maxLength={2048} placeholder="https://…" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
       </div></details>
-      <div className="trend-update-form-actions"><small>Saved updates are append-only and remain unverified until independently checked.</small>
-        <button type="submit" className="primary-action" disabled={saving || (subjectMode === 'existing' && !subjects.length)}>{saving ? 'Saving update…' : 'Save trend update'}</button>
+      <div className="trend-update-form-actions"><small>Cập nhật đã lưu không bị ghi đè và vẫn ở trạng thái chưa xác minh cho đến khi được kiểm tra độc lập.</small>
+        <button type="submit" className="primary-action" disabled={saving || (subjectMode === 'existing' && !subjects.length)}>{saving ? 'Đang lưu cập nhật…' : 'Lưu cập nhật xu hướng'}</button>
       </div>
     </form>
-    <div className="trend-update-history"><h4>Saved updates</h4>
-      {loading && <p role="status">Loading updates…</p>}
-      {!loading && updates.length === 0 && <p>No updates saved for this project yet.</p>}
+    <div className="trend-update-history"><h4>Cập nhật đã lưu</h4>
+      {loading && <p role="status">Đang tải cập nhật…</p>}
+      {!loading && updates.length === 0 && <p>Dự án chưa có cập nhật nào.</p>}
       {updates.map((update) => <article className="trend-update-item" key={update.id}>
-        <div className="trend-update-meta"><strong>{update.subject_name}</strong><span>{update.published_on}</span><span>Source-reported · unverified</span>{update.collection_name && <span>{update.collection_name}</span>}</div>
+        <div className="trend-update-meta"><strong>{update.subject_name}</strong><span>{update.published_on}</span><span>Theo nguồn cung cấp · chưa xác minh</span>{update.collection_name && <span>{update.collection_name}</span>}</div>
         <p className="trend-update-claim">{update.exact_claim}</p>
         {update.source_title && <p className="trend-update-source-title">{update.source_title}</p>}
         <p className="trend-update-source-note">{update.source_note}</p>
-        {update.source_url && <a href={update.source_url} target="_blank" rel="noopener noreferrer">Open supplied source link</a>}
-        <a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=trend_update&decisionTargetId=${encodeURIComponent(update.id)}`}>Review PO decision</a>
+        {update.source_url && <a href={update.source_url} target="_blank" rel="noopener noreferrer">Mở liên kết nguồn đã cung cấp</a>}
+        <a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=trend_update&decisionTargetId=${encodeURIComponent(update.id)}`}>Xem quyết định PO</a>
       </article>)}
-      {nextCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>Load more updates</button>}
+      {nextCursor && <button type="button" className="secondary-action" disabled={loading} onClick={() => void load(true)}>Tải thêm cập nhật</button>}
     </div>
   </section>;
 }

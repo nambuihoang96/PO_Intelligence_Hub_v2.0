@@ -52,20 +52,21 @@ describe('OpportunityReview', () => {
 
   it('shows source measurements as unverified and does not auto-attach similarly named report findings', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
+    expect(await screen.findByRole('heading', { name: 'Theo dõi quyết định sản phẩm' })).toBeTruthy();
     expect(await screen.findByText('Product Alpha')).toBeTruthy();
-    expect(await screen.findByLabelText('Attach Downloads source row 2')).toBeTruthy();
-    expect(screen.getByText(/row 2.*unverified/)).toBeTruthy();
+    expect(await screen.findByLabelText('Gắn Downloads ở dòng dữ liệu 2')).toBeTruthy();
+    expect(screen.getByText(/dòng dữ liệu 2.*chưa xác minh/i)).toBeTruthy();
     expect(screen.queryByText('Users value simplicity')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Research report'), { target: { value: 'report-1' } });
+    fireEvent.change(screen.getByLabelText('Báo cáo nghiên cứu'), { target: { value: 'report-1' } });
     expect(await screen.findByText('Users value simplicity')).toBeTruthy();
-    expect(screen.getByText(/Reports are not matched by product name/i)).toBeTruthy();
+    expect(screen.getByText(/Không tự ghép báo cáo theo tên sản phẩm/)).toBeTruthy();
   });
 
   it('opens a report finding PO decision from its explicit contextual link', async () => {
     const result = structuredClone(workspace);
     result.candidates.push({
       candidate_id: 'context:report-finding', name: 'Users value simplicity', source_entity_id: null,
-      dataset_id: null, dataset_content_sha256: null, dataset_filename: 'Research report',
+      dataset_id: null, dataset_content_sha256: null, dataset_filename: 'Báo cáo nghiên cứu',
       selection_reason: 'How do users choose?', target_kind: 'report_finding',
       decision_target: { kind: 'report_finding', target_id: 'finding-1', report_id: 'report-1',
         report_content_sha256: 'b'.repeat(64), item_key: 'finding-1' },
@@ -76,15 +77,15 @@ describe('OpportunityReview', () => {
     window.history.replaceState({}, '', '/research?projectId=workspace-1&view=opportunities&decisionKind=report_finding&decisionReportId=report-1&decisionReportHash=' + 'b'.repeat(64) + '&decisionItemKey=finding-1');
     render(<OpportunityReview projectId="workspace-1" />);
     expect(await screen.findByRole('heading', { name: 'Users value simplicity' })).toBeTruthy();
-    expect(screen.getByText('REPORT FINDING')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Assess this finding directly.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    expect(screen.getByText('PHÁT HIỆN TRONG BÁO CÁO')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Assess this finding directly.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(1));
     expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].decision_target).toEqual(result.candidates[1].decision_target);
     window.history.replaceState({}, '', '/');
   });
 
-  it('shows prior PO decision versions without exposing raw decision JSON', async () => {
+  it('shows prior Quyết định của PO versions without exposing raw decision JSON', async () => {
     const result = structuredClone(workspace);
     result.candidates[0].decision = {
       candidate_id: result.candidates[0].candidate_id, expected_revision: 2, revision: 2,
@@ -92,14 +93,14 @@ describe('OpportunityReview', () => {
       decision_status: 'investigate', rationale: 'Current rationale.', supporting_evidence: [], contradictory_evidence: [],
       open_questions: [], assessments: [], priority: 'medium', review_date: null, next_action: 'Current action.',
       revision_history: [{ revision: 1, saved_at: '2026-10-26T10:00:00Z', snapshot: {
-        rationale: 'Earlier PO rationale.', decision_status: 'hold', next_action: 'Review source context.' } }],
+        rationale: 'Earlier Lý do / đánh giá của PO.', decision_status: 'hold', next_action: 'Review source context.' } }],
     };
     vi.mocked(researchApi.getOpportunities).mockResolvedValue(result);
     render(<OpportunityReview projectId="workspace-1" />);
     expect(await screen.findByDisplayValue('Current rationale.')).toBeTruthy();
-    fireEvent.click(screen.getByText('Previous decision versions (1)'));
-    expect(screen.getByText('Earlier PO rationale.')).toBeTruthy();
-    expect(screen.getByText(/Decision: Hold · Next action: Review source context./)).toBeTruthy();
+    fireEvent.click(screen.getByText('Các phiên bản quyết định trước (1)'));
+    expect(screen.getByText('Earlier Lý do / đánh giá của PO.')).toBeTruthy();
+    expect(screen.getByText(/Quyết định: Tạm hoãn · Việc tiếp theo: Review source context./)).toBeTruthy();
     expect(screen.queryByText(/\{"candidate_id"/)).toBeNull();
   });
 
@@ -113,20 +114,20 @@ describe('OpportunityReview', () => {
       contradictory_evidence: [], open_questions: [], assessments: [], priority: 'medium', review_date: null, next_action: '' };
     vi.mocked(researchApi.getOpportunities).mockResolvedValue({ ...structuredClone(workspace), candidates: [candidate] });
     render(<OpportunityReview projectId="workspace-1" />);
-    expect(await screen.findByLabelText('Attach Downloads source row 2')).toHaveProperty('checked', true);
-    expect(screen.getByText(/Selected evidence \(1 supporting · 0 contradictory\)/)).toBeTruthy();
+    expect(await screen.findByLabelText('Gắn Downloads ở dòng dữ liệu 2')).toHaveProperty('checked', true);
+    expect(screen.getByText(/Bằng chứng đã chọn \(1 ủng hộ · 0 trái chiều\)/)).toBeTruthy();
   });
 
   it('saves explicit PO judgment, priority, follow-up and attached evidence', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.click(screen.getByLabelText('Attach Downloads source row 2'));
-    fireEvent.change(screen.getByLabelText('PO decision'), { target: { value: 'investigate' } });
-    fireEvent.change(screen.getByLabelText('Set PO priority'), { target: { value: 'high' } });
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Validate retention before prioritizing.' } });
-    fireEvent.change(screen.getByLabelText('Next action'), { target: { value: 'Request a retention study.' } });
-    fireEvent.change(screen.getByLabelText('Open questions'), { target: { value: 'What is D7 retention?' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.click(screen.getByLabelText('Gắn Downloads ở dòng dữ liệu 2'));
+    fireEvent.change(screen.getByLabelText('Quyết định của PO'), { target: { value: 'investigate' } });
+    fireEvent.change(screen.getByLabelText('Chọn mức ưu tiên'), { target: { value: 'high' } });
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Validate retention before prioritizing.' } });
+    fireEvent.change(screen.getByLabelText('Việc tiếp theo'), { target: { value: 'Request a retention study.' } });
+    fireEvent.change(screen.getByLabelText('Câu hỏi còn mở'), { target: { value: 'What is D7 retention?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(1));
     const submitted = vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1];
     expect(submitted.decision_status).toBe('investigate');
@@ -136,17 +137,17 @@ describe('OpportunityReview', () => {
     expect(submitted.open_questions).toEqual(['What is D7 retention?']);
     expect(submitted.supporting_evidence).toEqual([{ kind: 'quantitative', dataset_id: 'dataset-1',
       source_entity_id: 'provider:alpha', source_row_number: 2, metric_id: 'downloads_absolute' }]);
-    expect(await screen.findByText('Decision saved.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu quyết định.')).toBeTruthy();
   });
 
   it('saves repeatedly without echoing response-only metadata into the strict request contract', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'First saved judgment.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
-    await screen.findByText('Decision saved.');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Updated saved judgment.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'First saved judgment.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
+    await screen.findByText('Đã lưu quyết định.');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Updated saved judgment.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(2));
     const secondPayload = vi.mocked(researchApi.saveOpportunityDecision).mock.calls[1][1] as Record<string, unknown>;
     expect(secondPayload.expected_revision).toBe(1);
@@ -155,7 +156,7 @@ describe('OpportunityReview', () => {
     expect(secondPayload).not.toHaveProperty('dataset_filename');
     expect(secondPayload).not.toHaveProperty('updated_at');
     expect(secondPayload).not.toHaveProperty('revision');
-    expect(await screen.findByText('Decision saved.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu quyết định.')).toBeTruthy();
   });
 
   it('keeps stale historical judgments visible without presenting stale measurements', async () => {
@@ -168,7 +169,7 @@ describe('OpportunityReview', () => {
           open_questions: [], assessments: [], priority: 'medium', review_date: null, next_action: '' } }],
     });
     render(<OpportunityReview projectId="workspace-1" />);
-    expect((await screen.findByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('Historical note');
+    expect((await screen.findByLabelText('Lý do / đánh giá của PO') as HTMLTextAreaElement).value).toBe('Historical note');
     expect(screen.getByText(/Dataset hash mismatch/)).toBeTruthy();
     expect(screen.queryByText(/Downloads: 1200 downloads/)).toBeNull();
   });
@@ -176,44 +177,44 @@ describe('OpportunityReview', () => {
   it('keeps draft text after a failed save and allows an explicit retry', async () => {
     vi.mocked(researchApi.saveOpportunityDecision).mockRejectedValueOnce(new Error('Network unavailable'));
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Keep this draft after the failure.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
-    expect(await screen.findByText('Save failed')).toBeTruthy();
-    expect((screen.getByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('Keep this draft after the failure.');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Keep this draft after the failure.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
+    expect(await screen.findByText('Lưu không thành công')).toBeTruthy();
+    expect((screen.getByLabelText('Lý do / đánh giá của PO') as HTMLTextAreaElement).value).toBe('Keep this draft after the failure.');
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lưu lại' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText('Decision saved.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu quyết định.')).toBeTruthy();
   });
 
   it('protects an unsaved draft when switching candidates, then reopens the saved decision', async () => {
     const two = workspaceWithTwoCandidates();
     vi.mocked(researchApi.getOpportunities).mockResolvedValue(two);
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Keep this decision rationale.' } });
-    fireEvent.change(screen.getByLabelText('Next action'), { target: { value: 'Ask for comparable retention data.' } });
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Keep this decision rationale.' } });
+    fireEvent.change(screen.getByLabelText('Việc tiếp theo'), { target: { value: 'Ask for comparable retention data.' } });
     fireEvent.click(screen.getByText('Product Beta').closest('button')!);
-    expect(await screen.findByRole('alertdialog', { name: 'Unsaved PO changes' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }));
-    expect(screen.getByLabelText('PO rationale')).toHaveProperty('value', 'Keep this decision rationale.');
+    expect(await screen.findByRole('alertdialog', { name: 'Thay đổi chưa lưu' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }));
+    expect(screen.getByLabelText('Lý do / đánh giá của PO')).toHaveProperty('value', 'Keep this decision rationale.');
     fireEvent.click(screen.getByText('Product Beta').closest('button')!);
-    fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
-    await screen.findByRole('region', { name: 'Review Product Beta' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu và tiếp tục' }));
+    await screen.findByRole('region', { name: 'Xem xét Product Beta' });
     expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].rationale).toBe('Keep this decision rationale.');
     fireEvent.click(screen.getByText('Product Alpha').closest('button')!);
-    expect((await screen.findByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('Keep this decision rationale.');
-    expect((screen.getByLabelText('Next action') as HTMLTextAreaElement).value).toBe('Ask for comparable retention data.');
+    expect((await screen.findByLabelText('Lý do / đánh giá của PO') as HTMLTextAreaElement).value).toBe('Keep this decision rationale.');
+    expect((screen.getByLabelText('Việc tiếp theo') as HTMLTextAreaElement).value).toBe('Ask for comparable retention data.');
   });
 
   it('lets the PO explicitly discard a draft before changing candidates', async () => {
     vi.mocked(researchApi.getOpportunities).mockResolvedValue(workspaceWithTwoCandidates());
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Discard this draft.' } });
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Discard this draft.' } });
     fireEvent.click(screen.getByText('Product Beta').closest('button')!);
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard changes' }));
-    await screen.findByRole('region', { name: 'Review Product Beta' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Bỏ thay đổi' }));
+    await screen.findByRole('region', { name: 'Xem xét Product Beta' });
     expect(researchApi.saveOpportunityDecision).not.toHaveBeenCalled();
   });
 
@@ -224,35 +225,35 @@ describe('OpportunityReview', () => {
       resolveSave = () => resolve(savedWorkspace(payload));
     }));
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'First submitted draft.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'Newer edit after save began.' } });
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'First submitted draft.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'Newer edit after save began.' } });
     resolveSave();
-    await waitFor(() => expect(screen.getByText('Unsaved changes')).toBeTruthy());
-    expect((screen.getByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('Newer edit after save began.');
+    await waitFor(() => expect(screen.getByText('Chưa lưu thay đổi')).toBeTruthy());
+    expect((screen.getByLabelText('Lý do / đánh giá của PO') as HTMLTextAreaElement).value).toBe('Newer edit after save began.');
   });
 
   it('preserves the draft and explains a revision conflict', async () => {
     vi.mocked(researchApi.saveOpportunityDecision).mockRejectedValueOnce(new Error('Decision changed in another session. Refresh and review the saved version.'));
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('PO rationale'), { target: { value: 'My conflicting edit stays here.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'My conflicting edit stays here.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/changed in another session/i);
-    expect((screen.getByLabelText('PO rationale') as HTMLTextAreaElement).value).toBe('My conflicting edit stays here.');
+    expect((screen.getByLabelText('Lý do / đánh giá của PO') as HTMLTextAreaElement).value).toBe('My conflicting edit stays here.');
   });
 
   it('requires evidence to be attached to an observed fact assessment and saves its exact reference', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
-    fireEvent.change(screen.getByLabelText('Suggested assessment dimension'), { target: { value: 'Market signal' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-    fireEvent.change(screen.getByLabelText('Market signal evidence type'), { target: { value: 'observed_fact' } });
-    expect(screen.getByText(/Observed facts need supporting evidence attached/i)).toBeTruthy();
-    fireEvent.click(screen.getByText(/Attach evidence to this assessment/));
-    fireEvent.click(screen.getByLabelText('Market signal: Downloads · source row 2'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save PO decision' }));
+    await screen.findByLabelText('Lý do / đánh giá của PO');
+    fireEvent.change(screen.getByLabelText('Khía cạnh đánh giá gợi ý'), { target: { value: 'Market signal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
+    fireEvent.change(screen.getByLabelText('Tín hiệu thị trường loại bằng chứng'), { target: { value: 'observed_fact' } });
+    expect(screen.getByText(/Sự kiện đã quan sát cần có bằng chứng hỗ trợ được gắn/i)).toBeTruthy();
+    fireEvent.click(screen.getByText(/Gắn bằng chứng vào đánh giá này/));
+    fireEvent.click(screen.getByLabelText('Tín hiệu thị trường: Downloads · dòng dữ liệu 2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
     await waitFor(() => expect(researchApi.saveOpportunityDecision).toHaveBeenCalledTimes(1));
     expect(vi.mocked(researchApi.saveOpportunityDecision).mock.calls[0][1].assessments[0].evidence_refs).toEqual([
       { kind: 'quantitative', dataset_id: 'dataset-1', source_entity_id: 'provider:alpha', source_row_number: 2, metric_id: 'downloads_absolute' },
@@ -265,8 +266,8 @@ describe('OpportunityReview', () => {
       value_precision: 'approximate', reported_value_text: 'approximately zero' };
     vi.mocked(researchApi.getOpportunities).mockResolvedValue(approx);
     render(<OpportunityReview projectId="workspace-1" />);
-    await screen.findByLabelText('PO rationale');
+    await screen.findByLabelText('Lý do / đánh giá của PO');
     expect(screen.getByText(/Downloads: 0 downloads/)).toBeTruthy();
-    expect(screen.getByText(/Approximate value · as reported: approximately zero/)).toBeTruthy();
+    expect(screen.getByText(/Giá trị ước tính.*approximately zero/)).toBeTruthy();
   });
 });
