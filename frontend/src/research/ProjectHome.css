@@ -69,16 +69,3 @@
 @container (max-width: 700px) { .project-home-action-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) { .project-home-content-grid { grid-template-columns: minmax(0, 1fr); } .project-home-header { align-items: flex-start; flex-direction: column; gap: 12px; } .project-home-action-grid { grid-template-columns: minmax(0, 1fr); } .project-home-action { min-height: 78px; } .project-home-next-step { align-items: stretch; flex-direction: column; } .project-home-decision-step { display: grid; grid-template-columns: minmax(0, 1fr); } .project-home-decision-step > .project-home-next-button { grid-column: 1; justify-self: stretch; } .project-home-next-button { width: 100%; } }
 @media (max-width: 480px) { .project-home { gap: 15px; } .project-home-section { padding: 14px; } .project-home-section-heading { align-items: flex-start; } .project-home-report, .project-home-activity-row { grid-template-columns: 32px minmax(0, 1fr) 16px; } .project-home-report .project-home-date, .project-home-activity-row time { display: none; } .project-home-file-mark, .project-home-collection-mark { width: 30px; height: 30px; } .project-home-row-copy strong { white-space: normal; } }
-
-/* Peachy Studio scope: keep approved warm navigation on Project Home and Report Reader. */
-body:has(.project-home) .sidebar, body:has(.report-viewer) .sidebar { background: #fff7f3; color: var(--peachy-ink); border-right: 1px solid var(--peachy-line); }
-body:has(.project-home) .sidebar .brand-copy small, body:has(.report-viewer) .sidebar .brand-copy small, body:has(.project-home) .sidebar .nav-label, body:has(.report-viewer) .sidebar .nav-label, body:has(.project-home) .sidebar .sidebar-footer, body:has(.report-viewer) .sidebar .sidebar-footer { color: #89777b; }
-body:has(.project-home) .sidebar .nav-item, body:has(.report-viewer) .sidebar .nav-item { color: #4e4145; }
-body:has(.project-home) .sidebar .nav-item:hover, body:has(.report-viewer) .sidebar .nav-item:hover { background: #fff0e9; color: #6e332e; }
-body:has(.project-home) .sidebar .nav-item.active, body:has(.report-viewer) .sidebar .nav-item.active { background: #ffe5dc; color: #8d3d32; }
-body:has(.project-home) .sidebar .nav-icon, body:has(.report-viewer) .sidebar .nav-icon { color: var(--peachy-accent); }
-
-body:has(.project-home) .main-panel, body:has(.report-viewer) .main-panel { background: #fffaf7; }
-body:has(.report-viewer) .report-viewer { color: var(--peachy-ink); }
-body:has(.report-viewer) .report-viewer .research-panel { border-color: var(--peachy-line); }
-body:has(.report-viewer) .report-viewer .results-tabs { background: #fff; border-color: var(--peachy-line); }
