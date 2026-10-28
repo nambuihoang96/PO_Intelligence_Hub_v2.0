@@ -514,5 +514,6 @@ User rejected existing 15195 UX and asked for direct code changes rather than ad
 - **Screenshots:** real local app captures saved under `.bangiao/screenshots/g1-findings-entity-ux/`; includes single/plural Findings and Entity desktop/mobile, zero-structured text-only desktop/mobile, contextual Benchmark, and PO decision after save/reopen.
 - **Automated verification:** frontend 26 files / 230 tests PASS; TypeScript PASS; production build PASS with existing ~627 kB JS chunk advisory. Backend tests not rerun because backend/API/schema are unchanged. `git diff --check` is run as part of final staging/commit verification.
 - **Handoff:** `.bangiao/G1-FINDINGS-ENTITY-UX-ROUND.md`.
+- **Implementation commit:** `f3fdfe3` (`fix: refine findings and entity result workflows`).
 - **Status:** this G1-02 round is `DEV_DONE / TECHNICAL BROWSER UAT PASS / OWNER REVIEW PENDING`. Do not infer product acceptance. G1-01 and G1-03 remain `REWORK / PRODUCT NEEDS FIX`; overall G1 is not accepted.
 - **Next priority cursor:** G3 Data Analysis, beginning with outstanding exact desktop/390px visual UAT for the already implemented G3-06 Subject Profile/analysis workflow. G3-07 remains blocked by its G4 dependency. No G3 implementation started in this bounded round.

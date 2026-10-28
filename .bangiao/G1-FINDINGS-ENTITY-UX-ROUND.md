@@ -81,4 +81,4 @@ The supplied Peachy references informed the existing report-shell styling. This 
 - `.bangiao/G1-FINDINGS-ENTITY-UX-ROUND.md`
 - `.bangiao/screenshots/g1-findings-entity-ux/` (real Chrome captures listed above)
 
-Implementation commit SHA: pending commit.
+Implementation commit SHA (code and screenshot commit): `f3fdfe3`.
