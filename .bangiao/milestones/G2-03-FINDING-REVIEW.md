@@ -21,3 +21,9 @@ Verification: 26 frontend test files / 220 tests PASS, TypeScript PASS, producti
 - **Decision:** `TECHNICAL PASS` for the finding slice; broader G2-03 remains IN PROGRESS.
 
 Files: `frontend/src/research/OpportunityReview.tsx`, its test, Recovery Board and browser evidence. Commit: see task branch history containing this handoff.
+
+## Additional subject and trend QA
+
+After the finding slice, browser UAT also saved a separate subject decision (`Tìm hiểu thêm`) and an explicitly labelled synthetic trend-update decision (`Tạm hoãn`) in the same isolated project. Both appeared separately in Tracking and reopened with target, rationale and next action intact after refresh. The finding decision remained separate. [Trend decision](../screenshots/g2-03/trend-update-decision.jpg) · [Tracking with all three](../screenshots/g2-03/tracking-three-targets.jpg).
+
+Legacy preservation and revision-conflict behavior still require applicable review; these synthetic checks do not confer owner product acceptance.
