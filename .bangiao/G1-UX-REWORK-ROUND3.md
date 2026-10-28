@@ -93,4 +93,4 @@ Application: `http://127.0.0.1:15310` with its paired API on `15311`; QA databas
 2. Repeat visual/product review with a genuine structured report when one is available in QA.
 3. Existing Vite bundle-size advisory remains.
 
-**Implementation commit:** `765b7a376d3709e6c24f481fee074b2b434f7669`.
+**Implementation commit:** `379cf13d204a327faaf6145d997bc9448217e17a`.

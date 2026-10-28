@@ -451,7 +451,7 @@ User rejected existing 15195 UX and asked for direct code changes rather than ad
 - **Data safety:** QA-only report fixture and isolated database; no production SQLite, report content, PO notes, or benchmark state changed.
 - **Product Acceptance:** PO goal: return to research results from a coherent project workspace. Journey: Research Home → Project Home → saved report → finding/evidence or original report → same Project. Automated work keeps existing report/project identity and presents only report-supplied content. Expected result: three clear Project actions and a report-reading layout with evidence and PO context. Remaining friction: structured verification uses only a synthetic fixture; the owner has not accepted the visual result. Verification: screenshots at both requested viewport sizes, actual browser routes/tabs/evidence and 227 frontend tests plus typecheck/build. **Decision: TECHNICAL PASS / PRODUCT REVIEW PENDING.**
 - **Current status:** `DEV_DONE / READY_FOR_OWNER` for this visual rework; G1-01/G1-02/G1-03 remain `REWORK / PRODUCT NEEDS FIX` until explicit owner acceptance. Do not propagate the design further or claim Product Pass based on functional UAT.
-- **Implementation commit:** `765b7a376d3709e6c24f481fee074b2b434f7669` (`fix(g1): rework project and report UX round 3`).
+- **Implementation commit:** `379cf13d204a327faaf6145d997bc9448217e17a` (`fix(g1): rework project and report UX round 3`).
 
 ### Mode B next selection — G3-05 image evidence browser upload — 2026-10-28
 
