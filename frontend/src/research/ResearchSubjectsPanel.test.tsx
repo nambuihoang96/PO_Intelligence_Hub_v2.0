@@ -164,16 +164,43 @@ describe('ResearchSubjectsPanel', () => {
     expect(poDecisionLink.getAttribute('href')).toContain('decisionKind=subject');
     expect(poDecisionLink.getAttribute('href')).toContain('decisionTargetId=subject-1');
     fireEvent.change(screen.getByDisplayValue('Existing PO note.'), { target: { value: 'Updated PO note, still not source verified.' } });
-    fireEvent.change(screen.getByLabelText('Tên phần tự đặt'), { target: { value: 'Accessibility' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm phần' }));
-    fireEvent.change(screen.getAllByLabelText('Phân tích của PO')[1], { target: { value: 'Check keyboard navigation.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu phân tích PO' }));
+    fireEvent.click(screen.getByText(/Ghi chú phân tích khác/));
+    fireEvent.change(screen.getByLabelText('Tên ghi chú mới'), { target: { value: 'Accessibility' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ghi chú' }));
+    fireEvent.change(screen.getAllByLabelText('Nội dung')[1], { target: { value: 'Check keyboard navigation.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu ghi chú hồ sơ' }));
     await waitFor(() => expect(update).toHaveBeenCalledWith('project-1', saved.id, { analysis_sections: updated.analysis_sections }));
-    expect(await screen.findByText('Đã lưu phần phân tích. Đây là ghi chú của bạn, chưa được xác minh độc lập.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu ghi chú hồ sơ. Đây là nội dung của bạn, chưa được xác minh độc lập.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Đóng hồ sơ' }));
     fireEvent.click(screen.getByRole('button', { name: 'Mở hồ sơ' }));
     expect(screen.getByDisplayValue('Updated PO note, still not source verified.')).toBeTruthy();
     expect(screen.getByDisplayValue('Check keyboard navigation.')).toBeTruthy();
+  });
+
+  it('saves follow-up research questions as PO notes and preserves existing analysis sections', async () => {
+    const saved = { ...subject(), analysis_sections: [{ key: 'custom-1', label: 'Accessibility', content: 'Keep large text legible.' }] };
+    const updated = { ...saved, analysis_sections: [
+      ...saved.analysis_sections,
+      { key: 'follow-up-questions-subject-1', label: 'Câu hỏi nghiên cứu tiếp theo', content: 'Which onboarding step causes the most confusion?' },
+    ] };
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValueOnce(page([saved])).mockResolvedValue(page([updated]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    emptyCollections();
+    const update = vi.spyOn(researchApi, 'updateSubject').mockResolvedValue(updated);
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+    fireEvent.click(screen.getByText('Hồ sơ sản phẩm và chủ đề'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở hồ sơ' }));
+    const followUp = screen.getByLabelText('Bạn muốn tìm hiểu thêm điều gì?');
+    fireEvent.change(followUp, { target: { value: 'Which onboarding step causes the most confusion?' } });
+    expect(screen.getByText('Chưa lưu thay đổi')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu ghi chú hồ sơ' }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith('project-1', saved.id, { analysis_sections: updated.analysis_sections }));
+    expect(await screen.findByText('Đã lưu ghi chú hồ sơ. Đây là nội dung của bạn, chưa được xác minh độc lập.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng hồ sơ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mở hồ sơ' }));
+    expect(screen.getByDisplayValue('Which onboarding step causes the most confusion?')).toBeTruthy();
+    fireEvent.click(screen.getByText(/Ghi chú phân tích khác/));
+    expect(screen.getByDisplayValue('Keep large text legible.')).toBeTruthy();
   });
 
   it('shows exact saved information and provenance in the explicitly linked subject profile', async () => {

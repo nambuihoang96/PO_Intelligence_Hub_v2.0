@@ -139,6 +139,30 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     setAnalysisDrafts((current) => ({ ...current, [subjectId]: (current[subjectId] ?? []).map((item) => item.key === key ? { ...item, [field]: value } : item) }));
   }
 
+  function updateFollowUpQuestions(subject: ResearchSubject, value: string) {
+    const current = analysisDrafts[subject.id] ?? subject.analysis_sections ?? [];
+    const section = current.find((item) => item.key === `follow-up-questions-${subject.id}` || item.label.trim().toLocaleLowerCase() === 'câu hỏi nghiên cứu tiếp theo');
+    if (section) {
+      if (!value.trim()) {
+        setAnalysisDrafts((drafts) => ({ ...drafts, [subject.id]: (drafts[subject.id] ?? subject.analysis_sections ?? []).filter((item) => item.key !== section.key) }));
+        setError(''); setNotice('');
+        return;
+      }
+      editAnalysisSection(subject.id, section.key, 'content', value);
+      return;
+    }
+    if (!value.trim()) return;
+    setAnalysisDrafts((drafts) => ({
+      ...drafts,
+      [subject.id]: [...(drafts[subject.id] ?? subject.analysis_sections ?? []), {
+        key: `follow-up-questions-${subject.id}`,
+        label: 'Câu hỏi nghiên cứu tiếp theo',
+        content: value,
+      }],
+    }));
+    setError(''); setNotice('');
+  }
+
   function addAnalysisSection(subject: ResearchSubject, label: string) {
     const cleanLabel = label.trim();
     if (!cleanLabel) return;
@@ -163,7 +187,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
     setBusy(`analysis:${subject.id}`); setError(''); setNotice('');
     try {
       await researchApi.updateSubject(projectId, subject.id, { analysis_sections: sections.map((item) => ({ ...item, label: item.label.trim(), content: item.content.trim() })) });
-      setNotice('Đã lưu phần phân tích. Đây là ghi chú của bạn, chưa được xác minh độc lập.'); await load();
+      setNotice('Đã lưu ghi chú hồ sơ. Đây là nội dung của bạn, chưa được xác minh độc lập.'); await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Không lưu được phân tích. Bản nháp vẫn còn trên trang.'); }
     finally { setBusy(null); }
   }
@@ -194,6 +218,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   function renderSubjectProfile(subject: ResearchSubject) {
     const savedSections = subject.analysis_sections ?? [];
     const sections = analysisDrafts[subject.id] ?? savedSections;
+    const followUpSection = sections.find((item) => item.key === `follow-up-questions-${subject.id}` || item.label.trim().toLocaleLowerCase() === 'câu hỏi nghiên cứu tiếp theo');
     const hasChanges = JSON.stringify(savedSections) !== JSON.stringify(sections);
     const linkedSources = sources.filter((source) => source.mapped_subject_id === subject.id);
     const savedItems = savedInformation.filter((item) => item.subject_id === subject.id);
@@ -240,23 +265,28 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
             <a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=trend_update&decisionTargetId=${encodeURIComponent(item.id)}`}>Xem quyết định PO cho cập nhật này</a>
           </article>)}</div>}
         </section>
-        <section className="research-subject-analysis" aria-label={`Phân tích thêm về ${subject.name}`}>
-          <div><h5>Phân tích của PO (không bắt buộc)</h5><p>Đây là ghi chú làm việc của bạn, được lưu riêng với nội dung do nguồn cung cấp. Bạn có thể tự đặt tên cho từng phần.</p></div>
-          <div className="research-subject-analysis-starters" aria-label="Gợi ý các phần phân tích">
-            {['Vòng lặp cốt lõi', 'Thiết kế màn chơi', 'Vị trí quảng cáo'].map((label) => <button type="button" className="text-button" key={label} disabled={sections.some((item) => item.label.toLocaleLowerCase() === label.toLocaleLowerCase())} onClick={() => addAnalysisSection(subject, label)}>Thêm {label}</button>)}
-          </div>
-          <form className="research-subject-analysis-custom" onSubmit={(event) => { event.preventDefault(); addAnalysisSection(subject, customSectionLabels[subject.id] ?? ''); }}>
-            <label htmlFor={`custom-analysis-${subject.id}`}>Tên phần tự đặt</label><input id={`custom-analysis-${subject.id}`} maxLength={120} value={customSectionLabels[subject.id] ?? ''} onChange={(event) => changeCustomSectionLabel(subject.id, event)} placeholder="Nhập chủ đề phù hợp với hồ sơ này" />
-            <button className="secondary-action" type="submit" disabled={!(customSectionLabels[subject.id] ?? '').trim()}>Thêm phần</button>
-          </form>
-          {!sections.length && <p>Chưa có phần phân tích nào.</p>}
-          <div className="research-subject-analysis-list">{sections.map((section) => <article key={section.key}>
-            <label>Tên phần<input maxLength={120} value={section.label} onChange={(event) => editAnalysisSection(subject.id, section.key, 'label', event.target.value)} /></label>
-            <label>Phân tích của PO<textarea rows={3} maxLength={20_000} value={section.content} onChange={(event) => editAnalysisSection(subject.id, section.key, 'content', event.target.value)} placeholder={`Ghi chú cho phần ${section.label}.`} /></label>
-            <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: (current[subject.id] ?? []).filter((item) => item.key !== section.key) }))}>Bỏ khỏi bản nháp</button>
-          </article>)}</div>
+        <section className="research-subject-analysis" aria-label={`Câu hỏi tiếp theo về ${subject.name}`}>
+          <div><h5>Câu hỏi nghiên cứu tiếp theo</h5><p>Ghi điều bạn muốn tìm hiểu thêm về hồ sơ này. Đây là ghi chú của bạn, tách biệt với nội dung do nguồn cung cấp.</p></div>
+          <label htmlFor={`follow-up-questions-${subject.id}`}>Bạn muốn tìm hiểu thêm điều gì?</label>
+          <textarea id={`follow-up-questions-${subject.id}`} rows={3} maxLength={20_000} value={followUpSection?.content ?? ''} onChange={(event) => updateFollowUpQuestions(subject, event.target.value)} placeholder={`Ví dụ: Cần kiểm tra thêm điều gì về ${subject.name}?`} />
+          <details className="research-subject-analysis-advanced">
+            <summary>Ghi chú phân tích khác · {sections.filter((item) => item.key !== followUpSection?.key).length}</summary>
+            <p>Ghi chú cũ được giữ nguyên. Bạn có thể mở phần này để sửa hoặc thêm ghi chú tự đặt.</p>
+            <div className="research-subject-analysis-starters" aria-label="Gợi ý các phần phân tích">
+              {['Vòng lặp cốt lõi', 'Thiết kế màn chơi', 'Vị trí quảng cáo'].map((label) => <button type="button" className="text-button" key={label} disabled={sections.some((item) => item.label.toLocaleLowerCase() === label.toLocaleLowerCase())} onClick={() => addAnalysisSection(subject, label)}>Thêm {label}</button>)}
+            </div>
+            <form className="research-subject-analysis-custom" onSubmit={(event) => { event.preventDefault(); addAnalysisSection(subject, customSectionLabels[subject.id] ?? ''); }}>
+              <label htmlFor={`custom-analysis-${subject.id}`}>Tên ghi chú mới</label><input id={`custom-analysis-${subject.id}`} maxLength={120} value={customSectionLabels[subject.id] ?? ''} onChange={(event) => changeCustomSectionLabel(subject.id, event)} placeholder="Nhập chủ đề phù hợp với hồ sơ này" />
+              <button className="secondary-action" type="submit" disabled={!(customSectionLabels[subject.id] ?? '').trim()}>Thêm ghi chú</button>
+            </form>
+            <div className="research-subject-analysis-list">{sections.filter((item) => item.key !== followUpSection?.key).map((section) => <article key={section.key}>
+              <label>Tên ghi chú<input maxLength={120} value={section.label} onChange={(event) => editAnalysisSection(subject.id, section.key, 'label', event.target.value)} /></label>
+              <label>Nội dung<textarea rows={3} maxLength={20_000} value={section.content} onChange={(event) => editAnalysisSection(subject.id, section.key, 'content', event.target.value)} placeholder={`Ghi chú cho ${section.label}.`} /></label>
+              <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: (current[subject.id] ?? []).filter((item) => item.key !== section.key) }))}>Bỏ khỏi bản nháp</button>
+            </article>)}</div>
+          </details>
           <div className="research-subject-analysis-actions">{hasChanges && <span>Chưa lưu thay đổi</span>}
-            <button type="button" className="primary-action" disabled={!hasChanges || busy === `analysis:${subject.id}`} onClick={() => void saveAnalysis(subject)}>{busy === `analysis:${subject.id}` ? 'Đang lưu phân tích…' : 'Lưu phân tích PO'}</button>
+            <button type="button" className="primary-action" disabled={!hasChanges || busy === `analysis:${subject.id}`} onClick={() => void saveAnalysis(subject)}>{busy === `analysis:${subject.id}` ? 'Đang lưu…' : 'Lưu ghi chú hồ sơ'}</button>
             {hasChanges && <button type="button" className="text-button" onClick={() => setAnalysisDrafts((current) => ({ ...current, [subject.id]: savedSections.map((item) => ({ ...item })) }))}>Bỏ thay đổi</button>}
           </div>
         </section>
