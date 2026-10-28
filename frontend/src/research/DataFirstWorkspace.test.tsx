@@ -113,7 +113,7 @@ describe('DataFirstWorkspace', () => {
     fireEvent.click(within(screen.getByRole('row', { name: /Beta/ })).getByRole('button', { name: 'Thêm vào bộ so sánh' }));
     await waitFor(() => expect(researchApi.mapSubjectSource).toHaveBeenCalledWith('workspace-1', { source_kind: 'csv_entity', source_id: 'dataset-1', source_key: 'st-beta', create_subject_from_source: true }));
     await waitFor(() => expect(researchApi.addBenchmarkCollectionSubject).toHaveBeenCalledWith('workspace-1', 'collection-1', 'subject-beta'));
-    expect(await screen.findByRole('status')).toBeTruthy();
+    expect((await screen.findAllByRole('status')).length).toBeGreaterThan(0);
   });
 
   it('opens the explicitly selected project dataset from a Project Home deep link', async () => {
@@ -215,4 +215,30 @@ describe('DataFirstWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'Chọn 5 giá trị cao nhất trong CSV này' })).toBeNull();
     expect((screen.getByLabelText('Chọn Game 0 để nghiên cứu bằng ChatGPT') as HTMLInputElement).disabled).toBe(false);
   });
+  it('opens CSV intake from Project Home and clearly separates source date from an unverified measurement period', async () => {
+    window.history.replaceState({}, '', '/research?projectId=workspace-1&view=data&action=import-csv#project-csv-data');
+    vi.mocked(reportApi.getProjectQuantitativeDataset).mockResolvedValue({
+      ...dataset,
+      observations: [{
+        ...dataset.observations[0],
+        snapshot_date: '2026-10-14',
+        period_start: null,
+        period_end: null,
+        period_semantics: 'unknown',
+        analysis_ready: false,
+        complete_observation: false,
+      }],
+    } as never);
+
+    const { container } = render(<DataFirstWorkspace projectId="workspace-1" />);
+    expect(await screen.findByText('CSV importer for workspace-1')).toBeTruthy();
+    expect(container.querySelector('.data-first-workspace.csv-import-focus')).not.toBeNull();
+    expect(container.querySelector('#project-csv-data')).not.toBeNull();
+    await screen.findByText(/1 phép đo đọc từ CSV · 0 phép đo đủ thông tin để phân tích/);
+    expect(screen.getByText(/Chưa thể kết luận tăng trưởng hoặc so sánh chuẩn hóa/)).toBeTruthy();
+    expect(screen.getByText(/Ngày ghi trong CSV: 2026-10-14 · Chưa xác nhận ý nghĩa kỳ đo/)).toBeTruthy();
+    const valueCell = container.querySelector('.workspace-app-table tbody td[data-label]');
+    expect(valueCell?.getAttribute('data-label')).toContain('Lượt tải');
+  });
+
 });
