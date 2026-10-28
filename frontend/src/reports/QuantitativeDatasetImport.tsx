@@ -340,7 +340,7 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
     finally { setBusy(null); }
   }
 
-  return <details className="quant-import-flow">
+  return <details className="quant-import-flow" open={projectId ? true : undefined}>
     <summary>Nhập CSV · chọn tệp → kiểm tra → {report ? 'lưu vào báo cáo' : 'lưu vào không gian làm việc'}</summary>
     <div className="quant-import-steps">
       <p className="quant-import-purpose">Mục đích: {report ? 'lưu các chỉ số trong CSV vào báo cáo này để xem và so sánh.' : 'lưu CSV vào không gian làm việc để khám phá và so sánh trước khi có báo cáo ChatGPT.'} Bước 3 chỉ xem thử; chỉ bước 4 mới lưu. Tệp CSV gốc được giữ nguyên.</p>
