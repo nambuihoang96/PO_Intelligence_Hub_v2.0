@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataFirstWorkspace, followHashAnchorWhenReady } from './DataFirstWorkspace';
 import { researchApi, type ResearchProject } from './api';
@@ -7,7 +7,7 @@ import { reportApi } from '../reports/api';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
-  return { ...original, researchApi: { ...original.researchApi, getProject: vi.fn(), updateWorkspaceState: vi.fn(), listSavedInformation: vi.fn(), listSubjects: vi.fn(), listBenchmarkCollections: vi.fn() } };
+  return { ...original, researchApi: { ...original.researchApi, getProject: vi.fn(), updateWorkspaceState: vi.fn(), listSavedInformation: vi.fn(), listSubjects: vi.fn(), listSubjectSources: vi.fn(), listBenchmarkCollections: vi.fn(), mapSubjectSource: vi.fn(), addBenchmarkCollectionSubject: vi.fn() } };
 });
 
 vi.mock('../reports/api', async (importOriginal) => {
@@ -49,6 +49,7 @@ describe('DataFirstWorkspace', () => {
     vi.mocked(researchApi.getProject).mockImplementation(async () => savedProject as never);
     vi.mocked(researchApi.listSavedInformation).mockResolvedValue({ items: [], next_cursor: null, limit: 50 } as never);
     vi.mocked(researchApi.listSubjects).mockResolvedValue({ items: [], next_cursor: null, limit: 100 } as never);
+    vi.mocked(researchApi.listSubjectSources).mockResolvedValue({ items: [], next_cursor: null, limit: 50 } as never);
     vi.mocked(researchApi.listBenchmarkCollections).mockResolvedValue({ items: [], next_cursor: null, limit: 100 } as never);
     vi.mocked(researchApi.updateWorkspaceState).mockImplementation(async (_id, selected_app_ids, selected_app_criterion, selected_app_context) => {
       savedProject = { ...project, workspace_state_json: { selected_app_ids, selected_app_criterion, ...(selected_app_context ? { selected_app_context } : {}) } };
@@ -87,6 +88,32 @@ describe('DataFirstWorkspace', () => {
     await screen.findByText('sensor-export.csv');
     fireEvent.click(screen.getByRole('button', { name: 'Nhập CSV' }));
     expect(await screen.findByText('CSV importer for workspace-1')).toBeTruthy();
+  });
+
+  it('shows source values in a searchable and sortable product table, then creates and adds a profile to a selected comparison', async () => {
+    const observations = [
+      { ...dataset.observations[0], source_entity_id: 'st-alpha', source_entity_name: 'Alpha', value: 120 },
+      { ...dataset.observations[0], source_entity_id: 'st-beta', source_entity_name: 'Beta', value: 240 },
+    ];
+    vi.mocked(reportApi.getProjectQuantitativeDataset).mockResolvedValue({ ...dataset, source_apps: 2, observations } as never);
+    const collection = { id: 'collection-1', project_id: 'workspace-1', name: 'Shortlist', description: null, members: [], dimensions: [], created_at: '2026-10-23T00:00:00Z', updated_at: '2026-10-23T00:00:00Z' };
+    vi.mocked(researchApi.listBenchmarkCollections).mockResolvedValue({ items: [collection], next_cursor: null, limit: 100 } as never);
+    vi.mocked(researchApi.mapSubjectSource).mockResolvedValue({ project_id: 'workspace-1', source_kind: 'csv_entity', source_id: 'dataset-1', source_key: 'st-beta', source_name: 'Beta', source_type: null, context_name: 'sensor-export.csv', mapped_subject_id: 'subject-beta', mapped_subject_name: 'Beta', source_state: 'available' } as never);
+    vi.mocked(researchApi.addBenchmarkCollectionSubject).mockResolvedValue({ ...collection, members: [{ subject_id: 'subject-beta', name: 'Beta', subject_type: 'product', source_count: 1, report_source_count: 0, csv_source_count: 1, trend_update_count: 0, observations: [] }] } as never);
+    render(<DataFirstWorkspace projectId="workspace-1" />);
+    await screen.findByText('sensor-export.csv');
+    expect(screen.getByRole('columnheader', { name: /Downloads \(Absolute\)/ })).toBeTruthy();
+    expect(screen.getByText(/240 downloads/)).toBeTruthy();
+    expect(screen.getAllByText(/Đọc từ CSV · chưa xác minh độc lập/)).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText('Tìm sản phẩm'), { target: { value: 'Alpha' } });
+    expect(screen.getByText('Alpha')).toBeTruthy();
+    expect(screen.queryByText('Beta')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Tìm sản phẩm'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Bộ so sánh đích'), { target: { value: 'collection-1' } });
+    fireEvent.click(within(screen.getByRole('row', { name: /Beta/ })).getByRole('button', { name: 'Thêm vào bộ so sánh' }));
+    await waitFor(() => expect(researchApi.mapSubjectSource).toHaveBeenCalledWith('workspace-1', { source_kind: 'csv_entity', source_id: 'dataset-1', source_key: 'st-beta', create_subject_from_source: true }));
+    await waitFor(() => expect(researchApi.addBenchmarkCollectionSubject).toHaveBeenCalledWith('workspace-1', 'collection-1', 'subject-beta'));
+    expect(await screen.findByRole('status')).toBeTruthy();
   });
 
   it('opens the explicitly selected project dataset from a Project Home deep link', async () => {

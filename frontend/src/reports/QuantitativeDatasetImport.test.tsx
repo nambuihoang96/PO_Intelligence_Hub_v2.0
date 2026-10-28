@@ -22,6 +22,7 @@ const preview = {
 
 describe('QuantitativeDatasetImport', () => {
   beforeEach(() => { cleanup(); vi.clearAllMocks(); });
+  const openMapping = () => fireEvent.click(screen.getByText('Rà soát cách nhận diện và phạm vi (chỉ cần khi cần chỉnh)'));
 
   it('shows a local file preview and does not persist before explicit confirm', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
@@ -72,7 +73,8 @@ describe('QuantitativeDatasetImport', () => {
     await screen.findByText(file.name);
     expect(screen.getByText(/dấu phân cách ;/)).toBeTruthy();
     expect(screen.getByText(/Đã nhận diện 1 cột chỉ số/)).toBeTruthy();
-    fireEvent.change(screen.getAllByRole('combobox')[2], { target: { value: 'Platform' } });
+    openMapping();
+    fireEvent.change(screen.getByLabelText('Nền tảng / môi trường'), { target: { value: 'Platform' } });
     fireEvent.change(screen.getByLabelText('GEO · giá trị xác nhận'), { target: { value: 'Worldwide' } });
     fireEvent.change(screen.getByLabelText('Ngày bắt đầu kỳ · giá trị xác nhận'), { target: { value: '2026-10-14' } });
     fireEvent.change(screen.getByLabelText('Ngày kết thúc kỳ · giá trị xác nhận'), { target: { value: '2026-11-13' } });
@@ -119,6 +121,7 @@ describe('QuantitativeDatasetImport', () => {
     const file = new File(['Unified Name;Unified ID;Platform;Date;Downloads (Absolute)\nApp A;st-a;Unified;2026-10-01;1200\n'], 'snapshot.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
+    openMapping();
     expect((screen.getByLabelText('Ngày chụp số liệu') as HTMLSelectElement).value).toBe('Date');
     expect((screen.getByLabelText('Ngày bắt đầu kỳ') as HTMLSelectElement).value).toBe('');
     const meaning = screen.getByLabelText(/Ý nghĩa của ngày \/ kỳ/) as HTMLSelectElement;
@@ -139,8 +142,9 @@ describe('QuantitativeDatasetImport', () => {
     const file = new File(['Unified Name;Date;Category;Publisher ID;Publisher Name;Downloads (Absolute)\nApp A;14/10/2026;Games;publisher-1;Publisher One;1200\n'], 'app-metrics.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
+    openMapping();
 
-    expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('Unified Name');
+    expect((screen.getByText('Đối tượng (ID / tên)').closest('label')!.querySelector('select') as HTMLSelectElement).value).toBe('Unified Name');
     expect(screen.getByText('Cột tên nguồn: Unified Name · Đã nhận diện 1 cột chỉ số')).toBeTruthy();
     expect(screen.queryByText('Entity name: Unified Name · Name: Unified Name')).toBeNull();
     fireEvent.click(screen.getByText('1 cột chỉ số được chọn'));
@@ -159,6 +163,7 @@ describe('QuantitativeDatasetImport', () => {
     ], 'Worldwide 2026-09-14 to 2026-10-13.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
+    openMapping();
 
     expect(screen.getByText(/Đã nhận diện 2 cột chỉ số/)).toBeTruthy();
     expect(screen.getByText(/Danh tính nguồn: ID Unified ID · tên Unified Name/)).toBeTruthy();
@@ -204,6 +209,7 @@ describe('QuantitativeDatasetImport', () => {
     const file = new File(['Entity;Value\nTwin;1\nUnknown One;bad\nUnknown Two;3\n'], 'three.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
+    openMapping();
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
     fireEvent.click(screen.getByText('Chọn thêm cột chỉ số'));
     fireEvent.click(screen.getByLabelText('Value'));
@@ -239,6 +245,7 @@ describe('QuantitativeDatasetImport', () => {
     const file = new File(['Entity;Value\nAlpha;1\n'], 'stale.csv', { type: 'text/csv' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
     await screen.findByText(file.name);
+    openMapping();
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Entity' } });
     fireEvent.click(screen.getByText('Chọn thêm cột chỉ số'));
     fireEvent.click(screen.getByLabelText('Value'));

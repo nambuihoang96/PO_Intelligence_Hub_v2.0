@@ -1111,6 +1111,36 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .workspace-app-table tbody th { min-width: 190px; color: #233955; }
 .workspace-app-table tbody th small { display: block; max-width: 260px; overflow-wrap: anywhere; color: #728198; font-weight: 400; }
 .workspace-app-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: #2463eb; }
+.workspace-product-controls { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin:14px 0; }
+.workspace-product-controls label { display:grid; gap:5px; min-width:180px; color:#51657e; font-size:13px; }
+.workspace-product-controls input,.workspace-product-controls select { min-width:0; padding:8px 10px; border:1px solid #ced9e5; border-radius:8px; background:#fff; color:#1c2d43; }
+.workspace-product-controls label:first-child { flex:1 1 240px; }
+.workspace-app-table { min-width:900px; }
+.workspace-app-table .table-source-label { display:block; color:#75849a; font-size:11px; font-weight:400; }
+.workspace-source-value { display:block; color:#193755; font-variant-numeric:tabular-nums; }
+.workspace-product-actions { min-width:155px; }
+.workspace-product-actions > * { display:block; width:100%; margin:0 0 6px; text-align:center; }
+.quant-live-data { display:grid; gap:10px; padding:14px; border:1px solid #dbe6f0; border-radius:12px; background:#fff; }
+.quant-live-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.quant-live-heading > div { display:grid; gap:3px; }
+.quant-live-heading span,.quant-live-data > small,.quant-live-scope { color:#63758a; font-size:13px; }
+.quant-source-state { padding:5px 8px; border-radius:999px; background:#eff4fa; color:#37506c !important; white-space:nowrap; }
+.quant-live-controls { display:flex; flex-wrap:wrap; align-items:end; gap:10px; }
+.quant-live-controls label { display:grid; gap:4px; min-width:180px; color:#52657c; font-size:13px; }
+.quant-live-controls input,.quant-live-controls select { min-width:0; padding:8px 9px; border:1px solid #ced9e5; border-radius:8px; background:#fff; color:#1c2d43; }
+.quant-live-controls label:first-child { flex:1 1 220px; }
+.quant-live-scope { margin:0; }
+.quant-live-table { min-width:900px; border-collapse:collapse; font-size:13px; }
+.quant-live-table th,.quant-live-table td { padding:9px 11px; border-bottom:1px solid #e7edf4; text-align:left; white-space:nowrap; }
+.quant-live-table thead th { position:sticky; top:0; z-index:1; background:#f3f7fc; color:#40566f; }
+.quant-live-table tbody th { min-width:210px; white-space:normal; }
+.quant-live-table tbody th small { display:block; margin-top:3px; color:#6e7f94; font-size:12px; font-weight:400; }
+.quant-live-table-scroll { max-height:420px; }
+.quant-advanced-mapping > summary { color:#52657c; cursor:pointer; font-weight:600; }
+.quant-import-confirm { display:grid; gap:8px; padding:14px; border-radius:10px; background:#f5f8fc; }
+.quant-import-confirm h4,.quant-import-confirm p { margin:0; }
+.quant-import-confirm p { color:#52657c; }
+@media (max-width:600px) { .workspace-product-controls { align-items:stretch; flex-direction:column; } .workspace-product-controls label,.quant-live-controls label { min-width:0; width:100%; } .quant-live-heading { flex-direction:column; } .quant-live-table-scroll { max-height:360px; } }
 .workspace-selection-criterion { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding: 12px; border-radius: 10px; background: #f6f9fd; }
 .workspace-selection-criterion .field-label { flex: 1 1 320px; margin: 0; }
 .workspace-selection-criterion > span { flex: 1 1 100%; color: #64748b; font-size: 13px; }

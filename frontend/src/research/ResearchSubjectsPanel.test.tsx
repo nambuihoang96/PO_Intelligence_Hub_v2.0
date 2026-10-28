@@ -65,6 +65,25 @@ describe('ResearchSubjectsPanel', () => {
     })));
   });
 
+  it('reloads saved subjects before opening a profile deep link pushed by another panel', async () => {
+    const saved = subject('created-from-csv', 'Surprise Dumpling: ASMR Box');
+    const listSubjects = vi.spyOn(researchApi, 'listSubjects')
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValue(page([saved]));
+    vi.spyOn(researchApi, 'listSubjectSources').mockResolvedValue(page([]));
+    vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValue(page<ProjectSavedInformation>([]));
+    emptyCollections();
+    render(<ResearchSubjectsPanel projectId="project-1" />);
+    await waitFor(() => expect(listSubjects).toHaveBeenCalledTimes(1));
+
+    window.history.pushState({}, '', '/research?projectId=project-1&view=data&subjectId=created-from-csv#project-subject-profiles');
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    expect(await screen.findByRole('region', { name: 'Hồ sơ Surprise Dumpling: ASMR Box' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Đóng hồ sơ' })).toBeTruthy();
+    expect(listSubjects).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps historical source links visible but prevents remapping a stale source', async () => {
     const historical = source({ source_state: 'stale', mapped_subject_id: 'subject-1', mapped_subject_name: 'Example Product' });
     vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([subject()]));

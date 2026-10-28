@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { reportApi, type ComparisonDataset, type QuantitativeDataset, type ReportSummary } from '../reports/api';
 import { QuantitativeDatasetImport } from '../reports/QuantitativeDatasetImport';
-import { researchApi, type ResearchProject, type ShortlistContext } from './api';
+import { researchApi, type ResearchBenchmarkCollection, type ResearchProject, type ResearchSubjectSource, type ShortlistContext } from './api';
 import { OpportunityReview } from './OpportunityReview';
 import { ProjectJourneyNav } from './ProjectJourneyNav';
 import { ResearchSubjectsPanel } from './ResearchSubjectsPanel';
@@ -130,6 +130,13 @@ function buildPrompt(project: ResearchProject, dataset: QuantitativeDataset, con
 export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ResearchProject | null>(null);
   const [datasets, setDatasets] = useState<ComparisonDataset[]>([]);
+  const [collections, setCollections] = useState<ResearchBenchmarkCollection[]>([]);
+  const [subjectSources, setSubjectSources] = useState<ResearchSubjectSource[]>([]);
+  const [targetCollectionId, setTargetCollectionId] = useState('');
+  const [productQuery, setProductQuery] = useState('');
+  const [displayMetric, setDisplayMetric] = useState('');
+  const [productSort, setProductSort] = useState<'asc' | 'desc'>('desc');
+  const [productActionBusy, setProductActionBusy] = useState<string | null>(null);
   const [dataset, setDataset] = useState<QuantitativeDataset | null>(null);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [allReports, setAllReports] = useState<ReportSummary[]>([]);
@@ -159,8 +166,9 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   async function load() {
     setLoading(true); setError('');
     try {
-      const [workspace, firstDatasetPage, reportPage, allReportsPage] = await Promise.all([
+      const [workspace, firstDatasetPage, reportPage, allReportsPage, collectionPage, subjectSourcePage] = await Promise.all([
         researchApi.getProject(projectId), reportApi.listComparisonDatasets(undefined, projectId), reportApi.listProjectReports(projectId), reportApi.list(),
+        researchApi.listBenchmarkCollections(projectId), researchApi.listSubjectSources(projectId),
       ]);
       const allDatasets = [...firstDatasetPage.items];
       let datasetCursor = firstDatasetPage.next_cursor ?? undefined;
@@ -169,7 +177,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
         allDatasets.push(...page.items.filter((item) => !allDatasets.some((existing) => existing.id === item.id)));
         datasetCursor = page.next_cursor ?? undefined;
       }
-      setProject(workspace); setDatasets(allDatasets); setReports(reportPage.items); setReportsCursor(reportPage.next_cursor);
+      setProject(workspace); setDatasets(allDatasets); setCollections(collectionPage.items); setSubjectSources(subjectSourcePage.items); setReports(reportPage.items); setReportsCursor(reportPage.next_cursor);
       setAllReports(allReportsPage.items.filter((report) => !report.project_id || report.project_id === projectId)); setAllReportsCursor(allReportsPage.next_cursor);
       const savedSelection = workspace.workspace_state_json?.selected_app_ids ?? [];
       selectedAppsRef.current = savedSelection;
@@ -227,6 +235,19 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
 
   const apps = useMemo(() => groupsFor(dataset), [dataset]);
   const rankingOptions = useMemo(() => rankingOptionsFor(apps), [apps]);
+  const datasetMetrics = useMemo(() => [...new Map((dataset?.observations ?? []).filter((row) => row.metric_id).map((row) => [row.metric_id!, row.metric_definition || row.metric_id!])).entries()], [dataset]);
+  const activeMetric = datasetMetrics.find(([id]) => id === displayMetric)?.[0] ?? datasetMetrics[0]?.[0] ?? '';
+  const visibleProductRows = useMemo(() => {
+    const filtered = apps.filter((app) => `${app.name} ${app.id}`.toLocaleLowerCase().includes(productQuery.trim().toLocaleLowerCase()));
+    const metricId = activeMetric;
+    if (metricId) filtered.sort((left, right) => {
+      const a = left.rows.find((row) => row.metric_id === metricId)?.value;
+      const b = right.rows.find((row) => row.metric_id === metricId)?.value;
+      const difference = (a == null ? Number.NEGATIVE_INFINITY : Number(a)) - (b == null ? Number.NEGATIVE_INFINITY : Number(b));
+      return (productSort === 'desc' ? -difference : difference) || left.name.localeCompare(right.name);
+    });
+    return filtered;
+  }, [apps, productQuery, activeMetric, productSort]);
   if (new URLSearchParams(window.location.search).get('view') === 'opportunities') {
     return <OpportunityReview projectId={projectId} />;
   }
@@ -257,6 +278,31 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
     finally {
       if (selectionQueue.current === saveOperation) setSavingSelection(false);
     }
+  }
+
+  function sourceMappingFor(app: AppGroup) {
+    return subjectSources.find((source) => source.source_kind === 'csv_entity' && source.source_id === dataset?.id && source.source_key === app.id);
+  }
+
+  async function resolveSubject(app: AppGroup): Promise<string> {
+    const existingSource = sourceMappingFor(app);
+    if (existingSource?.mapped_subject_id) return existingSource.mapped_subject_id;
+    if (!dataset) throw new Error('Chưa chọn được CSV nguồn.');
+    const mapped = await researchApi.mapSubjectSource(projectId, { source_kind: 'csv_entity', source_id: dataset.id, source_key: app.id, create_subject_from_source: true });
+    setSubjectSources((current) => [...current.filter((item) => !(item.source_kind === mapped.source_kind && item.source_id === mapped.source_id && item.source_key === mapped.source_key)), mapped]);
+    return mapped.mapped_subject_id || (() => { throw new Error('Đã lưu liên kết nguồn nhưng chưa nhận được mã hồ sơ.'); })();
+  }
+
+  async function addProductToCollection(app: AppGroup) {
+    if (!targetCollectionId) { setError('Chọn bộ so sánh trước khi thêm sản phẩm.'); return; }
+    setProductActionBusy(app.id); setError(''); setNotice('');
+    try {
+      const subjectId = await resolveSubject(app);
+      const saved = await researchApi.addBenchmarkCollectionSubject(projectId, targetCollectionId, subjectId);
+      setCollections((current) => current.map((item) => item.id === saved.id ? saved : item));
+      setNotice(`Đã thêm ${app.name} vào bộ so sánh “${saved.name}”. Dữ liệu nguồn vẫn được giữ nguyên.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thêm được sản phẩm vào bộ so sánh.'); }
+    finally { setProductActionBusy(null); }
   }
 
   async function retrySaveSelection() {
@@ -356,8 +402,9 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
       {!activeSelectionMatchesDataset && <div className="research-alert" role="status">Danh sách đã lưu thuộc tệp dữ liệu “{selectedContext?.dataset_filename || 'nguồn cũ chưa biết'}”, không phải tệp đang xem. Chọn “Tạo danh sách mới…” để bắt đầu từ tệp này; danh sách cũ vẫn được giữ cho đến khi bạn xác nhận hành động đó.</div>}
       {activeSelectionMatchesDataset && selectedApps.length === 0 && selectedContext && <p className="field-help">Danh sách mới đã mở từ tệp này. Chọn sản phẩm bên dưới để lưu vào danh sách.</p>}
       {!activeSelectionMatchesDataset && <button type="button" className="secondary-action" onClick={startNewShortlist} disabled={savingSelection}>Tạo danh sách mới từ tệp này (thay danh sách hiện tại)</button>}
-      {apps.length === 0 ? <p>Không tìm thấy dòng sản phẩm trong tệp dữ liệu này.</p> : <div className="workspace-app-table-scroll"><table className="workspace-app-table"><thead><tr><th>Chọn</th><th>Sản phẩm / danh tính nguồn</th><th>Các chỉ số</th><th>Phạm vi và kỳ</th></tr></thead><tbody>{apps.slice(0, visibleApps).map((app) => <tr key={app.id}><td><input type="checkbox" aria-label={`Chọn ${app.name} để nghiên cứu bằng ChatGPT`} checked={activeSelectionMatchesDataset && selectedApps.includes(app.id)} disabled={!activeSelectionMatchesDataset || savingSelection} onChange={() => void toggleApp(app.id)} /></td><th scope="row">{app.name}<small>{app.id}</small></th><td>{[...new Set(app.rows.map((row) => row.metric_definition || row.metric_id || 'Chưa xác định chỉ số'))].join(', ')}</td><td>{[...new Set(app.rows.map((row) => `${row.geo || 'Chưa có thị trường'} · ${row.platform || 'chưa có nền tảng'} · ${row.snapshot_date || `${row.period_start || '?'}–${row.period_end || '?'}`}`))].join('; ')}</td></tr>)}</tbody></table></div>}
-      {apps.length > visibleApps && <button type="button" className="secondary-action" onClick={() => setVisibleApps((current) => current + 50)}>Tải thêm sản phẩm</button>}
+      {apps.length > 0 && <div className="workspace-product-controls"><label>Tìm sản phẩm<input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Tên hoặc mã sản phẩm…" /></label><label>Chỉ số cần xem<select aria-label="Chỉ số cần xem trong bảng sản phẩm" value={activeMetric} onChange={(event) => setDisplayMetric(event.target.value)}>{datasetMetrics.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><button type="button" className="secondary-action" onClick={() => setProductSort((current) => current === 'desc' ? 'asc' : 'desc')}>Giá trị: {productSort === 'desc' ? 'cao → thấp' : 'thấp → cao'}</button><label>Bộ so sánh<select aria-label="Bộ so sánh đích" value={targetCollectionId} onChange={(event) => setTargetCollectionId(event.target.value)}><option value="">Chọn bộ so sánh…</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label></div>}
+      {apps.length === 0 ? <p>Không tìm thấy dòng sản phẩm trong tệp dữ liệu này.</p> : <div className="workspace-app-table-scroll"><table className="workspace-app-table"><thead><tr><th>Chọn nghiên cứu</th><th>Sản phẩm / mã nguồn</th><th>{datasetMetrics.find(([id]) => id === activeMetric)?.[1] || 'Giá trị CSV'} <span className="table-source-label">Giá trị gốc</span></th><th>Phạm vi trong file</th><th>Hồ sơ và bộ so sánh</th></tr></thead><tbody>{visibleProductRows.slice(0, visibleApps).map((app) => { const observation = app.rows.find((row) => row.metric_id === activeMetric); const mapping = sourceMappingFor(app); const profileHref = mapping?.mapped_subject_id ? `/research?projectId=${encodeURIComponent(projectId)}&view=data&subjectId=${encodeURIComponent(mapping.mapped_subject_id)}#project-subject-profiles` : ''; return <tr key={app.id}><td><input type="checkbox" aria-label={`Chọn ${app.name} để nghiên cứu bằng ChatGPT`} checked={activeSelectionMatchesDataset && selectedApps.includes(app.id)} disabled={!activeSelectionMatchesDataset || savingSelection} onChange={() => void toggleApp(app.id)} /></td><th scope="row">{app.name}<small>{app.id}</small></th><td><strong className="workspace-source-value">{observation?.value == null ? (observation?.source_validation_reasons?.length ? 'Giá trị không hợp lệ' : 'Chưa có giá trị') : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(observation.value)}${observation.unit ? ` ${observation.unit}` : ''}`}</strong><small>{observation?.verification_status === 'verified' ? 'Đã xác minh độc lập' : 'Đọc từ CSV · chưa xác minh độc lập'}{observation && !observation.analysis_ready ? ' · Chưa đủ metadata so sánh' : ''}</small></td><td>{[...new Set(app.rows.map((row) => `${row.geo || 'Chưa có GEO'} · ${row.platform || 'Chưa rõ nền tảng'} · ${row.snapshot_date || `${row.period_start || '?'}–${row.period_end || '?'}`}`))].join('; ')}</td><td className="workspace-product-actions">{profileHref ? <a className="secondary-action" href={profileHref}>Mở hồ sơ</a> : <button type="button" className="secondary-action" disabled={productActionBusy === app.id} onClick={async () => { setProductActionBusy(app.id); setError(''); try { const subjectId = await resolveSubject(app); setNotice(`Đã tạo hồ sơ cho ${app.name}.`); window.history.pushState({}, '', `/research?projectId=${encodeURIComponent(projectId)}&view=data&subjectId=${encodeURIComponent(subjectId)}#project-subject-profiles`); window.dispatchEvent(new PopStateEvent('popstate')); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không tạo được hồ sơ.'); } finally { setProductActionBusy(null); } }}>{productActionBusy === app.id ? 'Đang tạo…' : 'Tạo hồ sơ'}</button>}<button type="button" className="text-button" disabled={productActionBusy === app.id || !targetCollectionId} onClick={() => void addProductToCollection(app)}>Thêm vào bộ so sánh</button></td></tr>; })}</tbody></table></div>}
+      {visibleProductRows.length > visibleApps && <button type="button" className="secondary-action" onClick={() => setVisibleApps((current) => current + 50)}>Tải thêm sản phẩm</button>}
       {rankingOption && <div className="workspace-selection-criterion"><label className="field-label">Chọn sản phẩm theo số liệu đã ghi nhận<select value={rankingOption.key} onChange={(event) => setRankingKey(event.target.value)}>{rankingOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label><button type="button" className="secondary-action" disabled={!activeSelectionMatchesDataset || savingSelection || rankingOption.rows.size < 5} onClick={() => void selectFiveHighest()}>Chọn 5 giá trị cao nhất trong CSV này</button><span>Dùng 5 quan sát chính xác, đầy đủ và cùng phạm vi trong tệp này. Đây không phải thứ hạng thị trường.</span></div>}
       {rankingOptions.length === 0 && <p className="field-help">Chưa thể tự chọn sản phẩm vì không có nhóm 5 quan sát chính xác, đầy đủ cùng chỉ số, đơn vị, thị trường, nền tảng, phương pháp và kỳ. Bạn vẫn có thể tự chọn sản phẩm sau khi tạo danh sách từ tệp này.</p>}
       {selectedCriterion && <p className="field-help">{selectedCriterion}</p>}

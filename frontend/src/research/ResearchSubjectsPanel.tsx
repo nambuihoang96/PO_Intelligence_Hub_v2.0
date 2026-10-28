@@ -73,6 +73,24 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
+    const syncDeepLink = () => {
+      const params = new URLSearchParams(window.location.search);
+      const nextSubjectId = params.get('subjectId');
+      const nextCollectionId = params.get('collectionId');
+      if (nextSubjectId || nextCollectionId) {
+        setSubjectsOpen(true);
+        if (nextSubjectId) setProfileId(nextSubjectId);
+        // A deep link can be pushed immediately after another panel creates a
+        // subject. Refresh the list before rendering the selected profile so
+        // the new identity does not appear as a stale empty state.
+        void load();
+      }
+    };
+    window.addEventListener('popstate', syncDeepLink);
+    return () => window.removeEventListener('popstate', syncDeepLink);
+  }, []);
+
+  useEffect(() => {
     if (!profileId) { setProfileTrendUpdates([]); setProfileTrendError(''); return; }
     let current = true;
     setProfileTrendUpdates([]); setProfileTrendError('');
