@@ -42,7 +42,7 @@ describe('ProjectHome data entry', () => {
     render(<ProjectHome projectId="project-a" />);
     const dataLink = await screen.findByRole('link', { name: 'Mở số liệu từ export.csv' });
     expect(dataLink.getAttribute('href')).toBe('/research?projectId=project-a&view=data&datasetId=dataset-a#project-csv-data');
-    expect(dataLink.textContent).toContain('12 sản phẩm · 0 chỉ số · Một phần tương thích');
+    expect(dataLink.textContent).toContain('12 sản phẩm · 0 chỉ số · Dữ liệu nguồn · cần kiểm tra điều kiện so sánh');
     expect(screen.getByRole('link', { name: /Đã thêm tệp dữ liệu.*export\.csv/ }).getAttribute('href')).toBe('/research?projectId=project-a&view=data&datasetId=dataset-a#project-csv-data');
   });
 
