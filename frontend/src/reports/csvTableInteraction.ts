@@ -18,9 +18,20 @@ function numericCsvValue(value: string): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
-export function compareCsvCells(left: string, right: string, direction: 'asc' | 'desc'): number {
+export function compareCsvCells(left: string, right: string, direction: 'asc' | 'desc', strictNumeric = false): number {
   const a = left.trim();
   const b = right.trim();
+  if (strictNumeric) {
+    // Match import validation: ambiguous strings must not be treated as measured values.
+    const parse = (value: string) => {
+      if (!/^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) return null;
+      const number = Number(value.replaceAll(',', ''));
+      return Number.isFinite(number) ? number : null;
+    };
+    const x = parse(a), y = parse(b);
+    if (x === null || y === null) return x === null ? (y === null ? 0 : 1) : -1;
+    return direction === 'asc' ? x - y : y - x;
+  }
   // Blank values are unknown, not zero: keep them last in both directions.
   if (!a || !b) return a ? -1 : b ? 1 : 0;
   const numericA = numericCsvValue(a);

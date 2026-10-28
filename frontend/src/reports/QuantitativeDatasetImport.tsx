@@ -185,7 +185,7 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
       const index = headers.indexOf(rawSort.column);
       filtered.sort((a, b) => {
         const av = a[index] ?? ''; const bv = b[index] ?? '';
-        return compareCsvCells(av, bv, rawSort.direction);
+        return compareCsvCells(av, bv, rawSort.direction, valueColumns.includes(rawSort.column));
       });
     }
     return { rows: filtered, idColumn, nameColumn, identityColumn: idColumn || nameColumn, platformColumn, dateColumn, valueColumns };

@@ -138,6 +138,18 @@ describe('DataFirstWorkspace', () => {
     expect(screen.getAllByText(/Đọc từ CSV · chưa xác minh độc lập/)).toHaveLength(4);
   });
 
+  it('distinguishes an empty CSV cell from a non-numeric cell when both lack scope metadata', async () => {
+    const observations = [
+      { ...dataset.observations[0], source_entity_id: 'empty', source_entity_name: 'Empty', value: null, source_validation_reasons: ['CSV row 2 has an empty mapped value.', 'CSV row 2 is missing GEO.'] },
+      { ...dataset.observations[0], source_entity_id: 'invalid', source_entity_name: 'Invalid', value: null, source_validation_reasons: ["CSV row 3 has a non-numeric value 'bad'.", 'CSV row 3 is missing GEO.'] },
+    ];
+    vi.mocked(reportApi.getProjectQuantitativeDataset).mockResolvedValue({ ...dataset, source_apps: 2, observations } as never);
+    render(<DataFirstWorkspace projectId="workspace-1" />);
+    const emptyRow = await screen.findByRole('row', { name: /Empty/ });
+    expect(within(emptyRow).getByText('Chưa có giá trị')).toBeTruthy();
+    expect(within(screen.getByRole('row', { name: /Invalid/ })).getByText('Giá trị không hợp lệ')).toBeTruthy();
+  });
+
   it('opens the explicitly selected project dataset from a Project Home deep link', async () => {
     const otherDataset = { ...dataset, id: 'dataset-2', filename: 'second-export.csv', content_sha256: 'second-hash' };
     const otherCatalog = { ...catalog, id: 'dataset-2', filename: 'second-export.csv', content_sha256: 'second-hash' };

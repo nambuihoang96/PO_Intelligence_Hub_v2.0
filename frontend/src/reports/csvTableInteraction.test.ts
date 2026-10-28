@@ -19,4 +19,12 @@ describe('CSV table column controls', () => {
     expect(compareCsvCells('', '0', 'asc')).toBeGreaterThan(0);
     expect(compareCsvCells('', '0', 'desc')).toBeGreaterThan(0);
   });
+  it('keeps ambiguous, invalid and empty metric cells after valid numbers in both directions', () => {
+    for (const direction of ['asc', 'desc'] as const) {
+      expect(compareCsvCells('49.086.356.155', '0.542374', direction, true)).toBeGreaterThan(0);
+      expect(compareCsvCells('', '-0.264442', direction, true)).toBeGreaterThan(0);
+    }
+    expect(compareCsvCells('-0.264442', '0.542374', 'asc', true)).toBeLessThan(0);
+    expect(compareCsvCells('-0.264442', '0.542374', 'desc', true)).toBeGreaterThan(0);
+  });
 });

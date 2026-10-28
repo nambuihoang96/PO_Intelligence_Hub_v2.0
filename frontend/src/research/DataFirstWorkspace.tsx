@@ -463,7 +463,7 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
               {visibleDatasetMetrics.map(([metricId, metricName]) => {
                 const observation = app.rows.find((row) => row.metric_id === metricId);
                 return <td key={metricId} data-label={csvMetricLabel(metricId, metricName)}>
-                  <strong className="workspace-source-value">{observation?.value == null ? (observation?.source_validation_reasons?.length ? 'Giá trị không hợp lệ' : 'Chưa có giá trị') : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(observation.value)}${observation.unit ? ` ${observation.unit}` : ''}`}</strong>
+                  <strong className="workspace-source-value">{observation?.value == null ? (observation?.source_validation_reasons?.some((reason) => reason.includes('non-numeric value')) ? 'Giá trị không hợp lệ' : 'Chưa có giá trị') : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(observation.value)}${observation.unit ? ` ${observation.unit}` : ''}`}</strong>
                   <small>{observation?.verification_status === 'verified' ? 'Đã xác minh độc lập' : 'Đọc từ CSV · chưa xác minh độc lập'}{observation && !observation.analysis_ready ? ' · Chưa đủ metadata so sánh' : ''}</small>
                 </td>;
               })}
