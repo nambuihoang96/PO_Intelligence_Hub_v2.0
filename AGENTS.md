@@ -105,3 +105,18 @@ The Product Owner has explicitly selected **Mode B: autonomous implementation wi
 ## Scope control
 
 Follow the user's explicit task boundaries. Do not create, modify, configure, or invoke a Planner/Coder/Tester/Reviewer multi-agent system. The autonomous recovery authorization above permits only a scoped independent reviewer context where requested; it does not authorize a general multi-agent workflow.
+
+
+## UX interaction baseline for PO-facing data tables
+
+- For tables of product/CSV/benchmark metrics, verify basics **before** declaring a UI slice done: sort by selecting a visible column header with clear ↑/↓/unsorted state, search/filter without changing source records, checkbox-driven visibility for multiple metrics when the table supports metrics, understandable missing-value behavior, sticky/recoverable product identity while horizontally scrolling, keyboard-accessible controls, and responsive layout.
+- Do not invent or calculate incompatible metrics to populate the grid. Keep raw provider names/values available, show explicit GEO/OS/period uncertainty, and separate source display from comparison readiness.
+- Use a compact PO-facing checklist: can the user see what data this is, what each number means, which fields are displayed, how to sort, what needs verification, and what action comes next—**without knowing internal schemas?**
+- Screenshots from actual running app are mandatory for major table UI changes at desktop (around 1440px) and mobile (390px), including a multi-column state; verify no page-level horizontal overflow. Frontend tests alone do not establish product usability.
+- An instruction to use UI UX Pro Max does not prove the skill was loaded; first check the local Codex skill inventory and record whether it was invoked. The skill helps design review but cannot replace acceptance tests for basic table interactions.
+
+## Preflight inputs for continuous Mode B delivery
+
+- Continue independent approved, unblocked P0 slices after technical verification, even if Product Owner visual acceptance for a different slice is pending. Avoid the code → report → await ChatGPT next-action loop. Do not infer product acceptance, release or permission for destructive actions from silence.
+- Before starting **G1-03 cross-screen visual rollout**, obtain the **actual final approved full-resolution Peachy Studio screen references** (or a directly accessible Figma link), identify the authoritative version for Project Home / Report Reader / CSV Analytics and preserve the approved business journey. Screenshots of existing implementation are defect evidence, not design authority. If missing, stop only the visual-dependent work and ask once for exact files; continue other approved work.
+- Before claiming genuine report G2-04 acceptance, use a real PO-provided long-form report; an invented QA report is only fixture UAT. Before claiming multi-period benchmark G3-07 acceptance, use comparable real period datasets or label the remaining acceptance gate as unverified. Never fill missing GEO, platform, period or methodology by guesswork.
