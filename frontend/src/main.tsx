@@ -111,6 +111,7 @@ function App() {
     return () => window.removeEventListener('popstate', syncPath);
   }, []);
   const params = new URLSearchParams(window.location.search);
+  const qaDemoMode = import.meta.env.VITE_QA_DEMO_MODE === 'true';
   const projectId = params.get('projectId');
   const page = pathname === '/' && projectId ? pages.find((item) => item.path === '/reports')! : currentPage(pathname);
   const researchPage = page.path.startsWith('/research');
@@ -139,6 +140,7 @@ function App() {
         </header>
 
         <div className="content-wrap">
+          {qaDemoMode && <div className="qa-demo-banner" role="status">QA DEMO — DỮ LIỆU MÔ PHỎNG, KHÔNG PHẢI NGHIÊN CỨU THẬT</div>}
           {!opportunityReviewView && !(projectSelected && !projectView) && !pathname.startsWith('/reports/') && !(pathname === '/' && projectId) && !(pathname === '/reports' && projectId) && <section className="page-heading" aria-labelledby="page-title">
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>

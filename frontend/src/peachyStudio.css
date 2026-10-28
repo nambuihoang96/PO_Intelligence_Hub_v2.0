@@ -50,6 +50,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .content-wrap { width: min(1480px, calc(100% - 72px)); margin: 34px auto 46px; }
 .content-wrap:has(.project-home) { width: min(1480px, calc(100% - 72px)); margin-top: 30px; }
 .content-wrap:has(.report-viewer) { width: min(1480px, calc(100% - 72px)); margin-top: 24px; }
+.qa-demo-banner {
+  margin: 0 0 16px; padding: 10px 14px; border: 1px solid #e8b573; border-radius: 10px;
+  background: #fff4df; color: #68451b; font-size: 13px; font-weight: 700; line-height: 1.45;
+}
 .page-heading { margin-bottom: 22px; }
 .page-heading h1 { color: var(--peachy-ink); }
 .eyebrow, .page-heading .intro { color: var(--peachy-muted); }

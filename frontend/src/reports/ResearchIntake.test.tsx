@@ -367,12 +367,11 @@ describe('ChatGPT research intake', () => {
     const view = render(<ReportViewer reportId="saved-report" />);
     await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' });
     fireEvent.click(screen.getByText('Thông tin và thao tác liên quan'));
-    fireEvent.click(screen.getByRole('button', { name: 'Ghi quyết định PO' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ghi đánh giá PO' }));
     expect(screen.getByRole('tab', { name: 'Đánh giá của PO' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.change(screen.getByLabelText('Đánh giá của PO cho A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
     fireEvent.change(screen.getByLabelText('Việc tiếp theo cho A report-supplied insight'), { target: { value: 'Plan a small usability study.' } });
     expect(screen.getByText('Chưa lưu · thay đổi mới chỉ có trên trang này.')).toBeTruthy();
-    expect(screen.getByText('Chưa có quyết định')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá PO' }));
     await screen.findByText('Đã lưu đánh giá của PO, ghi chú và việc tiếp theo.');
     expect(await screen.findByText('Đã lưu đánh giá của PO, ghi chú và việc tiếp theo.')).toBeTruthy();
@@ -427,7 +426,7 @@ describe('ChatGPT research intake', () => {
     const details = screen.getAllByText('Thông tin và thao tác liên quan')[0];
     expect(details.closest('details')?.open).toBe(false);
     fireEvent.click(details);
-    expect(screen.getAllByRole('button', { name: 'Ghi quyết định PO' }).length).toBe(5);
+    expect(screen.getAllByRole('button', { name: 'Ghi đánh giá PO' }).length).toBe(5);
     expect(screen.getAllByRole('link', { name: 'Supplied source' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Thêm vào so sánh: Supplied finding 1' })).toBeTruthy();
 
@@ -533,7 +532,6 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Finding one' })).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Các phát hiện trong báo cáo' })).toBeNull();
-    expect(screen.getByText('Chưa có đánh giá PO được lưu cho phát hiện này.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Đánh giá phát hiện này/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Đối tượng' }));
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Subject one' })).toBeTruthy();
@@ -584,7 +582,7 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Saved finding' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Gợi ý trong báo cáo' })).toBeTruthy();
     expect(screen.getByText('Đây là nội dung do báo cáo cung cấp, chưa phải quyết định của PO.')).toBeTruthy();
-    expect(screen.getByText('Quyết định')).toBeTruthy();
+    expect(screen.getByText('Đánh giá')).toBeTruthy();
     expect(screen.getByText('Keep this direction in the next review.')).toBeTruthy();
     expect(screen.getByText('Ghi chú PO')).toBeTruthy();
     expect(screen.getByText('Discuss with research.')).toBeTruthy();
@@ -612,11 +610,47 @@ describe('ChatGPT research intake', () => {
 
   it('labels report-local notes separately from project decisions', async () => {
     const saved = { ...report, project_id: 'project-qa', benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'finding' as const, item_key: 'finding-a', po_assessment: '', notes: 'Ghi chú cũ', next_action: '', dimension_assessments: {}, observation_finding_links: {} }] } };
-    mockFetch(() => saved);
+    let persisted = saved;
+    mockFetch((_url, init) => {
+      if (init.method === 'PUT') {
+        const body = JSON.parse(String(init.body));
+        persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } };
+      }
+      return persisted;
+    });
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Ghi chú riêng của báo cáo đã lưu')).toBeTruthy();
+    expect(await screen.findByText('Ghi chú báo cáo đã lưu')).toBeTruthy();
     expect(screen.queryByText('Quyết định PO đã lưu')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Mở ghi chú báo cáo cũ' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mở ghi chú báo cáo' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Ghi chú báo cáo' }));
+    expect(await screen.findByRole('heading', { name: 'Ghi chú cho báo cáo này' })).toBeTruthy();
+    expect(screen.getByText('Quyết định PO chính thức được lưu riêng trong dự án.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Lưu ghi chú báo cáo' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Ghi chú báo cáo cho finding-a'), { target: { value: 'Ghi chú được lưu trong report.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu ghi chú báo cáo' }));
+    expect(await screen.findByText('Đã lưu ghi chú báo cáo.')).toBeTruthy();
+    expect(persisted.benchmark_workspace.entries[0].notes).toBe('Ghi chú được lưu trong report.');
+  });
+
+  it('opens the explicitly related entity from a finding and returns to the same finding', async () => {
+    const linked = {
+      ...report,
+      project_id: 'project-qa',
+      research_data: {
+        ...report.research_data,
+        entities: [{ key: 'entity-alpha', entity_type: 'service', name: '[QA DEMO] Entity Alpha', attributes: { description: 'Fixture description.' }, evidence_references: [] }],
+        findings: [{ key: 'finding-alpha', finding_type: 'qa_fixture', title: '[QA DEMO] Finding Alpha', description: 'Fixture finding.', related_entities: ['entity-alpha'], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: 'Fixture only.', po_implications: 'Fixture recommendation.' }],
+      },
+    };
+    mockFetch(() => linked);
+    render(<ReportViewer reportId="saved-report" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByRole('heading', { name: '[QA DEMO] Finding Alpha' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mở hồ sơ đối tượng' }));
+    expect(await screen.findByRole('heading', { name: '[QA DEMO] Entity Alpha' })).toBeTruthy();
+    expect(screen.getByText('Fixture description.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '← Quay lại phát hiện' }));
+    expect(await screen.findByRole('heading', { name: '[QA DEMO] Finding Alpha' })).toBeTruthy();
   });
 
   it('keeps insight and comparison targets independent and preserves PO notes across remove, refresh, and restore', async () => {
