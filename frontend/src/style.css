@@ -1977,3 +1977,135 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   .csv-chart-measure em, .csv-chart-change em { grid-column: 2; grid-row: 1; }
   .csv-chart-toolbar label { min-width: 0; flex-basis: 100%; }
 }
+
+/* G3-01 CSV product-first layout: readable on narrow screens, no fabricated comparisons. */
+.data-first-workspace.csv-import-focus > .project-journey,
+.data-first-workspace.csv-import-focus > .data-workspace-heading { order: -3; }
+.data-first-workspace.csv-import-focus > .workspace-source-grid {
+  order: -2;
+  grid-template-columns: minmax(0, 1fr);
+}
+.data-first-workspace.csv-import-focus > .workspace-explorer { order: -1; }
+.csv-readiness-summary {
+  margin: 10px 0 14px;
+  padding: 11px 14px;
+  border: 1px solid #eadbc6;
+  border-left: 4px solid #cc8056;
+  border-radius: 10px;
+  background: #fff8ed;
+  color: #624527;
+  line-height: 1.5;
+  font-size: 13px;
+}
+.data-first-workspace.csv-import-focus #project-csv-data .quant-import-flow[open] {
+  border: 1px solid #e7c6b6;
+  border-radius: 12px;
+  padding: 14px;
+  background: #fffaf7;
+}
+@media (max-width: 640px) {
+  .workspace-app-table-scroll {
+    max-width: 100%;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .workspace-app-table {
+    min-width: 0;
+    width: 100%;
+    display: block;
+  }
+  .workspace-app-table thead { display: none; }
+  .workspace-app-table tbody { display: grid; gap: 12px; }
+  .workspace-app-table tbody tr {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 10px 12px;
+    padding: 14px;
+    border: 1px solid #e4d9d5;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgb(60 39 56 / 5%);
+    min-width: 0;
+  }
+  .workspace-app-table tbody tr > th,
+  .workspace-app-table tbody tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .workspace-app-table tbody tr > td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    padding-top: 3px;
+  }
+  .workspace-app-table tbody tr > th:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1;
+    font-weight: 750;
+    line-height: 1.4;
+    color: #3f264a;
+  }
+  .workspace-app-table tbody th small {
+    display: block;
+    max-width: 100%;
+    font-size: 11px;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+    font-weight: 400;
+  }
+  .workspace-app-table tbody tr > td:nth-child(n+3) {
+    grid-column: 1 / -1;
+    padding-top: 9px;
+    border-top: 1px solid #eee8e6;
+    color: #526276;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .workspace-app-table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #68596e;
+  }
+  .workspace-app-table .workspace-source-value {
+    display: block;
+    font-size: 21px;
+    font-weight: 750;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+    font-variant-numeric: tabular-nums;
+    color: #3f264a;
+  }
+  .workspace-app-table tbody tr > td.workspace-product-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .workspace-app-table td.workspace-product-actions::before {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+  .workspace-app-table .workspace-product-actions > * {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 8px;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: normal;
+    line-height: 1.25;
+  }
+}
