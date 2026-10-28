@@ -1,5 +1,6 @@
 import { DatasetMetadataReview } from './DatasetMetadataReview';
 import { csvMetricLabel } from './csvPresentation';
+import { compareCsvCells, nextCsvColumnSort } from './csvTableInteraction';
 import { canonicalCsvIdentityBytes } from './csvIdentity';
 import { useMemo, useRef, useState } from 'react';
 import { reportApi, type ImportedReport, type QuantitativeDataset, type QuantitativeDatasetInput, type QuantitativeDatasetPreview, type QuantitativeMetricColumnMapping } from './api';
@@ -156,7 +157,7 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
   const [preview, setPreview] = useState<QuantitativeDatasetPreview | null>(null); const [busy, setBusy] = useState<'validating' | 'saving' | null>(null);
   const [message, setMessage] = useState(''); const [failure, setFailure] = useState('');
   const [rawQuery, setRawQuery] = useState('');
-  const [rawMetric, setRawMetric] = useState('');
+  const [visibleRawMetrics, setVisibleRawMetrics] = useState<string[]>([]);
   const [rawSort, setRawSort] = useState<{ column: string; direction: 'asc' | 'desc' }>({ column: '', direction: 'asc' });
   const validationRevision = useRef(0);
   const [validatedInputKey, setValidatedInputKey] = useState('');
@@ -178,20 +179,27 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
       const rawName = nameColumn ? row[headers.indexOf(nameColumn)] : '';
       const rawId = idColumn ? row[headers.indexOf(idColumn)] : '';
       const queryMatch = `${rawName || ''} ${rawId || ''}`.toLocaleLowerCase().includes(rawQuery.trim().toLocaleLowerCase());
-      const metricMatch = !rawMetric || valueColumns.includes(rawMetric);
-      return queryMatch && metricMatch;
+      return queryMatch;
     });
     if (rawSort.column) {
       const index = headers.indexOf(rawSort.column);
       filtered.sort((a, b) => {
         const av = a[index] ?? ''; const bv = b[index] ?? '';
-        const numericA = Number(av.replaceAll(',', '')); const numericB = Number(bv.replaceAll(',', ''));
-        const order = Number.isFinite(numericA) && Number.isFinite(numericB) ? numericA - numericB : av.localeCompare(bv, undefined, { numeric: true });
-        return (rawSort.direction === 'asc' ? order : -order);
+        return compareCsvCells(av, bv, rawSort.direction);
       });
     }
     return { rows: filtered, idColumn, nameColumn, identityColumn: idColumn || nameColumn, platformColumn, dateColumn, valueColumns };
-  }, [dataRows, fieldMapping, headers, metricMappings, rawQuery, rawMetric, rawSort]);
+  }, [dataRows, fieldMapping, headers, metricMappings, rawQuery, rawSort]);
+  const visibleRawColumns = rawProducts.valueColumns.filter((column) => visibleRawMetrics.includes(column));
+  function toggleVisibleRawMetric(column: string) {
+    if (visibleRawMetrics.includes(column)) {
+      if (visibleRawMetrics.length <= 1) return;
+      setVisibleRawMetrics((values) => values.filter((name) => name !== column));
+      if (rawSort.column === column) setRawSort({ column: '', direction: 'asc' });
+    } else {
+      setVisibleRawMetrics((values) => [...values, column]);
+    }
+  }
   const scopeMismatchReasons = [...new Set((preview?.validation_reasons ?? []).filter((reason) => /^(?:GEO '.+ differs from report scope|Platform '.+ differs from report scope)/.test(reason)))].slice(0, 2);
 
   function invalidatePreview() {
@@ -227,7 +235,8 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
       if (chosenRevision !== fileRevision.current) return;
       const explicitPeriodMeaning = next.period_start && next.period_end ? 'reporting_interval' : 'unknown';
       setFilename(file.name); setCsvContent(content); setFieldMapping(next); setMetricMappings(uniqueMetricMappings);
-      setRawMetric(uniqueMetricMappings[0]?.column ?? '');
+      setVisibleRawMetrics(uniqueMetricMappings[0]?.column ? [uniqueMetricMappings[0].column] : []);
+      setRawSort({ column: '', direction: 'asc' }); setRawQuery('');
       setExplicitValues((current) => ({ ...current, period_semantics: explicitPeriodMeaning }));
       if (globalThis.crypto?.subtle) {
         try {
@@ -349,12 +358,48 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
       <section><h4>1. Chọn tệp CSV</h4><label className="quant-file-picker">Chọn tệp CSV<input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>{filename && <span className="quant-file-name">{filename}</span>}
         {headers.length > 0 && !existing && <section className="quant-live-data" aria-label="Dữ liệu CSV đọc trực tiếp">
           <div className="quant-live-heading"><div><strong>{new Set(dataRows.map((row) => rawProducts.identityColumn ? row[headers.indexOf(rawProducts.identityColumn)] : '').filter(Boolean)).size.toLocaleString('vi-VN')} sản phẩm · {metricMappings.length} chỉ số được nhận diện</strong><span>Giá trị dưới đây đọc trực tiếp từ file; thiếu phạm vi thì chưa dùng để kết luận tăng trưởng.</span></div><span className="quant-source-state">Dữ liệu gốc · chưa xác minh độc lập</span></div>
-          <div className="quant-live-controls"><label>Tìm sản phẩm<input value={rawQuery} onChange={(event) => setRawQuery(event.target.value)} placeholder="Tìm theo tên hoặc mã…" /></label><label>Lọc chỉ số<select value={rawMetric} onChange={(event) => setRawMetric(event.target.value)}><option value="">Tất cả chỉ số</option>{metricMappings.map((metric) => <option key={metric.column} value={metric.column}>{csvMetricLabel(metric.metric_id, metric.column)}</option>)}</select></label><label>Sắp xếp theo<select aria-label="Sắp xếp dữ liệu CSV theo cột" value={rawSort.column} onChange={(event) => setRawSort((current) => ({ ...current, column: event.target.value }))}><option value="">Thứ tự trong file</option>{[rawProducts.nameColumn, rawProducts.idColumn, ...rawProducts.valueColumns].filter((column): column is string => Boolean(column)).map((column) => <option key={column} value={column}>{column}</option>)}</select></label><button type="button" className="text-button" onClick={() => setRawSort((current) => ({ ...current, direction: current.direction === 'asc' ? 'desc' : 'asc' }))} aria-label="Đổi chiều sắp xếp">{rawSort.direction === 'asc' ? 'Tăng dần' : 'Giảm dần'}</button></div>
+          <div className="quant-live-controls">
+            <label>Tìm sản phẩm<input value={rawQuery} onChange={(event) => setRawQuery(event.target.value)} placeholder="Tìm theo tên hoặc mã…" /></label>
+            {metricMappings.length > 0 && <details className="quant-column-picker">
+              <summary>Chọn cột chỉ số · {visibleRawColumns.length}/{metricMappings.length}</summary>
+              <div role="group" aria-label="Các chỉ số hiển thị thành cột">
+                {metricMappings.map((metric) => <label key={metric.column}>
+                  <input type="checkbox" checked={visibleRawColumns.includes(metric.column)} disabled={visibleRawColumns.length === 1 && visibleRawColumns.includes(metric.column)} onChange={() => toggleVisibleRawMetric(metric.column)} aria-label={`Hiển thị cột ${csvMetricLabel(metric.metric_id, metric.column)}`} />
+                  <span>{csvMetricLabel(metric.metric_id, metric.column)}<small>Tên cột nguồn: {metric.column}</small></span>
+                </label>)}
+              </div>
+            </details>}
+            <span className="quant-sort-instruction">Bấm tiêu đề cột ↕ để sắp xếp</span>
+          </div>
           <p className="quant-live-scope">{rawProducts.platformColumn ? `Nền tảng trong file: ${[...new Set(dataRows.map((row) => row[headers.indexOf(rawProducts.platformColumn!)]).filter(Boolean))].join(', ')}` : 'Nền tảng: chưa có trong file'} · {rawProducts.dateColumn ? `Ngày ghi trong CSV: ${[...new Set(dataRows.map((row) => row[headers.indexOf(rawProducts.dateColumn!)]).filter(Boolean))].slice(0, 3).join(', ')} (chưa xác nhận ý nghĩa kỳ đo)` : 'Chưa có ngày và chưa xác nhận kỳ đo'} · GEO: chưa được cung cấp rõ ràng</p>
-          <div className="quant-table-scroll quant-live-table-scroll"><table className="quant-live-table"><thead><tr><th>Sản phẩm / mã nguồn</th>{rawProducts.valueColumns.filter((column) => !rawMetric || column === rawMetric).map((column) => <th key={column} scope="col">{csvMetricLabel(metricMappings.find((metric) => metric.column === column)?.metric_id, column)}<small className="table-source-label">Tên nguồn: {column}</small></th>)}</tr></thead><tbody>{rawProducts.rows.map((row, rowIndex) => <tr key={`${rowIndex}-${rawProducts.identityColumn ? row[headers.indexOf(rawProducts.identityColumn)] : rowIndex}`}><th scope="row"><strong>{rawProducts.nameColumn ? row[headers.indexOf(rawProducts.nameColumn)] : 'Sản phẩm chưa có tên'}</strong><small>{rawProducts.idColumn ? row[headers.indexOf(rawProducts.idColumn)] : ''}{rawProducts.platformColumn ? ` · ${row[headers.indexOf(rawProducts.platformColumn)]}` : ''}</small></th>{rawProducts.valueColumns.filter((column) => !rawMetric || column === rawMetric).map((column) => <td key={column} data-label={csvMetricLabel(metricMappings.find((metric) => metric.column === column)?.metric_id, column)}>{row[headers.indexOf(column)] || 'Chưa có giá trị'}</td>)}</tr>)}</tbody></table>{rawProducts.rows.length === 0 && <p className="dataset-empty">Không có sản phẩm khớp với tìm kiếm.</p>}</div>
+          <div className="quant-table-scroll quant-live-table-scroll">
+            <table className="quant-live-table">
+              <thead><tr>
+                <th scope="col" aria-sort={rawSort.column === rawProducts.nameColumn ? rawSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
+                  <button className="quant-sort-header" type="button" onClick={() => rawProducts.nameColumn && setRawSort((current) => nextCsvColumnSort(current, rawProducts.nameColumn!, 'asc'))} disabled={!rawProducts.nameColumn}>
+                    <span>Sản phẩm / mã nguồn</span><span aria-hidden="true">{rawSort.column === rawProducts.nameColumn ? rawSort.direction === 'asc' ? '↑' : '↓' : '↕'}</span>
+                  </button>
+                </th>
+                {visibleRawColumns.map((column) => {
+                  const metric = metricMappings.find((item) => item.column === column);
+                  return <th key={column} scope="col" aria-sort={rawSort.column === column ? rawSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
+                    <button className="quant-sort-header" type="button" onClick={() => setRawSort((current) => nextCsvColumnSort(current, column))}>
+                      <span>{csvMetricLabel(metric?.metric_id, column)}<small>Tên nguồn: {column}</small></span>
+                      <span aria-hidden="true">{rawSort.column === column ? rawSort.direction === 'asc' ? '↑' : '↓' : '↕'}</span>
+                    </button>
+                  </th>;
+                })}
+              </tr></thead>
+              <tbody>{rawProducts.rows.map((row, rowIndex) => <tr key={`${rowIndex}-${rawProducts.identityColumn ? row[headers.indexOf(rawProducts.identityColumn)] : rowIndex}`}>
+                <th scope="row"><strong>{rawProducts.nameColumn ? row[headers.indexOf(rawProducts.nameColumn)] : 'Sản phẩm chưa có tên'}</strong><small>{rawProducts.idColumn ? row[headers.indexOf(rawProducts.idColumn)] : ''}{rawProducts.platformColumn ? ` · ${row[headers.indexOf(rawProducts.platformColumn)]}` : ''}</small></th>
+                {visibleRawColumns.map((column) => <td key={column} data-label={csvMetricLabel(metricMappings.find((metric) => metric.column === column)?.metric_id, column)}>{row[headers.indexOf(column)] || 'Chưa có giá trị'}</td>)}
+              </tr>)}</tbody>
+            </table>
+            {rawProducts.rows.length === 0 && <p className="dataset-empty">Không có sản phẩm khớp với tìm kiếm.</p>}
+          </div>
           <small>Đang xem {rawProducts.rows.length.toLocaleString('vi-VN')} trong {dataRows.length.toLocaleString('vi-VN')} dòng nguồn. Bảng cho phép khám phá CSV trước khi xác nhận phạm vi để phân tích.</small>
         </section>}
-        {headers.length > 0 && !existing && <div className="quant-preview-table"><strong>Xem nhanh · {dataRows.length.toLocaleString('vi-VN')} dòng có dữ liệu · dấu phân cách {delimiter === '\t' ? 'tab' : delimiter}</strong><div className="quant-table-scroll"><table style={headers.length > 8 ? { minWidth: `${headers.length * 96}px` } : undefined}><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`} style={{ whiteSpace: 'nowrap' }}>{header || `Cột ${index + 1}`}</th>)}</tr></thead><tbody>{sampleRows.map((sample, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index} style={{ whiteSpace: index === 0 ? 'normal' : 'nowrap' }}>{sample[index] ?? ''}</td>)}</tr>)}</tbody></table></div><small>Đang hiển thị {sampleRows.length} dòng đầu trong tổng số {dataRows.length}. Đây chỉ là mẫu xem nhanh.</small></div>}
+        {headers.length > 0 && !existing && <details className="quant-preview-table"><summary>Xem nhanh · {dataRows.length.toLocaleString('vi-VN')} dòng có dữ liệu · dấu phân cách {delimiter === '\t' ? 'tab' : delimiter}</summary><div className="quant-table-scroll"><table style={headers.length > 8 ? { minWidth: `${headers.length * 96}px` } : undefined}><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`} style={{ whiteSpace: 'nowrap' }}>{header || `Cột ${index + 1}`}</th>)}</tr></thead><tbody>{sampleRows.map((sample, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index} style={{ whiteSpace: index === 0 ? 'normal' : 'nowrap' }}>{sample[index] ?? ''}</td>)}</tr>)}</tbody></table></div><small>Đang hiển thị {sampleRows.length} dòng đầu trong tổng số {dataRows.length}. Đây chỉ là mẫu xem nhanh.</small></div>}
       </section>
       {headers.length > 0 && !existing && <details className="quant-advanced-mapping"><summary>Rà soát cách nhận diện và phạm vi (chỉ cần khi cần chỉnh)</summary><section><h4>2. Rà soát dữ liệu được nhận diện</h4><p>ID/tên từ CSV được giữ làm danh tính nguồn. {report ? 'Ứng dụng khớp rõ ràng với báo cáo được liên kết; đối tượng không có trong báo cáo vẫn hợp lệ ở cấp bộ dữ liệu và không cần thao tác thủ công.' : 'CSV được lưu độc lập với mọi báo cáo; tên và ID nguồn được giữ nguyên.'} Chỉ ID/tên mâu thuẫn hoặc có nhiều kết quả mới cần xem lại.</p>
         <div className="quant-auto-summary" role="status">{fieldMapping.entity_id && fieldMapping.entity_name ? `Danh tính nguồn: ID ${fieldMapping.entity_id} · tên ${fieldMapping.entity_name}` : fieldMapping.entity_id ? `Cột ID nguồn: ${fieldMapping.entity_id}` : fieldMapping.entity_name ? `Cột tên nguồn: ${fieldMapping.entity_name}` : 'Chọn cột ID hoặc tên để giữ danh tính của từng sản phẩm'}{fieldMapping.geo ? ` · Thị trường: ${fieldMapping.geo}` : ''}{fieldMapping.platform ? ` · Nền tảng: ${fieldMapping.platform}` : ''}{metricMappings.length ? ` · Đã nhận diện ${metricMappings.length} cột chỉ số` : ''}</div>
