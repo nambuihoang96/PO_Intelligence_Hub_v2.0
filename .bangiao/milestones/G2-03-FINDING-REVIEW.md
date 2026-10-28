@@ -27,3 +27,7 @@ Files: `frontend/src/research/OpportunityReview.tsx`, its test, Recovery Board a
 After the finding slice, browser UAT also saved a separate subject decision (`Tìm hiểu thêm`) and an explicitly labelled synthetic trend-update decision (`Tạm hoãn`) in the same isolated project. Both appeared separately in Tracking and reopened with target, rationale and next action intact after refresh. The finding decision remained separate. [Trend decision](../screenshots/g2-03/trend-update-decision.jpg) · [Tracking with all three](../screenshots/g2-03/tracking-three-targets.jpg).
 
 Legacy preservation and revision-conflict behavior still require applicable review; these synthetic checks do not confer owner product acceptance.
+
+## Concurrent edit QA
+
+Two browser tabs edited the same synthetic trend decision. The first saved a newer revision; the second received a conflict and retained its unsaved draft. After refresh, the first tab's saved value and revision history remained. The originally English conflict response is now displayed in Vietnamese with instructions to preserve the draft and review the newer version. [Conflict and retained draft](../screenshots/g2-03/decision-conflict-draft.jpg). After the fix, frontend 26 files / 220 tests, typecheck and build passed. Legacy preservation remains under review; product acceptance remains pending.

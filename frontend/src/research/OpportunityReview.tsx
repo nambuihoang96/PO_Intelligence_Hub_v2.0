@@ -274,7 +274,12 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
         setSaveState('unsaved');
       }
       return false;
-    } catch (cause) { setSaveState('failed'); setError(cause instanceof Error ? cause.message : 'Lưu không thành công. Các chỉnh sửa vẫn còn trên màn hình.'); return false; }
+    } catch (cause) {
+      setSaveState('failed');
+      const conflict = cause instanceof Error && 'code' in cause && cause.code === 'DECISION_REVISION_CONFLICT';
+      setError(conflict ? 'Quyết định đã thay đổi ở màn hình khác. Bản nháp vẫn còn nhưng chưa được lưu; hãy sao chép nội dung cần giữ, tải lại và đối chiếu phiên bản mới trước khi lưu.' : cause instanceof Error ? cause.message : 'Lưu không thành công. Các chỉnh sửa vẫn còn trên màn hình.');
+      return false;
+    }
   }
 
   if (loading) return <div className="opportunity-page"><p role="status">Đang tải quyết định sản phẩm…</p></div>;

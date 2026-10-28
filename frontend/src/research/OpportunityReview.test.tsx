@@ -250,12 +250,12 @@ describe('OpportunityReview', () => {
   });
 
   it('preserves the draft and explains a revision conflict', async () => {
-    vi.mocked(researchApi.saveOpportunityDecision).mockRejectedValueOnce(new Error('Decision changed in another session. Refresh and review the saved version.'));
+    vi.mocked(researchApi.saveOpportunityDecision).mockRejectedValueOnce(Object.assign(new Error('Conflict'), { code: 'DECISION_REVISION_CONFLICT' }));
     render(<OpportunityReview projectId="workspace-1" />);
     await screen.findByLabelText('Lý do / đánh giá của PO');
     fireEvent.change(screen.getByLabelText('Lý do / đánh giá của PO'), { target: { value: 'My conflicting edit stays here.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu quyết định' }));
-    expect((await screen.findByRole('alert')).textContent).toMatch(/changed in another session/i);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Bản nháp vẫn còn nhưng chưa được lưu/);
     expect((screen.getByLabelText('Lý do / đánh giá của PO') as HTMLTextAreaElement).value).toBe('My conflicting edit stays here.');
   });
 
