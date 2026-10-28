@@ -303,12 +303,13 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Tổng quan' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: Creative control supports engagement' }));
     expect(await screen.findAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
-    expect(document.querySelector('.insight-list-item.active')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.insight-list-item.active')).toBeNull();
+    expect(document.querySelector('.insight-workspace.is-single-item')).toBeTruthy();
     expect(screen.getByText('Test whether customization is discoverable.')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Research source' }).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Xem đoạn hỗ trợ trong báo cáo gốc' }));
+    fireEvent.click(screen.getByText('Xem đoạn hỗ trợ trong báo cáo gốc'));
     expect(screen.getByText(/line:3: A sourced finding/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Xem đoạn hỗ trợ trong báo cáo gốc' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Xem đoạn hỗ trợ trong báo cáo gốc').closest('details')?.open).toBe(true);
     expect(screen.getAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
   });
 
@@ -517,6 +518,79 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByText(/No research was performed/)).toBeTruthy();
   });
 
+  it('uses a full-width detail for one finding and entity, and keeps the empty states explicit', async () => {
+    const singleFixture = {
+      ...report,
+      research_data: {
+        ...report.research_data,
+        findings: [{ key: 'one-finding', finding_type: 'qa_fixture', title: '[QA ONLY] Finding one', description: 'Fixture detail.', related_entities: ['one-entity'], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: 'Fixture uncertainty.', po_implications: 'Fixture PO implication.' }],
+        entities: [{ key: 'one-entity', entity_type: 'research_subject', name: '[QA ONLY] Subject one', attributes: { description: 'Fixture description.' }, evidence_references: [] }],
+      },
+    };
+    mockFetch(() => singleFixture);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: report.question });
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByRole('heading', { name: '[QA ONLY] Finding one' })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Các phát hiện trong báo cáo' })).toBeNull();
+    expect(screen.getByText('Chưa có đánh giá PO được lưu cho phát hiện này.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Đánh giá phát hiện này/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đối tượng' }));
+    expect(await screen.findByRole('heading', { name: '[QA ONLY] Subject one' })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Đối tượng trong báo cáo' })).toBeNull();
+    expect(screen.getByText('Fixture description.')).toBeTruthy();
+    expect(screen.getByText('Báo cáo chưa cung cấp đường dẫn nguồn.')).toBeTruthy();
+  });
+
+  it('shows a selectable list for multiple findings and domain-neutral entities', async () => {
+    const multipleFixture = {
+      ...report,
+      research_data: {
+        ...report.research_data,
+        findings: ['finding-one', 'finding-two'].map((key) => ({ key, finding_type: 'qa_fixture', title: `[QA ONLY] ${key}`, description: `Detail ${key}.`, related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: '', po_implications: '' })),
+        entities: [
+          { key: 'subject-one', entity_type: 'place', name: '[QA ONLY] Place one', attributes: {}, evidence_references: [] },
+          { key: 'subject-two', entity_type: 'dataset', name: '[QA ONLY] Dataset two', attributes: {}, evidence_references: [] },
+        ],
+      },
+    };
+    mockFetch(() => multipleFixture);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: report.question });
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByRole('navigation', { name: 'Các phát hiện trong báo cáo' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /finding-two/ }));
+    expect(await screen.findByRole('heading', { name: '[QA ONLY] finding-two' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đối tượng' }));
+    expect(await screen.findByRole('navigation', { name: 'Đối tượng trong báo cáo' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Dataset two/ }));
+    expect(await screen.findByRole('heading', { name: '[QA ONLY] Dataset two' })).toBeTruthy();
+    expect(screen.getAllByText('dataset').length).toBeGreaterThan(0);
+  });
+
+  it('separates report recommendations from a saved PO assessment in finding detail', async () => {
+    const savedDecision = {
+      ...report,
+      benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'finding' as const, item_key: 'saved-finding', po_assessment: 'Keep this direction in the next review.', notes: 'Discuss with research.', next_action: 'Validate with users.', dimension_assessments: {}, observation_finding_links: {} }] },
+      research_data: {
+        ...report.research_data,
+        findings: [{ key: 'saved-finding', finding_type: 'qa_fixture', title: '[QA ONLY] Saved finding', description: 'Fixture detail.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: 'Fixture uncertainty.', po_implications: 'Report suggestion only.' }],
+      },
+    };
+    mockFetch(() => savedDecision);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: report.question });
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByRole('heading', { name: '[QA ONLY] Saved finding' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Gợi ý trong báo cáo' })).toBeTruthy();
+    expect(screen.getByText('Đây là nội dung do báo cáo cung cấp, chưa phải quyết định của PO.')).toBeTruthy();
+    expect(screen.getByText('Quyết định')).toBeTruthy();
+    expect(screen.getByText('Keep this direction in the next review.')).toBeTruthy();
+    expect(screen.getByText('Ghi chú PO')).toBeTruthy();
+    expect(screen.getByText('Discuss with research.')).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Các nguồn tham khảo' })).toBeNull();
+  });
+
   it('shows saved PO work in the Overview after reopening an existing report', async () => {
     const saved = {
       ...report,
@@ -651,9 +725,9 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Đối tượng' }));
-    const [addSubjectA, addSubjectB] = screen.getAllByRole('button', { name: 'Thêm vào so sánh' });
-    fireEvent.click(addSubjectA);
-    fireEvent.click(addSubjectB);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh: Subject A' }));
+    fireEvent.click(screen.getByRole('button', { name: /Subject B/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh: Subject B' }));
     await waitFor(() => expect(requestBodies).toHaveLength(1));
     const apply = (body: any) => { persisted = { ...persisted, benchmark_selections: body.selections, benchmark_workspace: { custom_dimensions: body.custom_dimensions, entries: body.entries } }; return jsonResponse(persisted); };
     releases[0](apply(requestBodies[0]));
@@ -706,7 +780,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'Đối tượng' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào so sánh: Subject A' }));
     await waitFor(() => expect(requestBodies).toHaveLength(1));
     fireEvent.click(screen.getByRole('tab', { name: 'So sánh' }));
     fireEvent.click(screen.getByText('Subject A').closest('summary')!);
@@ -829,7 +903,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByText('platform signature')).toBeTruthy();
     expect(screen.queryByText(/Setup time reported:/)).toBeNull();
     expect(screen.getAllByRole('link', { name: 'Source report' }).every((link) => link.getAttribute('href') === 'https://example.com/')).toBe(true);
-    expect(screen.getByRole('heading', { name: /Nguồn tham khảo hỗ trợ · needs_review · chưa xác minh/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Bằng chứng · 1 nguồn tham khảo, chưa xác minh độc lập/ })).toBeTruthy();
   });
 
   it('keeps the contextual assessment workflow for a non-mobile report with no comparison entities', async () => {

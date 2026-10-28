@@ -35,7 +35,7 @@ const shapes: Record<ResultsIconName, IconShape> = {
 
 export function ResultsIcon({ name, ...props }: SVGProps<SVGSVGElement> & { name: ResultsIconName }) {
   const shape = shapes[name];
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...props}>
+  return <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...props}>
     {shape.paths.map((d, index) => <path d={d} key={index} />)}
     {shape.circles?.map(([cx, cy, r], index) => <circle cx={cx} cy={cy} r={r} key={`c${index}`} />)}
     {shape.rects?.map(([x, y, width, height, rx], index) => <rect x={x} y={y} width={width} height={height} rx={rx} key={`r${index}`} />)}
