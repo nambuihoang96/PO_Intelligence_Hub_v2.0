@@ -49,6 +49,7 @@ Luồng CSV thật đã được chọn qua file chooser của ứng dụng, xem
 5. Tạo hồ sơ cho `Mystery Dumpling: Unbox ASMR` từ dòng CSV, tạo collection QA, chọn collection trong explorer và bấm `Thêm vào bộ so sánh`; UI xác nhận đã thêm. `Mở hồ sơ` dẫn tới đúng hồ sơ.
 6. Mở lại project sau thao tác: hồ sơ còn, trạng thái hồ sơ báo `1 bộ so sánh`, collection `[QA] G3-01 UI upload comparison` có 1 hồ sơ. Trong project QA seeded thứ hai, cùng luồng thêm hồ sơ làm collection hiện có tăng từ 1 lên 2; xác nhận sau khi mở lại.
 7. API QA đã được ping; frontend chạy ở `15295`, API ở `15296`, DB root `.g3-01-qa-20261028/`. Production SQLite không được mở hoặc ghi.
+8. Mở Project Home của project UI-upload; collection `[QA] G3-01 UI upload comparison` xuất hiện cùng số thành viên và dataset đã lưu. Mở collection từ Project Home dẫn về đúng collection trong workspace; hồ sơ và membership vẫn khớp.
 
 **Giới hạn UAT:** Không có GEO rõ ràng; `Platform=Unified` không cho biết iOS/Android; cột Date không đủ ngữ nghĩa để tự khẳng định period/granularity/methodology. Vì vậy dữ liệu được duyệt/khám phá nhưng không tuyên bố analytics-ready hoặc vẽ kết luận tăng trưởng. Các chiều 1440/768/390 được kiểm tra trực tiếp; 1076×828 không kiểm tra trong lượt này.
 
@@ -60,6 +61,7 @@ Luồng CSV thật đã được chọn qua file chooser của ứng dụng, xem
 - [Preview trước khi lưu — desktop](screenshots/g3-01/csv-upload-preview-desktop.jpg).
 - [Preview trước khi lưu — mobile](screenshots/g3-01/csv-upload-preview-mobile-390.jpg).
 - [Hồ sơ và benchmark sau khi mở lại](screenshots/g3-01/csv-ui-upload-profile-benchmark-after-reopen.jpg) — trang ứng dụng thật sau khi reopen.
+- [Project Home với collection và dataset](screenshots/g3-01/project-home-benchmark-collection.jpg) — xác nhận các kết quả đã lưu được đưa lại vào ngữ cảnh Project.
 - Các ảnh lượt trước vẫn giữ nguyên: [bảng CSV](screenshots/g3-01/csv-analytics-browser.png), [tìm kiếm](screenshots/g3-01/csv-product-filtered.png), [hồ sơ/benchmark](screenshots/g3-01/csv-profile-benchmark-after-refresh.png).
 
 ## Kiểm thử
