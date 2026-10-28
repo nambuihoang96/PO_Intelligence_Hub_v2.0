@@ -134,6 +134,7 @@ describe('ChatGPT research intake', () => {
     await screen.findByRole('heading', { name: report.question });
     expect(screen.getByRole('link', { name: '← Về thư viện báo cáo' }).getAttribute('href')).toBe('/reports?projectId=project-a');
     expect(screen.getByRole('link', { name: 'Báo cáo' }).getAttribute('href')).toBe('/reports?projectId=project-a');
+    expect(screen.getByRole('link', { name: 'Dự án' }).getAttribute('href')).toBe('/research?projectId=project-a');
   });
 
   it('copies the prompt for ChatGPT without calling an AI service', async () => {

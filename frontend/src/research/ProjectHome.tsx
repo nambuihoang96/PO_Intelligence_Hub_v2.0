@@ -108,8 +108,8 @@ export function ProjectHome({ projectId }: { projectId: string }) {
       <div className="project-home-section-heading"><div><span className="project-home-kicker">HÀNH ĐỘNG</span><h3 id="project-home-actions-title">Bạn muốn thực hiện gì?</h3></div></div>
       <div className="project-home-action-grid">
         <a className="project-home-action project-home-action-primary" href={deepResearch}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="search" /></span><span><strong>Nghiên cứu chuyên sâu</strong><small>Đặt câu hỏi, tạo yêu cầu ChatGPT và lưu kết quả</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
-        <a className="project-home-action" href={saveInformation}><span className="project-home-action-mark peach" aria-hidden="true"><ResultsIcon name="runs" /></span><span><strong>Ghi nhận xu hướng</strong><small>Lưu quan sát, bản tin, đường dẫn hoặc ảnh cho sản phẩm</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
-        <a className="project-home-action" href={csvImport}><span className="project-home-action-mark lilac" aria-hidden="true"><ResultsIcon name="metric" /></span><span><strong>Phân tích dữ liệu</strong><small>Nhập CSV, xem chỉ số và so sánh sản phẩm</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action" href={saveInformation}><span className="project-home-action-mark peach" aria-hidden="true"><ResultsIcon name="runs" /></span><span><strong>Lưu thông tin</strong><small>Lưu quan sát, bản tin, đường dẫn hoặc ảnh vào dự án</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action" href={csvImport}><span className="project-home-action-mark lilac" aria-hidden="true"><ResultsIcon name="metric" /></span><span><strong>Phân tích CSV</strong><small>Xem dữ liệu sản phẩm và chọn mục cần nghiên cứu tiếp</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
       </div>
     </section>
 

@@ -370,6 +370,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const reportsLibraryHref = report.project_id
     ? `/reports?projectId=${encodeURIComponent(report.project_id)}`
     : new URLSearchParams(window.location.search).get('from') === 'unassigned' ? '/reports?unassigned=1' : '/reports';
+  const projectHomeHref = report.project_id ? `/research?projectId=${encodeURIComponent(report.project_id)}` : '/research';
   const data = report.research_data;
   const researchStatus = report.research_status || (report.parse_status === 'PARSED' ? 'STRUCTURED_READY' : 'TEXT_ONLY');
   const keyTakeaways = data.key_takeaways ?? [];
@@ -544,7 +545,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     {report.project_id && <ProjectJourneyNav projectId={report.project_id} active="report" />}
     {imported && <div className="research-success" role="status">{new URLSearchParams(window.location.search).has('duplicate') ? 'Báo cáo đã tồn tại được mở từ lịch sử; dữ liệu gốc được giữ nguyên.' : 'Đã nhập báo cáo.'}</div>}
     <header className="research-panel report-meta results-header">
-      <div className="results-breadcrumb"><a href="/" onClick={confirmWorkspaceNavigation}>Dự án</a><span aria-hidden="true">›</span><a href={reportsLibraryHref} onClick={confirmWorkspaceNavigation}>Báo cáo</a><span aria-hidden="true">›</span><span>{report.question}</span></div>
+      <div className="results-breadcrumb"><a href={projectHomeHref} onClick={confirmWorkspaceNavigation}>Dự án</a><span aria-hidden="true">›</span><a href={reportsLibraryHref} onClick={confirmWorkspaceNavigation}>Báo cáo</a><span aria-hidden="true">›</span><span>{report.question}</span></div>
       <div className="results-title-row"><div className="results-title-copy"><span className="field-label">BÁO CÁO NGHIÊN CỨU · NHẬP LÚC {new Date(report.imported_at).toLocaleString('vi-VN')}</span><h2>{report.question}</h2><p className="results-context"><span>{displayReportGeo(report.geo)}</span><span>{displayReportEnvironment(report.os)}</span>{report.research_period && <span>{report.research_period}</span>}<span>{report.origin === 'chatgpt_user_import' ? 'Nhập từ ChatGPT' : report.origin}</span><span className="quantitative-context">{quantitativeStateLabels[quantitativeState.state]}</span></p></div><div className="results-header-actions"><span className={`results-status${researchStatus === 'TEXT_ONLY' ? ' is-text-only' : ''}`}>{researchStatus === 'STRUCTURED_READY' ? 'Đã có kết quả có cấu trúc' : researchStatus === 'STRUCTURED_PARTIAL' ? 'Kết quả có cấu trúc một phần' : 'Chỉ có báo cáo văn bản'}</span><a className="text-button results-back-link" href={reportsLibraryHref} onClick={confirmWorkspaceNavigation}>← Về thư viện báo cáo</a></div></div>
     </header>
     <section className="quantitative-foundation" aria-label="Nguồn dữ liệu"><div className="quant-data-heading"><strong>Nguồn dữ liệu</strong><span className={`quant-state quant-state-${quantitativeState.state}`}>{quantitativeStateLabels[quantitativeState.state]}</span>{quantitativeDatasets.length > 0 && <a className="text-button" href={`/compare-periods${report.project_id ? `?projectId=${encodeURIComponent(report.project_id)}` : ''}`}>So sánh các tệp CSV</a>}</div>
