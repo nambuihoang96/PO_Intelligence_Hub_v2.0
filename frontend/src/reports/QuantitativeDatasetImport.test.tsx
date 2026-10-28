@@ -31,6 +31,31 @@ describe('QuantitativeDatasetImport', () => {
   });
 
 
+  it('adds CSV metric columns with checkboxes and sorts by clicking numeric headers', async () => {
+    const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
+    fireEvent.click(screen.getByText('Nhập CSV · chọn tệp → kiểm tra → lưu vào báo cáo'));
+    const csv = [
+      'Unified Name;Unified ID;Platform;Downloads (Absolute);Downloads (YoY Growth %)',
+      'App A;a;Unified;1200;12.5',
+      'App B;b;Unified;500;8.1',
+    ].join('\n');
+    const file = new File([csv], 'metric-columns.csv', { type: 'text/csv' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await screen.findByText('metric-columns.csv');
+    const table = container.querySelector('.quant-live-table') as HTMLTableElement;
+    expect(table).toBeTruthy();
+    expect(table.querySelectorAll('thead th')).toHaveLength(2); // Product + default metric.
+    const metricCheckbox = screen.getByRole('checkbox', { name: 'Hiển thị cột Thay đổi lượt tải so với cùng kỳ (%)' });
+    fireEvent.click(metricCheckbox);
+    expect(table.querySelectorAll('thead th')).toHaveLength(3);
+    expect(table.textContent).toContain('12.5');
+    fireEvent.click(screen.getByRole('button', { name: /Lượt tải \(giá trị nguồn\)/ }));
+    expect(table.querySelector('tbody tr th strong')?.textContent).toBe('App A');
+    fireEvent.click(screen.getByRole('button', { name: /Lượt tải \(giá trị nguồn\)/ }));
+    expect(table.querySelector('tbody tr th strong')?.textContent).toBe('App B');
+    expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
+  });
+
   it('shows a local file preview and does not persist before explicit confirm', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
     vi.mocked(reportApi.importQuantitativeDataset).mockResolvedValue({ id: 'dataset-1', report_id: 'report-1', filename: 'metrics.csv', content_sha256: 'hash', field_mapping: {}, entity_mappings: {}, observations: preview.observations as never, compatibility_status: 'compatible', validation_reasons: [], created_at: '2026-01-01', duplicate: false } as never);
