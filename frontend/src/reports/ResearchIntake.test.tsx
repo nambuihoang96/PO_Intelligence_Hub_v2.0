@@ -457,6 +457,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByText('Báo cáo văn bản · Bổ sung kết quả có cấu trúc'));
     expect(screen.getByRole('button', { name: 'Tạo prompt cho ChatGPT' })).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Phát hiện' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mở đánh giá PO' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Câu hỏi còn mở' })).toBeNull();
   });
 

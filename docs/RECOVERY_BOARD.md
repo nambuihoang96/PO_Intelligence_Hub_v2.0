@@ -364,3 +364,9 @@ User rejected existing 15195 UX and asked for direct code changes rather than ad
 - Fixed report Overview wording so report-local historical notes are not labeled as the project decision. Existing notes and decisions remain separate. Frontend 26 files / 221 tests PASS; TypeScript/build PASS; 31 isolated backend report tests PASS with migrations.
 - Real screenshots: `.bangiao/screenshots/g2-01/structured-report-desktop.jpg` at 1440×900 and `text-report-mobile.jpg` at 390×844. Mobile header remains tall and wider design work is subject to G1 approval. Handoff `.bangiao/milestones/G2-01-REVIEW.md`.
 - **Status:** scoped technical/browser verification passed; owner acceptance remains pending. Genuine long-form report verification is G2-04 and was not performed. Continue G2-02 identity/link/navigation verification without changing production data.
+
+### G2-02 project/report continuity — verification in progress — 2026-10-28
+
+- Isolated in-app browser: project A library showed its two QA reports; project B filter showed its empty state; all-reports filter returned the same two IDs. Opening a report from the shared library retained its project context and browser Back returned to the shared library. Prior 3/2 allocation and explicit legacy link automated/isolated evidence remains in `.bangiao/P0-PROJECT-REPORT-UNIFICATION.md`.
+- Found a dead Overview action for text-only reports without report-local notes: the action targeted a hidden tab. Hide it when no corresponding tab exists; likewise do not offer an evidence action when there is no evidence tab. Browser reload confirmed the former is absent while the existing source action remains available. Frontend 26 files / 221 tests and TypeScript/build PASS.
+- **Remaining:** re-check explicit legacy linking and the broader accepted Project Home UX against current branch in browser. G2-02 stays REWORK / PRODUCT NEEDS FIX; no owner product acceptance claimed.
