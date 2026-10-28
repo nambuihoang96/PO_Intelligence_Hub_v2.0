@@ -116,6 +116,28 @@ describe('DataFirstWorkspace', () => {
     expect((await screen.findAllByRole('status')).length).toBeGreaterThan(0);
   });
 
+  it('adds multiple saved CSV metrics as columns and sorts directly from the chosen metric header', async () => {
+    const observations = [
+      { ...dataset.observations[0], source_entity_id: 'st-alpha', source_entity_name: 'Alpha', value: 120 },
+      { ...dataset.observations[0], source_entity_id: 'st-alpha', source_entity_name: 'Alpha', metric_id: 'downloads_yoy_growth_percent', metric_definition: 'Downloads (YoY Growth %)', unit: '%', value: 10 },
+      { ...dataset.observations[0], source_entity_id: 'st-beta', source_entity_name: 'Beta', value: 240 },
+      { ...dataset.observations[0], source_entity_id: 'st-beta', source_entity_name: 'Beta', metric_id: 'downloads_yoy_growth_percent', metric_definition: 'Downloads (YoY Growth %)', unit: '%', value: 20 },
+    ];
+    vi.mocked(reportApi.getProjectQuantitativeDataset).mockResolvedValue({ ...dataset, source_apps: 2, observations } as never);
+    const { container } = render(<DataFirstWorkspace projectId="workspace-1" />);
+    await screen.findByText('sensor-export.csv');
+    const table = container.querySelector('.workspace-app-table') as HTMLTableElement;
+    expect(table.querySelectorAll('thead th')).toHaveLength(5); // Selection, name, one metric, scope and actions.
+    fireEvent.click(screen.getByText('Chọn cột chỉ số · 1/2'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hiển thị cột Thay đổi lượt tải so với cùng kỳ (%)' }));
+    expect(table.querySelectorAll('thead th')).toHaveLength(6);
+    fireEvent.click(screen.getByRole('button', { name: /Thay đổi lượt tải so với cùng kỳ/ }));
+    expect(table.querySelector('tbody tr th')?.textContent).toContain('Beta');
+    fireEvent.click(screen.getByRole('button', { name: /Thay đổi lượt tải so với cùng kỳ/ }));
+    expect(table.querySelector('tbody tr th')?.textContent).toContain('Alpha');
+    expect(screen.getAllByText(/Đọc từ CSV · chưa xác minh độc lập/)).toHaveLength(4);
+  });
+
   it('opens the explicitly selected project dataset from a Project Home deep link', async () => {
     const otherDataset = { ...dataset, id: 'dataset-2', filename: 'second-export.csv', content_sha256: 'second-hash' };
     const otherCatalog = { ...catalog, id: 'dataset-2', filename: 'second-export.csv', content_sha256: 'second-hash' };
