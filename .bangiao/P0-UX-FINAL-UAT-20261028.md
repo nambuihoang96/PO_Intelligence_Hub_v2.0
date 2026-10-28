@@ -76,3 +76,11 @@ The implementation changes in this commit cover the Vietnamese shell, report/dat
 **Implementation commit SHA:** `29c8547a5e2cefbb152e021a02f6fa6b89f412e1`
 
 **Push status:** Pushed successfully to `origin/feat/ux-recovery-01-research-results`.
+
+## Follow-up P0 verification — 2026-10-28
+
+After the implementation commit, the saved subject decision was reopened from Project Home in the same isolated QA browser. The PO status remained `Tạm hoãn`; the reason `UAT — trì hoãn chủ đề cho đến khi có nguồn phù hợp.` and next action `UAT — gắn một phát hiện đã có căn cứ rồi đánh giá lại.` were populated. A browser reload preserved the selected status and both text fields. This verifies subject/project decision persistence for the QA fixture; finding-specific decision persistence is not verified because the fixture report is text-only.
+
+The provided Sensor Tower CSV was selected in the Project CSV intake and previewed without saving. It contained 27 data rows with a semicolon delimiter, detected `Unified Name`, `Unified ID`, `Platform`, `Date`, and 9 metric columns. Preview validation showed 243 measurements, 25 source-only entities, 0 matches, 0 complete observations, 243 incomplete observations, and 16 duplicates. GEO and period semantics/methodology were not explicit in the file; `Unified` was kept as supplied. No save/confirm action was taken. After reloading, the isolated workspace still listed exactly its original one persisted dataset. Production SQLite was not touched.
+
+No code changed during this follow-up; the implementation and automated-test results above refer to commit `29c8547a5e2cefbb152e021a02f6fa6b89f412e1`. The G3-01 CSV workflow remains under rework because missing metadata correctly prevents analytics readiness; do not fill it by inference. The full P0 product status remains `NEEDS FIX`.
