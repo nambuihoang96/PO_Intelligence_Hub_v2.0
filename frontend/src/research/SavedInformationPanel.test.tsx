@@ -8,6 +8,7 @@ const projectId = 'project-1';
 const page = <T,>(items: T[]) => ({ items, next_cursor: null, limit: 50 });
 const subject: ResearchSubject = { id: 'subject-1', project_id: projectId, name: 'Puzzle Topic', subject_type: 'game', aliases: [], external_ids: [], provenance: {}, created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z' };
 const saved: ProjectSavedInformation = { id: 'info-1', project_id: projectId, subject_id: null, subject_name: null, collection_id: null, collection_name: null, original_content: 'Original pasted update, preserved exactly.', source_context: null, source_title: null, source_url: null, captured_on: null, image_filename: null, image_content_type: null, image_size: null, image_sha256: null, image_url: null, source_status: 'source_reported_unverified', created_at: '2026-10-27T12:00:00Z' };
+const savedWithImage: ProjectSavedInformation = { ...saved, image_filename: 'evidence.png', image_content_type: 'image/png', image_size: 9, image_sha256: 'a'.repeat(64), image_url: `/api/v1/projects/${projectId}/saved-information/info-1/image` };
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -38,6 +39,33 @@ describe('SavedInformationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lưu liên kết' }));
     await waitFor(() => expect(update).toHaveBeenCalledWith(projectId, saved.id, { subject_id: subject.id, collection_id: null }));
     expect(await screen.findByText('Đã liên kết thông tin với sản phẩm hoặc chủ đề đã chọn.')).toBeTruthy();
+  });
+
+  it('saves an image with project information without requiring a product or topic, then reloads it', async () => {
+    const savedRead = vi.spyOn(researchApi, 'listSavedInformation').mockResolvedValueOnce(page([])).mockResolvedValue(page([savedWithImage]));
+    vi.spyOn(researchApi, 'listSubjects').mockResolvedValue(page([subject]));
+    vi.spyOn(researchApi, 'listBenchmarkCollections').mockResolvedValue(page([]));
+    const create = vi.spyOn(researchApi, 'createSavedInformation').mockResolvedValue(savedWithImage);
+    render(<SavedInformationPanel projectId={projectId} />);
+
+    fireEvent.change(await screen.findByLabelText(/Nội dung cần lưu/), { target: { value: 'Quan sát kèm ảnh chụp màn hình.' } });
+    const image = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0])], 'evidence.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText(/Tệp ảnh/), { target: { files: [image] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith(projectId, expect.objectContaining({
+      original_content: 'Quan sát kèm ảnh chụp màn hình.',
+      subject_id: null,
+      image_filename: 'evidence.png',
+      image_content_type: 'image/png',
+      image_base64: 'iVBORw0KGgoA',
+    })));
+    expect(await screen.findByRole('status')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải lại' }));
+    await waitFor(() => expect(savedRead).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('img', { name: 'Ảnh đính kèm' })).toBeTruthy();
+    expect(screen.getByText('evidence.png · Tệp lưu cục bộ · Chưa xác minh')).toBeTruthy();
   });
 
   it('keeps the pasted draft and reports failure without clearing content', async () => {
