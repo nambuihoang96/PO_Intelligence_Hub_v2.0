@@ -1,7 +1,7 @@
 # G1–G3 P0 Recovery — Continuation Milestone
 
-**Date:** 2026-10-28  
-**Branch / HEAD:** `feat/ux-recovery-01-research-results` / `5581f1efb3a2993511abd6c62ee6719e0528b4c4`  
+**Date:** 2026-10-28
+**Branch / HEAD:** `feat/ux-recovery-01-research-results` / `5581f1efb3a2993511abd6c62ee6719e0528b4c4`
 **Status:** Technical slice verified; full P0 recovery remains `IN_PROGRESS`; Product Owner acceptance pending.
 
 ## This slice
@@ -59,3 +59,4 @@ This addendum supersedes the earlier `Browser UAT: NOT VERIFIED` statement for t
 - **Product limitation:** The report was an explicitly labeled UAT text-only fixture, not a genuine owner research report; genuine-report acceptance is NOT VERIFIED. Full P0 product acceptance remains NEEDS FIX and is not implied by these route checks.
 - **Data safety:** Production SQLite not touched. Frontend/backend QA processes at `15295`/`15296` remain available for owner preview; the temporary screenshot receiver was stopped. No merge or deployment.
 - **Handoff:** `.bangiao/P0-UX-FINAL-UAT-20261028.md` contains test evidence, limitations and Product Acceptance assessment. Commit/push evidence is recorded there after commit creation.
+- **Commit / push:** `29c8547a5e2cefbb152e021a02f6fa6b89f412e1` pushed successfully to `origin/feat/ux-recovery-01-research-results`.

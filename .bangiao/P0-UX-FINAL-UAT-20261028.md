@@ -1,8 +1,8 @@
 # P0 UX Recovery — Browser UAT and Local Commit Handoff
 
-**Date:** 2026-10-28  
-**Branch:** `feat/ux-recovery-01-research-results`  
-**Base before this handoff:** `5581f1efb3a2993511abd6c62ee6719e0528b4c4`  
+**Date:** 2026-10-28
+**Branch:** `feat/ux-recovery-01-research-results`
+**Base before this handoff:** `5581f1efb3a2993511abd6c62ee6719e0528b4c4`
 **Status:** Technical checks pass for the current frontend slice; product acceptance for the broader P0 recovery remains pending.
 
 ## Scope completed
@@ -73,6 +73,6 @@ All images below are captured from the running browser, not generated mockups.
 
 The implementation changes in this commit cover the Vietnamese shell, report/data/research/tracking presentation, Project Home deep links, current frontend tests, recovery audit/board notes, milestone evidence and the screenshots listed above. `scripts/setup.ps1` and all QA scratch directories are excluded. No merge, deployment or database migration was performed.
 
-**Commit SHA:** to be filled after the commit is created.
+**Implementation commit SHA:** `29c8547a5e2cefbb152e021a02f6fa6b89f412e1`
 
-**Push status:** to be recorded after attempting the authorized branch push.
+**Push status:** Pushed successfully to `origin/feat/ux-recovery-01-research-results`.
