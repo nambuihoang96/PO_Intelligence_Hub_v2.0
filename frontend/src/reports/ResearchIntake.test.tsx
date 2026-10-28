@@ -470,13 +470,22 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => saved);
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Quyết định PO đã lưu')).toBeTruthy();
+    expect(await screen.findByText('Đánh giá PO đã lưu')).toBeTruthy();
     expect(screen.getByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
     view.unmount();
 
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Mở so sánh · đã chọn 1' })).toBeTruthy();
+  });
+
+  it('labels report-local notes separately from project decisions', async () => {
+    const saved = { ...report, project_id: 'project-qa', benchmark_workspace: { custom_dimensions: [], entries: [{ item_type: 'finding' as const, item_key: 'finding-a', po_assessment: '', notes: 'Ghi chú cũ', next_action: '', dimension_assessments: {}, observation_finding_links: {} }] } };
+    mockFetch(() => saved);
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByText('Ghi chú riêng của báo cáo đã lưu')).toBeTruthy();
+    expect(screen.queryByText('Quyết định PO đã lưu')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mở ghi chú báo cáo cũ' })).toBeTruthy();
   });
 
   it('keeps insight and comparison targets independent and preserves PO notes across remove, refresh, and restore', async () => {
