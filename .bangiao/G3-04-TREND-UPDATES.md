@@ -1,6 +1,6 @@
 # G3-04 — Project Trend Updates
 
-**Status:** `READY_FOR_OWNER`; genuine-source acceptance and browser UAT remain unverified.
+**Status:** `DEV_DONE` — isolated browser capture, saved-subject association, optional collection link, Tracking target and refresh/reopen verified; genuine-source owner acceptance pending.
 **Branch:** `feat/ux-recovery-01-research-results`
 **Starting HEAD:** `ee25199561552552e8a08874ab4d74083e009b08`
 **Production SQLite:** not accessed or modified
@@ -55,7 +55,7 @@ The API always labels records `source-reported · unverified`. It does not open 
 - TypeScript: **passed**.
 - Production build: **passed**; Vite reports a 530.24 kB main chunk advisory.
 - `git diff --check`: **passed** for staged implementation; rerun after final handoff changes.
-- Browser UAT: **NOT VERIFIED**. No screenshot is attached. The isolated QA frontend selected fallback port 15315 after 15313/15314 were already occupied; the backend health request was blocked by a local socket-permission error. A separate in-process HTTP client attempt did not finish and was stopped; no endpoint HTTP or browser pass is claimed. API schema and direct handler tests passed.
+- Browser UAT (follow-up 2026-10-28): **passed for the scoped workflow** on the host-launched isolated QA app at `http://127.0.0.1:15310`, using project `[QA] Peachy Studio UAT` and saved QA subject `[QA] Subject for trend workflow`. Saved an explicitly synthetic trend note with date/source, selected its existing collection, refreshed, and confirmed the exact unverified claim persisted in the update list and the same project collection matrix. Opened the saved update's PO decision link and confirmed it resolved to the same trend-update target in Tracking. Browser screenshot was not saved in this follow-up; exact desktop/390px viewports remain NOT VERIFIED. No production SQLite was accessed.
 - Genuine Rotate Rings source note/link/file was not supplied. Only synthetic test text was used; no market claim is asserted as true.
 
 ## Product Acceptance
@@ -64,9 +64,9 @@ The API always labels records `source-reported · unverified`. It does not open 
 - **User journey:** Open Project Research → choose a saved subject → optionally choose a collection containing it → enter date, exact claim and source context → save → reopen in Saved updates and collection comparison.
 - **Automated work:** Validate project/subject/collection scope; append and retrieve the record; retain exact text; label as unverified; show it in the selected collection without extracting metrics.
 - **Expected result:** A saved source-attributed claim remains visible after refresh and is distinguishable from verified or measured data.
-- **Remaining friction:** Subject must already exist; optional collection association requires the subject to be an existing member. Browser flow and responsive states were not tested. Local image evidence and contextual PO decisions are later tasks. Genuine owner source data is still required for product acceptance.
-- **Verification:** Focused backend/frontend tests, TypeScript and production build; browser UAT is **NOT VERIFIED**.
-- **Decision:** `TECHNICAL PASS` for the bounded capture and matrix slice; `PRODUCT NEEDS FIX` pending browser UAT and genuine owner-source acceptance. Owner decision remains pending.
+- **Remaining friction:** Subject must already exist; optional collection association requires the subject to be an existing member. Genuine owner source data is still required for product acceptance. Exact desktop/mobile visual checks and browser screenshot artifact are not included in this follow-up.
+- **Verification:** Focused backend/frontend tests, TypeScript and production build from implementation; actual isolated browser verified capture, collection, refresh/reopen and Tracking navigation. The follow-up was browser-only with documentation updates, so automated tests were not rerun in this round.
+- **Decision:** `DEV_DONE / TECHNICAL PASS` for the scoped capture and matrix workflow. `PRODUCT ACCEPTANCE PENDING OWNER REVIEW`; no Product Pass claimed.
 
 ## Known limitations
 
@@ -74,4 +74,4 @@ The API always labels records `source-reported · unverified`. It does not open 
 - Trend claims are displayed as text only. There is no metric normalization, period comparison, image upload, PO decision history, or Tracking timeline in this task.
 - API HTTP behavior was not exercised through a running browser/server in this environment; direct handler/schema tests and OpenAPI exposure were exercised.
 
-**Implementation commit:** `867f321`
+**Implementation commit:** `867f321`; browser-verified documentation update: see Recovery Board G3-04 follow-up dated 2026-10-28.

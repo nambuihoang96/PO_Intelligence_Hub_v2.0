@@ -1,6 +1,6 @@
 # G3-03 — Project Benchmark Collections
 
-**Status:** `READY_FOR_OWNER` — report, CSV and source-attributed trend observations are supported; owner acceptance is pending.
+**Status:** `DEV_DONE` — report, CSV and explicitly linked trend observations verified in isolated browser QA; owner acceptance is pending.
 **Branch:** `feat/ux-recovery-01-research-results`
 **Starting HEAD:** `7c45cad3ab12b7eb92940f4d5300541274ac78e6`
 **Production SQLite:** not accessed or modified
@@ -51,6 +51,9 @@ The comparison matrix only includes report-supplied benchmark dimensions and CSV
 - `git diff --check`: **passed** before handoff edits; rerun before commit.
 - Backend regression additionally verifies trend claims appear in the collection response with exact source note, publication date, source link and unverified status. Frontend tests cover trend-source labelling and note rendering.
 - Browser UAT: **passed for the earlier collection/report/CSV workflow** using headless Google Chrome + Playwright and isolated QA SQLite under `.g3-03-collection-uat/appdata`. The G3-04 trend-source extension has not been exercised in a browser; post-extension browser UAT, genuine owner-data acceptance and responsive/mobile UAT are **NOT VERIFIED**.
+- Follow-up browser UAT on 2026-10-28: **passed for the trend-source extension** using the running QA app at `http://127.0.0.1:15310` and isolated QA project `[QA] Peachy Studio UAT` (`950d908b-ad16-4719-9955-859d820a9101`). After refresh, selecting the saved QA subject exposed the explicitly linked collection in the trend form. A clearly synthetic, unverified trend note was saved to `[QA] Hồ sơ cần đối chiếu`; after refresh it remained in the trend history and appeared in the collection matrix as `Trend updates (source-reported)` with its exact note, date, provenance and unverified status. No source/metric/GEO/platform/period was inferred. This confirms the collection selector is populated contextually after choosing a saved subject; it does not require reloading the page. No production database was accessed.
+- The earlier observation that the collection selector was empty was an incomplete form state: the form was still set to create a new subject. Switching to “Dùng hồ sơ đã lưu” and selecting the collection's explicit member made the collection available. No product defect was reproduced, so no code change was made in this follow-up.
+- Responsive browser UAT at exact desktop/mobile widths and genuine owner-data acceptance remain **NOT VERIFIED**. The browser session was at its available narrow viewport; no screenshot was saved for this follow-up.
 - The screenshots are real captures from that running QA app. The matrix capture predates the final progressive-disclosure adjustment for CSV validation reasons. The final collapsed/expand behavior is verified by a frontend interaction test; a post-adjustment browser screenshot is **NOT VERIFIED** because the isolated QA server ports could not be rebound in this session.
 - Screenshot 1: [membership after refresh](screenshots/g3-03-benchmark-collection/collection-membership-after-refresh.png)
 - Screenshot 2: [source-backed comparison matrix (captured before validation disclosure adjustment)](screenshots/g3-03-benchmark-collection/collection-comparison-matrix.png)
@@ -61,9 +64,9 @@ The comparison matrix only includes report-supplied benchmark dimensions and CSV
 - **User journey:** Project Research → Research subjects → create collection → add confirmed subject → inspect source-backed matrix → remove/restore membership → refresh and reopen.
 - **Automated work:** Persistence, project-scope checks, duplicate membership protection, source retrieval, provenance/scope/evidence display and unknown states.
 - **Expected result:** A saved project collection with report/CSV source counts and attributable observations; no invented dimensions or values.
-- **Remaining friction:** Trend updates are not integrated until G3-04. Subject mapping is explicit and the panel remains inside the Research Subjects disclosure. No genuine owner dataset was used.
-- **Verification:** Automated backend/frontend checks, TypeScript/build and isolated Chrome UAT with screenshots above. Mobile and broad migration backup/restore are not verified here.
-- **Decision:** `TECHNICAL PASS` for the report/CSV collection slice; overall G3-03 `NEEDS FOLLOW-UP` for trend-source integration. Owner acceptance remains pending.
+- **Remaining friction:** Subject-to-collection association is explicit and the collection workflow remains within the Project Home's “Hồ sơ sản phẩm và chủ đề” area. No genuine owner dataset was used. Exact responsive visual checks and broad migration backup/restore remain unverified.
+- **Verification:** Earlier automated backend/frontend checks, TypeScript/build, and isolated Chrome collection/report/CSV UAT with screenshots above; this follow-up verified trend selection → save → refresh → collection matrix in the actual QA browser. No new code changed, so automated checks were not rerun for this documentation-only verification.
+- **Decision:** `DEV_DONE / TECHNICAL PASS` for the scoped report/CSV/trend collection workflow. Product owner acceptance remains pending; no Product Pass claimed.
 
 ## Limitations
 
