@@ -97,7 +97,7 @@ export function ProjectHome({ projectId }: { projectId: string }) {
 
   return <div className="project-home">
     <header className="project-home-header">
-      <div><a className="project-home-back" href="/research">← Tất cả dự án</a><p className="project-home-eyebrow">DỰ ÁN NGHIÊN CỨU</p><h2>{project.name}</h2>
+      <div><a className="project-home-back" href="/research">← Tất cả dự án</a><p className="project-home-eyebrow">DỰ ÁN NGHIÊN CỨU</p><h1>{project.name}</h1>
         <p className="project-home-description">{project.category || 'Không gian nghiên cứu'}{project.owner ? ` · ${project.owner}` : ''}</p></div>
     </header>
 
@@ -129,12 +129,12 @@ export function ProjectHome({ projectId }: { projectId: string }) {
       </section>
 
       <section className="project-home-section" aria-labelledby="project-subjects-title">
-        <div className="project-home-section-heading"><div><span className="project-home-kicker">ĐỐI TƯỢNG NGHIÊN CỨU</span><h3 id="project-subjects-title">Sản phẩm và chủ đề</h3></div><a href={saveInformation}>Lưu thông tin mới <span aria-hidden="true">→</span></a></div>
+        <div className="project-home-section-heading"><div><span className="project-home-kicker">ĐỐI TƯỢNG NGHIÊN CỨU</span><h3 id="project-subjects-title">Sản phẩm và chủ đề</h3></div></div>
         {subjects.length === 0 ? <div className="project-home-empty"><p>Sản phẩm và chủ đề sẽ xuất hiện khi bạn chủ động liên kết chúng với nghiên cứu đã lưu.</p></div> : <div className="project-home-subject-list">{subjects.slice(0, 6).map((subject) => <a className="project-home-subject" href={`${home}&view=data&subjectId=${encodeURIComponent(subject.id)}#project-subject-profiles`} aria-label={`Mở hồ sơ ${subject.name}`} key={subject.id}>{subject.name}<span aria-hidden="true"> →</span></a>)}</div>}
       </section>
 
       <section className="project-home-section" aria-labelledby="project-data-title">
-        <div className="project-home-section-heading"><div><span className="project-home-kicker">DỮ LIỆU ĐÃ CÓ</span><h3 id="project-data-title">Dữ liệu và phân tích</h3></div><a href={csvImport}>Phân tích dữ liệu <span aria-hidden="true">→</span></a></div>
+        <div className="project-home-section-heading"><div><span className="project-home-kicker">DỮ LIỆU ĐÃ CÓ</span><h3 id="project-data-title">Dữ liệu và phân tích</h3></div></div>
         {datasets.length === 0 ? <div className="project-home-empty"><p>Các tệp dữ liệu CSV của dự án sẽ xuất hiện ở đây.</p></div> : <div className="project-home-compact-list">{datasets.slice(0, 4).map((dataset) => <a className="project-home-compact-row project-home-dataset" href={`${home}&view=data&datasetId=${encodeURIComponent(dataset.id)}#project-csv-data`} aria-label={`Mở số liệu từ ${dataset.filename}`} key={dataset.id}><span className="project-home-collection-mark" aria-hidden="true"><ResultsIcon name="metric" /></span><span className="project-home-row-copy"><strong>{dataset.filename}</strong><small>{dataset.source_apps} sản phẩm · {dataset.metrics.length} chỉ số · {datasetReadinessLabel(dataset.compatibility_status)}</small></span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div>}
         {opportunityWorkspace?.shortlist_dataset_id && <p className="project-home-data-note">Đã có phân tích sản phẩm được lưu để xem lại.</p>}
       </section>

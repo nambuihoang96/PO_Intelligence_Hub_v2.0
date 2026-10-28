@@ -40,6 +40,11 @@ describe('ProjectHome data entry', () => {
 
   it('opens the chosen CSV directly in its project data review', async () => {
     render(<ProjectHome projectId="project-a" />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Dự án A' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Lưu thông tin mới/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Phân tích dữ liệu/ })).toBeNull();
+    expect(screen.getAllByRole('link').filter((link) => link.getAttribute('href') === '/research?projectId=project-a&view=data#project-saved-information')).toHaveLength(1);
+    expect(screen.getAllByRole('link').filter((link) => link.getAttribute('href') === '/research?projectId=project-a&view=data&action=import-csv#project-csv-data')).toHaveLength(1);
     const dataLink = await screen.findByRole('link', { name: 'Mở số liệu từ export.csv' });
     expect(dataLink.getAttribute('href')).toBe('/research?projectId=project-a&view=data&datasetId=dataset-a#project-csv-data');
     expect(dataLink.textContent).toContain('12 sản phẩm · 0 chỉ số · Dữ liệu nguồn · cần kiểm tra điều kiện so sánh');

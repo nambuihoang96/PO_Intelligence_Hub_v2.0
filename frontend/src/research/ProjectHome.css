@@ -1,6 +1,6 @@
 .project-home { --ph-ink: var(--peachy-ink); --ph-muted: #71646a; --ph-line: var(--peachy-line); --ph-accent: var(--peachy-accent); display: grid; gap: 20px; color: var(--ph-ink); }
 .project-home-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 4px 0 16px; border-bottom: 1px solid var(--ph-line); }
-.project-home-header h2 { margin: 3px 0 5px; font-size: clamp(25px, 3vw, 34px); line-height: 1.15; letter-spacing: -.025em; }
+.project-home-header h1 { margin: 3px 0 5px; font-size: clamp(25px, 3vw, 34px); line-height: 1.15; letter-spacing: -.025em; }
 .project-home-back, .project-home-section-heading > a, .project-home-empty a { color: var(--ph-accent); font-size: 14px; text-decoration: none; }
 .project-home-back { display: inline-block; margin-bottom: 13px; }
 .project-home-eyebrow, .project-home-kicker { margin: 0; color: #667b94; font-size: 11px; font-weight: 700; letter-spacing: .075em; }

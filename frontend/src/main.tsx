@@ -139,7 +139,7 @@ function App() {
         </header>
 
         <div className="content-wrap">
-          {!opportunityReviewView && !pathname.startsWith('/reports/') && !(pathname === '/' && projectId) && !(pathname === '/reports' && projectId) && <section className="page-heading" aria-labelledby="page-title">
+          {!opportunityReviewView && !(projectSelected && !projectView) && !pathname.startsWith('/reports/') && !(pathname === '/' && projectId) && !(pathname === '/reports' && projectId) && <section className="page-heading" aria-labelledby="page-title">
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>
             <p className="intro">{pageIntro}</p>
