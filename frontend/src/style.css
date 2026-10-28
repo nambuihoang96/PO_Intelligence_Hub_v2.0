@@ -1120,14 +1120,14 @@ body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: min(1420px, 
 .workspace-source-value { display:block; color:#193755; font-variant-numeric:tabular-nums; }
 .workspace-product-actions { min-width:155px; }
 .workspace-product-actions > * { display:block; width:100%; margin:0 0 6px; text-align:center; }
-.quant-live-data { display:grid; gap:10px; padding:14px; border:1px solid #dbe6f0; border-radius:12px; background:#fff; }
-.quant-live-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.quant-live-data { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; gap:10px; padding:14px; border:1px solid #dbe6f0; border-radius:12px; background:#fff; }
+.quant-live-heading { display:flex; min-width:0; max-width:100%; align-items:flex-start; justify-content:space-between; gap:12px; }
 .quant-live-heading > div { display:grid; gap:3px; }
 .quant-live-heading span,.quant-live-data > small,.quant-live-scope { color:#63758a; font-size:13px; }
 .quant-source-state { padding:5px 8px; border-radius:999px; background:#eff4fa; color:#37506c !important; white-space:nowrap; }
-.quant-live-controls { display:flex; flex-wrap:wrap; align-items:end; gap:10px; }
-.quant-live-controls label { display:grid; gap:4px; min-width:180px; color:#52657c; font-size:13px; }
-.quant-live-controls input,.quant-live-controls select { min-width:0; padding:8px 9px; border:1px solid #ced9e5; border-radius:8px; background:#fff; color:#1c2d43; }
+.quant-live-controls { display:flex; min-width:0; max-width:100%; flex-wrap:wrap; align-items:end; gap:10px; }
+.quant-live-controls label { display:grid; min-width:180px; max-width:100%; gap:4px; color:#52657c; font-size:13px; }
+.quant-live-controls input,.quant-live-controls select { width:100%; max-width:100%; min-width:0; padding:8px 9px; border:1px solid #ced9e5; border-radius:8px; background:#fff; color:#1c2d43; }
 .quant-live-controls label:first-child { flex:1 1 220px; }
 .quant-live-scope { margin:0; }
 .quant-live-table { min-width:900px; border-collapse:collapse; font-size:13px; }
@@ -2110,67 +2110,27 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   }
 }
 
+@media (max-width: 420px) {
+  .workspace-app-table tbody tr > td.workspace-product-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* File-preview rows use the same mobile reading pattern as saved products. */
 @media (max-width: 640px) {
   .quant-live-table-scroll {
-    max-height: none;
-    overflow: visible;
-    border: 0;
-    background: transparent;
+    max-width: 100%;
+    max-height: 360px;
+    overflow: auto;
   }
   .quant-live-table {
-    display: block;
-    width: 100%;
-    min-width: 0;
+    display: table;
+    width: max-content;
+    min-width: 560px;
   }
-  .quant-live-table thead { display: none; }
-  .quant-live-table tbody { display: grid; gap: 10px; }
-  .quant-live-table tbody tr {
-    display: grid;
-    gap: 9px;
-    min-width: 0;
-    padding: 13px;
-    border: 1px solid #e4d9d5;
-    border-radius: 12px;
-    background: #fff;
-  }
+  .quant-live-table thead { display: table-header-group; }
+  .quant-live-table tbody { display: table-row-group; }
+  .quant-live-table tbody tr { display: table-row; }
   .quant-live-table tbody th,
-  .quant-live-table tbody td {
-    display: block;
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    white-space: normal;
-    word-break: normal;
-    overflow-wrap: normal;
-  }
-  .quant-live-table tbody th {
-    color: #3f264a;
-    font-weight: 750;
-    font-size: 14px;
-  }
-  .quant-live-table tbody th small {
-    display: block;
-    margin-top: 4px;
-    color: #66768c;
-    font-weight: 400;
-    font-size: 11px;
-    overflow-wrap: anywhere;
-  }
-  .quant-live-table tbody td {
-    padding-top: 8px;
-    border-top: 1px solid #eee8e6;
-    font-size: 20px;
-    font-weight: 750;
-    color: #3f264a;
-    font-variant-numeric: tabular-nums;
-  }
-  .quant-live-table tbody td[data-label]::before {
-    content: attr(data-label);
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    margin-bottom: 4px;
-    color: #68596e;
-  }
+  .quant-live-table tbody td { display: table-cell; white-space: nowrap; overflow-wrap: normal; }
 }
