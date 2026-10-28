@@ -124,4 +124,4 @@ Read-only inventory and next safe sequence: [DATA-ANALYSIS-PREPARATION.md](DATA-
 
 ## Commit
 
-Implementation and evidence commit: pending at time this report was prepared. Recovery Board was updated in the same scoped delivery. No push, merge or deploy was performed.
+Implementation and evidence commit: `d113adfd030e7f8f503bf6d44e61d25e44b36c97` (`feat: add persistent research QA recovery demo`). Recovery Board update is included in that commit. No push, merge or deploy was performed.
