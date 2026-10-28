@@ -81,9 +81,9 @@ describe('research run UI integration', () => {
     window.history.replaceState({}, '', '/research?projectId=project-1');
     render(<ResearchWorkspace mode="list" />);
     expect(await screen.findByRole('heading', { name: 'Bạn muốn thực hiện gì?' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Nghiên cứu chuyên sâu Đặt câu hỏi/ }).getAttribute('href')).toContain('view=plan');
-    expect(screen.getByRole('link', { name: /Lưu thông tin Lưu quan sát/ }).getAttribute('href')).toContain('#project-saved-information');
-    expect(screen.getByRole('link', { name: /Phân tích CSV Xem dữ liệu/ }).getAttribute('href')).toContain('action=import-csv');
+    expect(screen.getByRole('link', { name: /Nghiên cứu chuyên sâu Tạo câu hỏi/ }).getAttribute('href')).toContain('view=plan');
+    expect(screen.getByRole('link', { name: /Lưu thông tin Lưu quan sát, bài viết/ }).getAttribute('href')).toContain('#project-saved-information');
+    expect(screen.getByRole('link', { name: /Phân tích CSV Khám phá số liệu/ }).getAttribute('href')).toContain('action=import-csv');
   });
 
   it('keeps a saved report, benchmark collection, and subject visible in the same Project Home', async () => {

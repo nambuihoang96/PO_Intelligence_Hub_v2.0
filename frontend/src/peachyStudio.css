@@ -117,6 +117,9 @@ body:has(.project-home) .content-wrap {
 
 .project-home-next-button { background: #294d46; }
 .project-home-next-button:hover { background: #1f3e39; }
+.project-home-decision-step { grid-template-columns: minmax(0, 1fr); }
+.project-home-decision-step > .project-home-next-button { justify-self: start; }
+.project-home-report .project-home-row-copy strong { display: -webkit-box; overflow: hidden; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 
 /* Report Reader uses the same warm surfaces and ink, while retaining its existing interactions. */
 body:has(.report-viewer) .report-viewer {
@@ -171,6 +174,25 @@ body:has(.report-viewer) .report-viewer .quantitative-note-mark { color: #7056ad
 body:has(.report-viewer) .report-viewer .overview-gaps { background: #fffaf4; }
 body:has(.report-viewer) .report-viewer .overview-decisions { background: #f5fbf7; }
 body:has(.report-viewer) .report-viewer :focus-visible { outline-color: #d98276; }
+body:has(.report-viewer) .report-viewer .overview-main-grid.is-single-column { grid-template-columns: minmax(0, 1fr); }
+body:has(.report-viewer) .report-viewer .structuring-callout:not([open]) { padding-block: 10px; }
+body:has(.report-viewer) .report-viewer .structuring-callout > summary { color: #704b45; font-size: 14px; font-weight: 650; }
+body:has(.report-viewer) .report-viewer .project-journey { padding: 12px 16px; }
+body:has(.report-viewer) .report-viewer .project-journey-steps { padding-top: 8px; }
+@media (min-width: 561px) {
+  body:has(.report-viewer) .report-viewer .project-journey { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-bottom: 10px; padding: 8px 13px; }
+  body:has(.report-viewer) .project-journey-heading { align-items: center; }
+  body:has(.report-viewer) .project-journey-heading > div { grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 3px 9px; }
+  body:has(.report-viewer) .project-journey-heading .state-label { font-size: 9px; }
+  body:has(.report-viewer) .project-journey-heading strong { font-size: 14px; }
+  body:has(.report-viewer) .project-journey-heading small:not(.project-objective):not(.project-scope) { display: none; }
+  body:has(.report-viewer) .project-journey-steps { gap: 3px; padding: 0; border: 0; }
+  body:has(.report-viewer) .project-journey-steps a { gap: 6px; padding: 6px 8px; font-size: 12px; }
+  body:has(.report-viewer) .report-viewer .results-breadcrumb { display: none; }
+  body:has(.report-viewer) .report-viewer .report-meta { padding: 14px 18px; }
+  body:has(.report-viewer) .quantitative-foundation { margin-bottom: 10px; padding: 10px 14px; }
+  body:has(.report-viewer) .quant-data-heading { margin-bottom: 5px; }
+}
 
 @media (max-width: 760px) {
   body:has(.project-home) .content-wrap { width: calc(100% - 32px); margin-top: 22px; }
@@ -209,13 +231,24 @@ body:has(.report-viewer) .report-viewer :focus-visible { outline-color: #d98276;
   body:has(.report-viewer) .topbar .breadcrumb { display: none; }
   body:has(.project-home) .local-badge,
   body:has(.report-viewer) .local-badge { margin-left: auto; }
-  body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: calc(100% - 24px); margin-top: 12px; }
-  body:has(.report-viewer) .project-journey { gap: 8px; margin-bottom: 12px; padding: 12px; }
+  body:has(.report-viewer) .content-wrap:has(.report-viewer) { width: calc(100% - 24px); margin-top: 10px; }
+  body:has(.report-viewer) .project-journey { gap: 6px; margin-bottom: 9px; padding: 9px 11px; }
   body:has(.report-viewer) .project-journey-heading { align-items: flex-start; }
-  body:has(.report-viewer) .project-journey-heading strong { font-size: 15px; }
-  body:has(.report-viewer) .project-journey-heading .text-button { min-height: 36px; padding-inline: 8px; }
-  body:has(.report-viewer) .project-journey-steps { padding-top: 7px; }
-  body:has(.report-viewer) .project-journey-steps a { font-size: 13px; }
-  body:has(.report-viewer) .report-viewer .report-meta { padding: 14px; }
-  body:has(.report-viewer) .report-viewer .results-context { gap: 4px 8px; }
+  body:has(.report-viewer) .project-journey-heading strong { font-size: 14px; }
+  body:has(.report-viewer) .project-journey-heading .text-button,
+  body:has(.report-viewer) .project-journey-heading small:not(.project-objective):not(.project-scope) { display: none; }
+  body:has(.report-viewer) .project-journey-steps { gap: 4px; padding-top: 6px; }
+  body:has(.report-viewer) .project-journey-steps a { justify-content: center; gap: 5px; padding: 6px 7px; font-size: 12px; }
+  body:has(.report-viewer) .project-journey-steps a > span { width: 20px; height: 20px; }
+  body:has(.report-viewer) .report-viewer .results-breadcrumb,
+  body:has(.report-viewer) .report-viewer .results-title-copy > .field-label { display: none; }
+  body:has(.report-viewer) .report-viewer .report-meta { padding: 12px; }
+  body:has(.report-viewer) .report-viewer .results-title-copy > h2 { font-size: 23px; }
+  body:has(.report-viewer) .report-viewer .results-context { gap: 3px 7px; }
+  body:has(.report-viewer) .report-viewer .results-context > span:nth-last-child(-n + 2) { display: none; }
+  body:has(.report-viewer) .quantitative-foundation { margin-bottom: 9px; padding: 9px 11px; }
+  body:has(.report-viewer) .quant-data-heading { gap: 4px 8px; margin-bottom: 4px; }
+  body:has(.report-viewer) .quant-data-details > summary { font-size: 12px; }
+  body:has(.report-viewer) .report-viewer .report-tabs { margin-bottom: 9px; }
+  body:has(.report-viewer) .report-viewer .structuring-callout:not([open]) { padding: 9px 11px; }
 }

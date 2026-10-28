@@ -99,7 +99,6 @@ export function ProjectHome({ projectId }: { projectId: string }) {
     <header className="project-home-header">
       <div><a className="project-home-back" href="/research">← Tất cả dự án</a><p className="project-home-eyebrow">DỰ ÁN NGHIÊN CỨU</p><h2>{project.name}</h2>
         <p className="project-home-description">{project.category || 'Không gian nghiên cứu'}{project.owner ? ` · ${project.owner}` : ''}</p></div>
-      <a className="project-home-secondary" href={`/reports?projectId=${encodeURIComponent(projectId)}`}>Xem báo cáo dự án <span aria-hidden="true">→</span></a>
     </header>
 
     {!hasWork && <section className="project-home-welcome"><div><span className="project-home-kicker">BẮT ĐẦU TẠI ĐÂY</span><h3>Bắt đầu nghiên cứu</h3><p>Hãy chọn một việc cần làm. Mọi báo cáo và cập nhật sẽ được lưu chung trong dự án.</p></div></section>}
@@ -107,16 +106,16 @@ export function ProjectHome({ projectId }: { projectId: string }) {
     <section className="project-home-actions" aria-labelledby="project-home-actions-title">
       <div className="project-home-section-heading"><div><span className="project-home-kicker">HÀNH ĐỘNG</span><h3 id="project-home-actions-title">Bạn muốn thực hiện gì?</h3></div></div>
       <div className="project-home-action-grid">
-        <a className="project-home-action project-home-action-primary" href={deepResearch}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="search" /></span><span><strong>Nghiên cứu chuyên sâu</strong><small>Đặt câu hỏi, tạo yêu cầu ChatGPT và lưu kết quả</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
-        <a className="project-home-action" href={saveInformation}><span className="project-home-action-mark peach" aria-hidden="true"><ResultsIcon name="runs" /></span><span><strong>Lưu thông tin</strong><small>Lưu quan sát, bản tin, đường dẫn hoặc ảnh vào dự án</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
-        <a className="project-home-action" href={csvImport}><span className="project-home-action-mark lilac" aria-hidden="true"><ResultsIcon name="metric" /></span><span><strong>Phân tích CSV</strong><small>Xem dữ liệu sản phẩm và chọn mục cần nghiên cứu tiếp</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action project-home-action-primary" href={deepResearch}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="search" /></span><span><strong>Nghiên cứu chuyên sâu</strong><small>Tạo câu hỏi nghiên cứu và lưu báo cáo ChatGPT</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action" href={saveInformation}><span className="project-home-action-mark peach" aria-hidden="true"><ResultsIcon name="runs" /></span><span><strong>Lưu thông tin</strong><small>Lưu quan sát, bài viết, liên kết hoặc ảnh</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action" href={csvImport}><span className="project-home-action-mark lilac" aria-hidden="true"><ResultsIcon name="metric" /></span><span><strong>Phân tích CSV</strong><small>Khám phá số liệu và chọn sản phẩm cần tìm hiểu</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
       </div>
     </section>
 
     <div className="project-home-content-grid">
       <section className="project-home-section project-home-reports" aria-labelledby="project-reports-title">
         <div className="project-home-section-heading"><div><span className="project-home-kicker">ĐÃ NGHIÊN CỨU</span><h3 id="project-reports-title">Báo cáo nghiên cứu</h3></div><a href={`/reports?projectId=${encodeURIComponent(projectId)}`}>Xem tất cả <span aria-hidden="true">→</span></a></div>
-        {reports.length === 0 ? <div className="project-home-empty"><strong>Chưa có báo cáo trong dự án</strong><p>Dán kết quả ChatGPT để lưu và đọc báo cáo tại đây.</p><a href={`/?projectId=${encodeURIComponent(projectId)}`}>Nhập báo cáo ChatGPT →</a></div> : <div className="project-home-report-list">{reports.slice(0, 5).map((report) => <a className="project-home-report" href={`/reports/${encodeURIComponent(report.id)}`} key={report.id}><span className="project-home-file-mark" aria-hidden="true"><ResultsIcon name="reports" /></span><span className="project-home-row-copy"><strong>{reportTitle(report)}</strong><small>{[reportScopeLabel(report.geo, 'geo'), reportScopeLabel(report.os, 'environment'), report.research_period].filter(Boolean).join(' · ')}</small></span><span className="project-home-date">{dateLabel(report.imported_at)}</span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div>}
+        {reports.length === 0 ? <div className="project-home-empty"><strong>Chưa có báo cáo trong dự án</strong><p>Dán kết quả ChatGPT để lưu và đọc báo cáo tại đây.</p><a href={`/?projectId=${encodeURIComponent(projectId)}`}>Nhập báo cáo ChatGPT →</a></div> : <div className="project-home-report-list">{reports.slice(0, 5).map((report) => <a className="project-home-report" href={`/reports/${encodeURIComponent(report.id)}`} key={report.id}><span className="project-home-file-mark" aria-hidden="true"><ResultsIcon name="reports" /></span><span className="project-home-row-copy"><strong title={reportTitle(report)}>{reportTitle(report)}</strong><small>{[reportScopeLabel(report.geo, 'geo'), reportScopeLabel(report.os, 'environment'), report.research_period].filter(Boolean).join(' · ')}</small></span><span className="project-home-date">{dateLabel(report.imported_at)}</span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div>}
       </section>
 
       <section className="project-home-section" aria-labelledby="project-activity-title">
@@ -147,6 +146,5 @@ export function ProjectHome({ projectId }: { projectId: string }) {
       </section>
     </div>
 
-    {reports.length > 0 && <section className="project-home-next-step"><div><span className="project-home-kicker">GỢI Ý TIẾP THEO</span><h3>Tiếp tục báo cáo gần nhất</h3><p>Đọc báo cáo và xem lại phát hiện, bằng chứng và quyết định.</p></div><a className="project-home-next-button" href={`/reports/${encodeURIComponent(reports[0].id)}`}>Mở báo cáo mới nhất <span aria-hidden="true">→</span></a></section>}
   </div>;
 }

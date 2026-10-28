@@ -460,6 +460,18 @@ describe('ChatGPT research intake', () => {
     expect(screen.queryByRole('tab', { name: 'Phát hiện' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Mở đánh giá PO' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Câu hỏi còn mở' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Số liệu trong báo cáo' })).toBeNull();
+  });
+
+  it('keeps a text-only report readable without empty snapshot or decision panels', async () => {
+    const textOnly = { ...report, research_status: 'TEXT_ONLY' as const };
+    mockFetch(() => textOnly);
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: 'Phát hiện chính' })).toBeTruthy();
+    expect(screen.getByText('Báo cáo cần được cấu trúc')).toBeTruthy();
+    expect(screen.queryByText('Tổng quan nghiên cứu')).toBeNull();
+    expect(screen.queryByText('Bước tiếp theo')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' })).toBeTruthy();
   });
 
   it('shows saved PO work in the Overview after reopening an existing report', async () => {
