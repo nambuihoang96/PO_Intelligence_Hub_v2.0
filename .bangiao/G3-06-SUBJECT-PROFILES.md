@@ -1,6 +1,6 @@
 # G3-06 — Subject Profile & Extensible Analysis Sections
 
-**Status:** `READY_FOR_OWNER` — automated verification complete; Browser UAT `NOT VERIFIED`
+**Status:** `DEV_DONE — scoped feedback round verified; owner review pending; Product Acceptance not claimed`
 **Branch:** `feat/ux-recovery-01-research-results`
 **Starting HEAD:** `127980bac588fde4beaf04cc5b19d513a9d3cb80`
 **Implementation commit:** `bd69a72b617cf194c4e067fabacf1f27731fc1e2`
@@ -60,3 +60,12 @@ The analysis contract is a list of generic `{ key, label, content }` sections, n
 - This does not add AI interpretation, OCR, source verification, action management, or cross-subject analysis.
 - Browser screenshots and UAT remain outstanding.
 - Implementation commit: `bd69a72b617cf194c4e067fabacf1f27731fc1e2`.
+
+## Feedback round — product-first follow-up workflow — 2026-10-28
+
+- **Owner direction:** Rework the subject profile around a coherent product/topic history and in-context follow-up research questions, not database-like analysis forms. Preserve existing saved profiles, analysis sections and explicit links.
+- **Change:** The profile now presents one follow-up question field with one save action. Other analysis notes remain editable under a collapsed “Ghi chú phân tích khác” section. The existing analysis-sections API/contract remains unchanged; no migration/backend edits.
+- **Browser UAT:** On the isolated QA project at `http://127.0.0.1:15310`, saved a clearly labeled QA-only follow-up question, refreshed, reopened the same profile and verified it remained. Existing custom-analysis content and the QA trend history remained accessible. Browser inspected at 375px; no page-level horizontal overflow was visible in the captured viewport. Exact 390px and desktop screenshots were not saved and are NOT VERIFIED.
+- **Tests:** Focused profile suite 12/12 PASS; full frontend suite 26 files / 223 tests PASS; TypeScript PASS; production build PASS with the existing large-chunk advisory; `git diff --check` PASS.
+- **Implementation commit:** `7bea79efc3a274b746baab296459ab628f0d345c`.
+- **Status:** `DEV_DONE` for this scoped rework; owner review pending. This does not mark G3-06 Product Accepted.
