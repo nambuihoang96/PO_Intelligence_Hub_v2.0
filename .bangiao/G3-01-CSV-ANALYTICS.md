@@ -107,3 +107,57 @@ Thay đổi sẵn có trong `scripts/setup.ps1` và các thư mục QA/scratch k
 2. 1076×828 chưa kiểm tra; biểu đồ/tăng trưởng chuẩn hóa không thể xác nhận từ metadata CSV hiện tại.
 3. Full backend suite bị chặn bởi TestClient/Windows runtime; bộ 29 unit tests quantitative và API QA live được ghi riêng như trên.
 4. Không chạy state machine hoặc tạo nghiên cứu giả; prompt chỉ được chuẩn bị/copy cho ChatGPT Plus.
+
+## G3-01 — nghiệm thu browser sau đồng bộ `ebd9a819` — 2026-10-28
+
+**Kết luận:** `TECHNICAL PASS` cho frontend; `BROWSER UAT PASS` cho các luồng bên dưới trên DB QA cô lập; `PRODUCT ACCEPTANCE PENDING OWNER REVIEW`. Không chuyển sang task khác.
+
+### Đồng bộ và an toàn dữ liệu
+
+- Nhánh `feat/ux-recovery-01-research-results` được fast-forward an toàn tới `ebd9a8190c9742d8b5708efc7c6b48d0920368e5`; không reset hoặc ghi đè local changes.
+- Backend chạy tại `http://127.0.0.1:15296/`, frontend tại `http://127.0.0.1:15295/`; dữ liệu test nằm trong `.g3-01-qa-20261028/`.
+- Giữ nguyên thay đổi đã tồn tại trong `scripts/setup.ps1` cùng các thư mục QA/scratch. Không đưa chúng vào commit nghiệm thu.
+- Không mở hoặc sửa SQLite production. Không lưu một bản dataset trùng trong lượt kiểm tra này; dùng dataset QA đã có và chọn lại file trong preview để xác minh UI mới.
+
+### Kết quả browser UAT
+
+| Luồng | Kết quả | Bằng chứng |
+|---|---|---|
+| Project Home → Phân tích dữ liệu | **PASS** — một lần bấm mở thẳng `view=data&action=import-csv#project-csv-data`; vùng nhập đã mở và thấy `Chọn tệp CSV` ngay | Kiểm tra URL và trạng thái DOM của trang đang chạy |
+| Chọn CSV Sensor Tower thật | **PASS** — chọn bằng file chooser trình duyệt, không nạp lên trước khi xác nhận | `acceptance-import-preview-desktop-1440.jpg` |
+| Giá trị nguồn / metric | **PASS** — 27 dòng CSV, dấu `;`, 25 sản phẩm, 9 metric được nhận diện; cột và giá trị hiển thị theo nguồn | Ảnh preview desktop và bảng explorer desktop |
+| Readiness và scope | **PASS** — 243 phép đo, 0 phép đo đủ điều kiện phân tích; không tạo kết luận tăng trưởng | `acceptance-explorer-desktop-1440.jpg` |
+| GEO / platform / dates | **PASS** — GEO không có; `Unified` không bị đổi thành Android/iOS; `2026-10-14` và `2026-09-14` hiển thị là ngày nguồn, ý nghĩa kỳ đo chưa xác nhận | CSV preview và trạng thái từng sản phẩm |
+| Tìm kiếm / sắp xếp | **PASS** — tìm `Mystery Dumpling` còn một kết quả; sort Downloads tăng dần đưa Jigsaw Drop (1,948,943) lên đầu và Surprise Dumpling (13,837,982) xuống cuối | Thao tác thật trên `.workspace-explorer` |
+| Hồ sơ / bộ so sánh / refresh | **PASS** — mở hồ sơ Mystery Dumpling; thêm Surprise Dumpling vào collection QA; sau refresh collection còn hai sản phẩm | Browser page sau refresh; DB chỉ là QA |
+| Mobile 390px | **PASS** — tên, giá trị, scope và thao tác đọc được; `document.documentElement.scrollWidth=375`, không tràn ngang toàn trang | `acceptance-product-actions-mobile-390.jpg` |
+
+### Lỗi giao diện được sửa trong lượt này
+
+Kiểm tra ở 390px phát hiện bảng preview CSV rộng tràn khỏi khung và kéo document tới 624px. Chuyển phần preview sang cuộn ngang bên trong khung giới hạn chiều rộng. Thẻ sản phẩm đã lưu tiếp tục xếp dọc; nút mở hồ sơ và thêm vào bộ so sánh xếp thành hai hàng ở ≤420px để không bẻ nhãn trên các nút hẹp. Sau sửa, mobile preview có cuộn ngang cục bộ cho các cột CSV rộng; trang không tràn ngang.
+
+### Automated checks sau sửa
+
+- `npm test`: **PASS**, 25 test files / 212 tests.
+- `npm run typecheck`: **PASS**.
+- `npm run build`: **PASS**; giữ cảnh báo hiện có về bundle JavaScript lớn hơn 500 kB.
+- Vitest chỉ chạy được sau khi đặt `TEMP`/`TMP` vào `frontend/.g3-01-uat-temp`; thư mục TEMP mặc định trên Windows gây `EPERM` khi rename trước khi chạy test. Không phải lỗi của test sản phẩm.
+- Backend test suite không được chạy lại trong lượt nghiệm thu visual này; các API đã được gọi trong workflow trình duyệt dùng backend QA nói trên. Backend quantitative unit suite 29 tests PASS đã ghi ở phần kiểm thử ban đầu.
+
+### Ảnh mới
+
+- [CSV preview thật — desktop 1440×900](screenshots/g3-01/acceptance-import-preview-desktop-1440.jpg)
+- [CSV explorer — desktop 1440×900](screenshots/g3-01/acceptance-explorer-desktop-1440.jpg)
+- [Sản phẩm, giá trị nguồn và thao tác — mobile 390×844](screenshots/g3-01/acceptance-product-actions-mobile-390.jpg)
+
+### Product Acceptance
+
+- **PO goal:** Nhập một CSV Sensor Tower và đọc được ngay danh sách sản phẩm, metric/giá trị gốc, điều kiện so sánh và bước nghiên cứu tiếp.
+- **User journey:** Project Home → Phân tích dữ liệu → chọn CSV → xem dữ liệu gốc → tìm/sắp xếp → mở hồ sơ hoặc thêm bộ so sánh.
+- **Automated work:** Nhận diện các cột/metric đã biết, trình bày giá trị nguồn, báo điều kiện thiếu và chỉ đánh dấu quan sát đủ điều kiện khi metadata thực sự đáp ứng.
+- **Expected result:** 25 sản phẩm và 9 metric nhìn thấy; giá trị thô có thể khám phá dù 0/243 phép đo đủ điều kiện so sánh chuẩn hóa; các thao tác hồ sơ/bộ so sánh giữ qua refresh.
+- **Remaining friction:** CSV nguồn không cho biết GEO, `Unified` không xác định OS, và `Date` không định nghĩa kỳ đo. Mobile xem trước các cột rộng bằng cuộn ngang bên trong bảng. Biểu đồ tăng trưởng chưa hợp lệ với metadata hiện tại.
+- **Verification:** Frontend 25 files/212 tests, typecheck/build và browser UAT ở desktop 1440×900, mobile 390×844; ảnh thật ở trên. 768px không được chạy lại trong lượt cuối này; full backend test suite cũng không được chạy lại.
+- **Decision:** `TECHNICAL PASS` cho kiểm thử chạy; `BROWSER UAT PASS` cho các bước nêu trên; `PRODUCT ACCEPTANCE PENDING OWNER REVIEW`.
+
+**Commit sửa CSS:** `3658116b5c3298655400118c0dc2fb2c6b0588e7`. Ảnh và bàn giao của lượt nghiệm thu này được commit riêng sau đó trên cùng nhánh; HEAD cuối và kết quả push được báo trong phần bàn giao của Codex.
