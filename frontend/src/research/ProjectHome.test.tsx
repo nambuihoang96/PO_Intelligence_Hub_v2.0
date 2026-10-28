@@ -48,7 +48,8 @@ describe('ProjectHome data entry', () => {
     const dataLink = await screen.findByRole('link', { name: 'Mở số liệu từ export.csv' });
     expect(dataLink.getAttribute('href')).toBe('/research?projectId=project-a&view=data&datasetId=dataset-a#project-csv-data');
     expect(dataLink.textContent).toContain('12 sản phẩm · 0 chỉ số · Dữ liệu nguồn · cần kiểm tra điều kiện so sánh');
-    expect(screen.getByRole('link', { name: /Đã thêm tệp dữ liệu.*export\.csv/ }).getAttribute('href')).toBe('/research?projectId=project-a&view=data&datasetId=dataset-a#project-csv-data');
+    expect(screen.queryByRole('link', { name: /Đã thêm tệp dữ liệu.*export\.csv/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Thông tin đã lưu' })).toBeTruthy();
   });
 
   it('opens a selected product or topic profile in the project workspace', async () => {
@@ -75,6 +76,6 @@ describe('ProjectHome data entry', () => {
     const decision = await screen.findByRole('link', { name: /Surprise Dumpling.*Tạm hoãn.*Xác minh nguồn trước khi quyết định/ });
     const expectedHref = '/research?projectId=project-a&view=opportunities&decisionKind=report_finding&decisionReportId=report-7&decisionReportHash=report-hash&decisionItemKey=market-signal';
     expect(decision.getAttribute('href')).toBe(expectedHref);
-    expect(screen.getByRole('link', { name: /Đã lưu quyết định PO.*Surprise Dumpling/ }).getAttribute('href')).toBe(expectedHref);
+    expect(screen.getByRole('heading', { name: 'Quyết định PO' })).toBeTruthy();
   });
 });

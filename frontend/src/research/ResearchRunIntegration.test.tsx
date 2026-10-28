@@ -86,6 +86,23 @@ describe('research run UI integration', () => {
     expect(screen.getByRole('link', { name: /Phân tích CSV Khám phá số liệu/ }).getAttribute('href')).toContain('action=import-csv');
   });
 
+  it('keeps Research Home focused on reopening a project or creating one', async () => {
+    const recentReport = { id: 'recent-report', project_id: project.id, question: 'Báo cáo gần đây để QA', geo: 'US', os: 'Android', research_period: '2026', content_sha256: 'a'.repeat(64), origin: 'chatgpt_user_import', imported_at: '2026-10-27T12:00:00Z', verification_status: 'unverified' };
+    installApi((url) => {
+      if (url.includes('/projects?')) return page([project]);
+      if (url.includes('/api/v1/reports?')) return page([recentReport]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    window.history.replaceState({}, '', '/research');
+    render(<ResearchWorkspace mode="list" />);
+    expect(await screen.findByRole('heading', { name: 'Dự án của bạn' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Puzzle Market/ }).getAttribute('href')).toBe('/research?projectId=project-1');
+    expect(screen.getByRole('link', { name: /Tạo dự án/ }).getAttribute('href')).toBe('/research/new');
+    expect(screen.getByRole('heading', { name: 'Báo cáo nghiên cứu' })).toBeTruthy();
+    expect((await screen.findByRole('link', { name: /Báo cáo gần đây để QA/ })).getAttribute('href')).toBe('/reports/recent-report');
+    expect(screen.queryByRole('link', { name: /Khám phá danh sách ứng dụng/ })).toBeNull();
+  });
+
   it('keeps a saved report, benchmark collection, and subject visible in the same Project Home', async () => {
     const report = { id: 'report-1', project_id: project.id, question: 'What keeps puzzle players engaged?', geo: 'US', os: 'Android', research_period: '2026', content_sha256: 'a'.repeat(64), origin: 'chatgpt_user_import', imported_at: '2026-10-24T12:00:00Z', verification_status: 'unverified' };
     const collection = { id: 'collection-1', project_id: project.id, name: 'Puzzle October', description: null, members: [{ subject_id: 'subject-1', name: 'Puzzle One', subject_type: 'game', source_count: 1, report_source_count: 1, csv_source_count: 0, trend_update_count: 0, observations: [] }], dimensions: [], created_at: '2026-10-22T12:00:00Z', updated_at: '2026-10-22T12:00:00Z' };
@@ -107,7 +124,8 @@ describe('research run UI integration', () => {
     expect(savedReport?.getAttribute('href')).toBe('/reports/report-1');
     expect(screen.getByText('Puzzle October')).toBeTruthy();
     expect(screen.getByText('Puzzle One')).toBeTruthy();
-    expect(screen.getByText('Đã lưu báo cáo')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Báo cáo nghiên cứu' })).toBeTruthy();
+    expect(screen.queryByText('Đã lưu báo cáo')).toBeNull();
   });
 
   it('shows a run detail pinned to the exact saved plan version and exposes evidence navigation', async () => {

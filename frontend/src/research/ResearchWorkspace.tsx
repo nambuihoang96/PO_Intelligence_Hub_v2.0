@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiError, researchApi } from './api';
 import type { ResearchPlan, ResearchPlanPayload, ResearchProject, ResearchRun } from './api';
+import { reportApi, type ReportSummary } from '../reports/api';
 import { DataFirstWorkspace } from './DataFirstWorkspace';
 import { ProjectJourneyNav } from './ProjectJourneyNav';
 import { ProjectHome } from './ProjectHome';
@@ -85,7 +86,7 @@ function ErrorNotice({ error, onRetry }: { error: ApiError; onRetry?: () => void
 }
 
 function ProjectList({
-  projects, nextCursor, onLoadMore, loading, error, onRetry,
+  projects, nextCursor, onLoadMore, loading, error, onRetry, recentReports, reportsLoading, reportsError,
 }: {
   projects: ResearchProject[];
   nextCursor: string | null;
@@ -93,18 +94,21 @@ function ProjectList({
   loading: boolean;
   error: ApiError | null;
   onRetry: () => void;
+  recentReports: ReportSummary[];
+  reportsLoading: boolean;
+  reportsError: string;
 }) {
   return (
-    <div className="research-layout">
+    <div className="research-home">
       <section className="research-panel" aria-labelledby="projects-title">
-        <div className="panel-heading"><div><span className="state-label">DỰ ÁN</span><h2 id="projects-title">Dự án của bạn</h2></div>
+        <div className="panel-heading"><div><span className="state-label">KHÔNG GIAN NGHIÊN CỨU</span><h2 id="projects-title">Dự án của bạn</h2><p>Mở lại nghiên cứu đã lưu hoặc bắt đầu một dự án mới.</p></div>
           <a className="primary-action" href="/research/new">Tạo dự án <span aria-hidden="true">＋</span></a>
         </div>
         {error && <ErrorNotice error={error} onRetry={onRetry} />}
         {loading ? <p className="state-message" role="status">Đang tải dự án…</p> : projects.length === 0 && !error ? (
-          <div className="research-empty"><span aria-hidden="true">⌕</span><strong>Chưa có dự án</strong><p>Tạo một dự án để tập hợp báo cáo và hoạt động nghiên cứu.</p><a className="secondary-action" href="/research/new">Tạo dự án</a></div>
+          <div className="research-home-empty"><div><strong>Chưa có dự án nghiên cứu</strong><p>Tạo dự án đầu tiên để lưu câu hỏi, báo cáo và dữ liệu cùng một nơi.</p></div></div>
         ) : (
-          <div className="project-list">
+          <div className="research-home-project-list">
             {projects.map((project) => (
               <div className="project-row-wrap" key={project.id}><a className="project-row" href={`/research?projectId=${encodeURIComponent(project.id)}`}>
                 <span className="project-mark" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span>
@@ -115,6 +119,19 @@ function ProjectList({
             {nextCursor && <button className="secondary-action load-more" type="button" onClick={onLoadMore}>Tải thêm dự án</button>}
           </div>
         )}
+      </section>
+      <section className="research-panel research-home-recent" aria-labelledby="recent-reports-title">
+        <div className="panel-heading"><div><span className="state-label">KẾT QUẢ GẦN ĐÂY</span><h2 id="recent-reports-title">Báo cáo nghiên cứu</h2><p>Mở lại nội dung đã lưu để tiếp tục công việc.</p></div><a className="secondary-action" href="/reports">Tất cả báo cáo</a></div>
+        {reportsError ? <p className="research-home-recent-empty" role="status">Chưa tải được báo cáo gần đây. Bạn vẫn có thể mở lại dự án ở phía trên.</p>
+          : reportsLoading ? <p className="research-home-recent-empty" role="status">Đang tải báo cáo gần đây…</p>
+            : recentReports.length === 0 ? <p className="research-home-recent-empty">Báo cáo đã lưu sẽ xuất hiện tại đây.</p>
+              : <div className="research-home-report-list">{recentReports.slice(0, 5).map((report) => (
+                <a className="research-home-report-row" href={`/reports/${encodeURIComponent(report.id)}`} key={report.id}>
+                  <span className="research-home-report-mark" aria-hidden="true">↗</span>
+                  <span className="research-home-report-copy"><strong>{report.question || 'Báo cáo nghiên cứu'}</strong><small>{[report.geo, report.os, report.research_period].filter(Boolean).join(' · ') || 'Chưa ghi phạm vi'}</small></span>
+                  <time>{new Date(report.imported_at).toLocaleDateString('vi-VN')}</time>
+                </a>
+              ))}</div>}
       </section>
     </div>
   );
@@ -325,6 +342,9 @@ export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' | 'data' }) {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [recentReports, setRecentReports] = useState<ReportSummary[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState('');
 
   async function loadProjects(cursor?: string) {
     setLoading(true);
@@ -341,10 +361,19 @@ export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' | 'data' }) {
   }
 
   useEffect(() => { if (!projectId && mode === 'list') void loadProjects(); }, [projectId, mode]);
+  useEffect(() => {
+    if (projectId || mode !== 'list') return;
+    let active = true;
+    setReportsLoading(true);
+    reportApi.list().then((page) => { if (active) setRecentReports(page.items); })
+      .catch((cause: unknown) => { if (active) setReportsError(cause instanceof Error ? cause.message : 'Không tải được báo cáo gần đây.'); })
+      .finally(() => { if (active) setReportsLoading(false); });
+    return () => { active = false; };
+  }, [projectId, mode]);
 
   if (projectId && (mode === 'data' || view === 'data')) return <DataFirstWorkspace projectId={projectId} />;
   if (projectId && view === 'plan') return <PlanEditor projectId={projectId} />;
   if (projectId) return <ProjectHome projectId={projectId} />;
   if (mode === 'new') return <NewProjectForm />;
-  return <ProjectList projects={projects} nextCursor={nextCursor} onLoadMore={() => void loadProjects(nextCursor ?? undefined)} loading={loading} error={error} onRetry={() => void loadProjects()} />;
+  return <ProjectList projects={projects} nextCursor={nextCursor} onLoadMore={() => void loadProjects(nextCursor ?? undefined)} loading={loading} error={error} onRetry={() => void loadProjects()} recentReports={recentReports} reportsLoading={reportsLoading} reportsError={reportsError} />;
 }

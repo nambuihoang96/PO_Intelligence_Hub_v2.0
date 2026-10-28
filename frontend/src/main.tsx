@@ -29,8 +29,8 @@ const pages: Page[] = [
     label: 'Nghiên cứu',
     icon: 'search',
     eyebrow: 'NGHIÊN CỨU',
-    title: 'Dự án nghiên cứu',
-    intro: 'Quản lý nghiên cứu, phân tích dữ liệu và theo dõi quyết định trong một nơi.',
+    title: 'Nghiên cứu',
+    intro: 'Mở lại dự án để tiếp tục công việc, hoặc tạo một dự án mới.',
     emptyTitle: 'Chưa có dự án nghiên cứu',
     emptyCopy: 'Tạo dự án để nghiên cứu hoặc phân tích dữ liệu CSV.',
   },
@@ -143,11 +143,6 @@ function App() {
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>
             <p className="intro">{pageIntro}</p>
-            {page.path === '/research' && !projectId && (
-              <div className="home-actions">
-                <a className="secondary-action" href="/explorer">Khám phá danh sách ứng dụng</a>
-              </div>
-            )}
           </section>}
 
           {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : pathname === '/tracking' ? <TrackingWorkspace projectId={projectId} /> : pathname === '/compare-periods' ? <QuantitativePeriodComparison /> : pathname === '/' ? projectId ? <ResearchIntake /> : <ResearchWorkspace mode="list" /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : page.path.startsWith('/research') ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : ['data', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : pathname === '/sources' ? <SourcesWorkspace runId={runId} /> : pathname === '/explorer' ? <ExplorerWorkspace /> : <>

@@ -253,7 +253,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('heading', { name: 'Câu hỏi còn mở' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Source' }).getAttribute('href')).toBe('https://example.com/');
     expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: 'Mục lục' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Mục lục báo cáo' })).toBeTruthy();
   });
 
   it('shows a qualitative research dashboard from supplied findings without invented metrics', async () => {
@@ -281,7 +281,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('heading', { name: 'Phát hiện chính' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Điểm chính' })).toBeTruthy();
     expect(screen.getByText('Tổng quan nghiên cứu')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Research source' })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Research source' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: 'Bản đồ nghiên cứu' })).toBeTruthy();
     expect(document.querySelector('.research-map-entities')?.textContent).toContain('Product A');
     expect(document.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
@@ -305,7 +305,7 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
     expect(document.querySelector('.insight-list-item.active')?.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText('Test whether customization is discoverable.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Research source' })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Research source' }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Xem đoạn hỗ trợ trong báo cáo gốc' }));
     expect(screen.getByText(/line:3: A sourced finding/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Xem đoạn hỗ trợ trong báo cáo gốc' }).getAttribute('aria-expanded')).toBe('true');
@@ -427,7 +427,7 @@ describe('ChatGPT research intake', () => {
     expect(details.closest('details')?.open).toBe(false);
     fireEvent.click(details);
     expect(screen.getAllByRole('button', { name: 'Ghi quyết định PO' }).length).toBe(5);
-    expect(screen.getByRole('link', { name: 'Supplied source' })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Supplied source' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Thêm vào so sánh: Supplied finding 1' })).toBeTruthy();
 
     const map = document.querySelector('.research-map-board[role="list"]') as HTMLElement;
@@ -474,6 +474,49 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' })).toBeTruthy();
   });
 
+  it('places report sections beside the reading area and keeps sources and PO context accessible', async () => {
+    mockFetch(() => ({ ...report, research_status: 'TEXT_ONLY' as const }));
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('tablist', { name: 'Các phần kết quả nghiên cứu' })).toBeTruthy();
+    expect(screen.getByRole('tabpanel')).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: 'Nguồn và ghi chú hỗ trợ' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Nguồn trong báo cáo' })).toBeTruthy();
+    expect(screen.getByText('Báo cáo chưa cung cấp đường dẫn nguồn.')).toBeTruthy();
+    expect(screen.getByText('Báo cáo cần được cấu trúc')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' }));
+    expect(await screen.findByRole('navigation', { name: 'Mục lục báo cáo' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Executive summary' })).toBeTruthy();
+  });
+
+  it('shows structured QA fixtures in the same research reading layout without treating them as real claims', async () => {
+    const structuredFixture = {
+      ...report,
+      question: '[QA ONLY] Structured report layout fixture — not research',
+      content: '# [QA ONLY] Fixture report\n\nThis content is a layout fixture, not a research result.\n\n## [QA ONLY] Finding section\n\nSample text for visual validation only.',
+      research_status: 'STRUCTURED_READY' as const,
+      parse_status: 'PARSED' as const,
+      research_data: {
+        ...report.research_data,
+        executive_summary: '[QA ONLY] Summary used to verify structured report layout.',
+        key_takeaways: ['[QA ONLY] First layout item.'],
+        entities: [{ key: 'qa-entity', entity_type: 'qa_fixture', name: '[QA ONLY] Example entity', attributes: {}, evidence_references: ['https://example.invalid/qa-source'] }],
+        findings: [{ key: 'qa-finding', finding_type: 'qa_fixture', title: '[QA ONLY] Example finding', description: 'Fixture copy only; this is not a real observation.', related_entities: ['qa-entity'], evidence_references: ['https://example.invalid/qa-source'], source_locations: ['heading:[QA ONLY] Finding section'], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: '[QA ONLY] No research was performed.', po_implications: '[QA ONLY] No product action is recommended.' }],
+        evidence_references: [{ url: 'https://example.invalid/qa-source', title: '[QA ONLY] Fixture source link', source_location: 'heading:[QA ONLY] Finding section', verified: false }],
+        po_recommendations: ['[QA ONLY] Recommendation layout sample.'],
+      },
+    };
+    mockFetch(() => structuredFixture);
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: '[QA ONLY] Structured report layout fixture — not research' })).toBeTruthy();
+    expect(screen.getAllByText('[QA ONLY] Example finding').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: '[QA ONLY] Fixture source link' })[0].getAttribute('href')).toBe('https://example.invalid/qa-source');
+    expect(screen.getAllByText('[QA ONLY] Recommendation layout sample.').length).toBeGreaterThan(0);
+    expect(screen.getByRole('complementary', { name: 'Nguồn và ghi chú hỗ trợ' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByText(/Fixture copy only/)).toBeTruthy();
+    expect(screen.getByText(/No research was performed/)).toBeTruthy();
+  });
+
   it('shows saved PO work in the Overview after reopening an existing report', async () => {
     const saved = {
       ...report,
@@ -484,12 +527,12 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => saved);
     window.history.replaceState({}, '', '/reports/saved-report');
     const view = render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Đánh giá PO đã lưu')).toBeTruthy();
-    expect(screen.getByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
+    expect((await screen.findAllByText('Đánh giá PO đã lưu')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Keep the onboarding flow in the next prototype.')).length).toBeGreaterThan(0);
     view.unmount();
 
     render(<ReportViewer reportId="saved-report" />);
-    expect(await screen.findByText('Keep the onboarding flow in the next prototype.')).toBeTruthy();
+    expect((await screen.findAllByText('Keep the onboarding flow in the next prototype.')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Mở so sánh · đã chọn 1' })).toBeTruthy();
   });
 
@@ -739,7 +782,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
     expect(screen.getByText('Historical dimension PO note; do not discard.')).toBeTruthy();
     expect(screen.getByText('Khóa khía cạnh đã lưu:').parentElement?.textContent).toContain('retention-key-v1');
-    fireEvent.click(screen.getByText('Retention pattern').closest('summary')!);
+    fireEvent.click(screen.getAllByText('Retention pattern').find((element) => element.closest('summary'))!.closest('summary')!);
     expect((screen.getByLabelText('Đánh giá chiều dữ liệu cũ Retention / old wording cho Retention pattern') as HTMLTextAreaElement).value).toBe('Old dimension-specific assessment');
     const notes = screen.getByLabelText('Ghi chú cho Retention pattern') as HTMLTextAreaElement;
     fireEvent.change(notes, { target: { value: 'Edited current workspace note; historical note remains separate.' } });
@@ -883,7 +926,7 @@ describe('ChatGPT research intake', () => {
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
     fireEvent.click(await screen.findByRole('tab', { name: 'So sánh' }));
-    fireEvent.click(screen.getByText('Transfer service A').closest('summary')!);
+    fireEvent.click(screen.getAllByText('Transfer service A').find((element) => element.closest('summary'))!.closest('summary')!);
     const assessment = await screen.findByLabelText('Đánh giá của PO cho Transfer service A') as HTMLTextAreaElement;
     fireEvent.change(assessment, { target: { value: 'Unsaved decision draft' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gỡ khỏi so sánh: Transfer service A' }));
