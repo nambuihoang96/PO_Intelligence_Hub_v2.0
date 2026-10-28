@@ -24,6 +24,13 @@ describe('QuantitativeDatasetImport', () => {
   beforeEach(() => { cleanup(); vi.clearAllMocks(); });
   const openMapping = () => fireEvent.click(screen.getByText('Rà soát cách nhận diện và phạm vi (chỉ cần khi cần chỉnh)'));
 
+  it('shows the CSV file picker immediately when opened from a project', () => {
+    const { container } = render(<QuantitativeDatasetImport projectId="project-qa" onImported={vi.fn()} />);
+    expect((container.querySelector('details.quant-import-flow') as HTMLDetailsElement).open).toBe(true);
+    expect(screen.getByLabelText('Chọn tệp CSV')).toBeTruthy();
+  });
+
+
   it('shows a local file preview and does not persist before explicit confirm', async () => {
     vi.mocked(reportApi.previewQuantitativeDataset).mockResolvedValue(preview as never);
     vi.mocked(reportApi.importQuantitativeDataset).mockResolvedValue({ id: 'dataset-1', report_id: 'report-1', filename: 'metrics.csv', content_sha256: 'hash', field_mapping: {}, entity_mappings: {}, observations: preview.observations as never, compatibility_status: 'compatible', validation_reasons: [], created_at: '2026-01-01', duplicate: false } as never);
