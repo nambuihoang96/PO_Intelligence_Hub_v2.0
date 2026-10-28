@@ -3,6 +3,7 @@ import { reportApi, type ComparisonDataset, type ReportSummary } from '../report
 import { researchApi, type OpportunityWorkspace, type ProjectSavedInformation, type ProjectTrendUpdate, type ResearchBenchmarkCollection, type ResearchProject, type ResearchSubject } from './api';
 import { opportunityDecisionHref } from './decisionNavigation';
 import { ResultsIcon } from '../ui/ResultsIcon';
+import { csvCompatibilityLabel } from '../reports/csvPresentation';
 import './ProjectHome.css';
 
 type ProjectHomeData = {
@@ -35,9 +36,7 @@ function dateLabel(value: string): string {
 }
 
 function datasetReadinessLabel(status: ComparisonDataset['compatibility_status']): string {
-  if (status === 'compatible') return 'Phạm vi tương thích';
-  if (status === 'partial') return 'Một phần tương thích';
-  return 'Chưa tương thích';
+  return csvCompatibilityLabel(status);
 }
 
 function decisionStatusLabel(status: string | null | undefined): string {
