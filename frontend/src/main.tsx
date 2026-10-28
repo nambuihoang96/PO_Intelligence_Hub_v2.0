@@ -10,6 +10,7 @@ import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
 import { AppNavigation } from './AppNavigation';
 import { TrackingWorkspace } from './tracking/TrackingWorkspace';
 import './style.css';
+import './peachyStudio.css';
 
 type Page = {
   path: string;
