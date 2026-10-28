@@ -240,8 +240,8 @@ export function DataFirstWorkspace({ projectId }: { projectId: string }) {
   const apps = useMemo(() => groupsFor(dataset), [dataset]);
   const rankingOptions = useMemo(() => rankingOptionsFor(apps), [apps]);
   const datasetMetrics = useMemo(() => [...new Map((dataset?.observations ?? []).filter((row) => row.metric_id).map((row) => [row.metric_id!, row.metric_definition || row.metric_id!])).entries()], [dataset]);
-  const visibleDatasetMetrics = datasetMetrics.filter(([id]) =>
-    visibleProductMetrics.length ? visibleProductMetrics.includes(id) : id === datasetMetrics[0]?.[0]);
+  const selectedVisibleMetrics = datasetMetrics.filter(([id]) => visibleProductMetrics.includes(id));
+  const visibleDatasetMetrics = selectedVisibleMetrics.length ? selectedVisibleMetrics : datasetMetrics.slice(0, 1);
   function sortProductsBy(column: string) {
     const next = nextCsvColumnSort({ column: displayMetric, direction: productSort }, column, column === '__name__' ? 'asc' : 'desc');
     setDisplayMetric(next.column); setProductSort(next.direction);
