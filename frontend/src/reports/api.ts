@@ -15,6 +15,15 @@ export type ReportSummary = {
   entity_count?: number;
 };
 
+export type ResearchPresentationPlan = {
+  version: 'presentation_v1';
+  /** Optional suggestions, never proof of a comparable metric. */
+  headline?: string | null;
+  highlighted_finding_keys?: string[];
+  featured_observation_indexes?: number[];
+  chart_observation_indexes?: number[];
+};
+
 export type ResearchData = {
   executive_summary?: string | null;
   key_takeaways?: string[];
@@ -26,6 +35,7 @@ export type ResearchData = {
   research_gaps: string[];
   po_recommendations: string[];
   quantitative_observations?: QuantitativeObservation[];
+  presentation_plan?: ResearchPresentationPlan | null;
 };
 export type QuantitativeObservation = {
   metric_id: string | null;
