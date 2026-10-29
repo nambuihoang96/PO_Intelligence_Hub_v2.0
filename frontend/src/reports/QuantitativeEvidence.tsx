@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { QuantitativeObservation } from './api';
 import { quantitativeLimitations, selectQuantitativeViews, type QuantitativeView } from './quantitativeAnalytics';
 import { formatQuantitativePeriod, formatQuantitativeValue } from './quantitativePresentation';
@@ -165,15 +165,16 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
 }
 
 export function QuantitativeEvidence({ observations, onViewEvidence, onPrepareChartData }: Props) {
+  const headingId = useId();
   const [displayModes, setDisplayModes] = useState<Record<string, 'chart' | 'table'>>({});
   const reportRows = observations.map((row, index) => ({ row, index })).filter(({ row }) => row.observation_type === 'reported');
-  if (!reportRows.length) return <section className="research-panel quantitative-evidence quantitative-no-data" aria-labelledby="quantitative-evidence-title"><div className="quantitative-evidence-heading"><div><span className="field-label">BÁO CÁO CHATGPT · ĐÃ GIỮ NGUYÊN NỘI DUNG GỐC</span><h3 id="quantitative-evidence-title">Số liệu trong báo cáo</h3></div></div><p>Báo cáo này không có quan sát số liệu có cấu trúc. PO Hub không chuyển văn bản hoặc ảnh biểu đồ thành số liệu.</p>{onPrepareChartData && <button type="button" className="secondary-action" onClick={onPrepareChartData}>Chuẩn bị dữ liệu biểu đồ từ báo cáo này</button>}</section>;
+  if (!reportRows.length) return <section className="research-panel quantitative-evidence quantitative-no-data" aria-labelledby={headingId}><div className="quantitative-evidence-heading"><div><span className="field-label">BÁO CÁO CHATGPT · ĐÃ GIỮ NGUYÊN NỘI DUNG GỐC</span><h3 id={headingId}>Số liệu trong báo cáo</h3></div></div><p>Báo cáo này không có quan sát số liệu có cấu trúc. PO Hub không chuyển văn bản hoặc ảnh biểu đồ thành số liệu.</p>{onPrepareChartData && <button type="button" className="secondary-action" onClick={onPrepareChartData}>Chuẩn bị dữ liệu biểu đồ từ báo cáo này</button>}</section>;
   const rows = reportRows.map(({ row }) => row);
   const views = selectQuantitativeViews(rows).map((view) => ({ ...view, observations: view.observations.map((point) => ({ ...point, index: reportRows[point.index].index })) }));
   const limitations = quantitativeLimitations(rows);
   const metricNames = [...new Set(rows.map((row) => row.metric_definition || row.metric_id).filter(Boolean))];
-  return <section className="research-panel quantitative-evidence" aria-labelledby="quantitative-evidence-title">
-    <div className="quantitative-evidence-heading"><div><span className="field-label">SỐ LIỆU DO NGUỒN CUNG CẤP · CHƯA XÁC MINH</span><h3 id="quantitative-evidence-title">Số liệu và biểu đồ</h3><p>{metricNames.join(' · ') || 'Chưa có định nghĩa chỉ số'}</p></div><span className="quant-source-label">Nghiên cứu ChatGPT</span></div>
+  return <section className="research-panel quantitative-evidence" aria-labelledby={headingId}>
+    <div className="quantitative-evidence-heading"><div><span className="field-label">SỐ LIỆU DO NGUỒN CUNG CẤP · CHƯA XÁC MINH</span><h3 id={headingId}>Số liệu và biểu đồ</h3><p>{metricNames.join(' · ') || 'Chưa có định nghĩa chỉ số'}</p></div><span className="quant-source-label">Nghiên cứu ChatGPT</span></div>
     {views.length > 0 ? <div className="quantitative-views">{views.map((view, index) => { const key = `${view.kind}:${view.label}:${index}`; const displayMode = displayModes[key] || 'chart'; return <article className="quantitative-view" key={key}>
       <div className="quantitative-view-heading"><div><h4>{view.kind === 'scope_comparison' ? (view.dimension === 'geo' ? 'So sánh theo GEO' : 'So sánh theo nền tảng') : view.kind === 'comparison' || view.kind === 'grouped_bar' ? 'So sánh hồ sơ' : view.kind === 'period_matrix' ? 'Đối chiếu hồ sơ theo kỳ' : view.kind === 'two_point' ? 'Hai thời điểm được báo cáo' : view.kind === 'time_series' ? 'Chuỗi số liệu quan sát' : view.kind === 'ranking' ? 'Thứ hạng được báo cáo' : 'Quan sát được báo cáo'}</h4><p>{view.label}</p></div><div className="quantitative-view-actions"><span>{view.observations.length} quan sát</span>{(view.kind === 'scope_comparison' || view.kind === 'grouped_bar' || view.kind === 'two_point') && <button type="button" className="text-button" aria-pressed={displayMode === 'table'} onClick={() => setDisplayModes((current) => ({ ...current, [key]: displayMode === 'chart' ? 'table' : 'chart' }))}>{displayMode === 'chart' ? 'Xem bảng' : 'Xem biểu đồ'}</button>}</div></div>
       <p className="quant-scope-line">{view.kind === 'scope_comparison' ? `Cùng kỳ và phạm vi còn lại · ${view.observations.length} ${view.dimension === 'geo' ? 'GEO' : 'nền tảng'}` : scopeOf(view.observations[0].row)} · Do nguồn cung cấp · chưa xác minh</p>
