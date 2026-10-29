@@ -8,7 +8,7 @@ import { ResearchTextHighlighter } from './ResearchTextHighlighter';
 import { quantitativeStateLabels, selectQuantitativeState } from './quantitativeState';
 import type { QuantitativeDataset } from './api';
 import { QuantitativeDatasetImport } from './QuantitativeDatasetImport';
-import { QuantitativeEvidence } from './QuantitativeEvidence';
+import { AutoResearchInsights } from './AutoResearchInsights';
 import { AnalyticsDataSelection } from './AnalyticsDataSelection';
 import type { AnalyticsRecord } from './analyticsSelection';
 import { QuantitativeDatasetExplorer } from './QuantitativeDatasetExplorer';
@@ -401,6 +401,11 @@ export function ReportViewer({ reportId }: { reportId: string }) {
   const data = report.research_data;
   const researchStatus = report.research_status || (report.parse_status === 'PARSED' ? 'STRUCTURED_READY' : 'TEXT_ONLY');
   const keyTakeaways = data.key_takeaways ?? [];
+  const priorityFindingKeys = data.presentation_plan?.highlighted_finding_keys ?? [];
+  const overviewFindings = [...data.findings].sort((a, b) => {
+    const ai = priorityFindingKeys.indexOf(a.key), bi = priorityFindingKeys.indexOf(b.key);
+    return (ai < 0 ? Number.MAX_SAFE_INTEGER : ai) - (bi < 0 ? Number.MAX_SAFE_INTEGER : bi);
+  });
   const hasStructured = Boolean(data.executive_summary || keyTakeaways.length || data.findings.length + data.entities.length + data.benchmark_dimensions.length + data.research_gaps.length + data.po_recommendations.length + (data.quantitative_observations?.length || 0) > 0);
   const hasSnapshotData = data.findings.length + data.entities.length + data.evidence_references.length + data.research_gaps.length > 0;
   const assessmentItems: { item: BenchmarkSelection; label: string; kind: string }[] = [
@@ -608,10 +613,10 @@ export function ReportViewer({ reportId }: { reportId: string }) {
         {data.executive_summary && <section className="research-panel executive-card"><div className="overview-section-heading"><OverviewHeading icon="conclusion" eyebrow="KẾT LUẬN NGHIÊN CỨU" title="Kết luận nghiên cứu" /></div><p className={`executive-summary${summaryExpanded ? ' is-expanded' : ''}`}><ResearchTextHighlighter text={data.executive_summary} /></p><button className="text-button summary-toggle" aria-expanded={summaryExpanded} onClick={() => setSummaryExpanded(!summaryExpanded)}>{summaryExpanded ? 'Thu gọn' : 'Đọc toàn bộ kết luận'}</button></section>}
         {keyTakeaways.length > 0 && <section className="research-panel overview-takeaways"><div className="overview-section-heading"><OverviewHeading icon="takeaways" eyebrow="DO BÁO CÁO CUNG CẤP" title="Điểm chính" /></div><ol>{(takeawaysExpanded ? keyTakeaways : keyTakeaways.slice(0, 3)).map((item, index) => <li key={index}><span className="takeaway-number">{index + 1}</span><span className="takeaway-copy"><ResearchTextHighlighter text={item} /></span></li>)}</ol>{keyTakeaways.length > 3 && <button className="text-button" aria-expanded={takeawaysExpanded} onClick={() => setTakeawaysExpanded(!takeawaysExpanded)}>{takeawaysExpanded ? 'Thu gọn điểm chính' : `Xem cả ${keyTakeaways.length} điểm chính`}</button>}</section>}
       </div>
-      {(data.quantitative_observations ?? []).some((row) => row.observation_type === 'reported') && <QuantitativeEvidence observations={data.quantitative_observations ?? []} onPrepareChartData={() => void prepareChartData()} onViewEvidence={(index) => { setQuantEvidenceIndex(index); setQuantEvidenceTarget(`quant-observation-${index}`); setTab('evidence'); }} />}
+      <AutoResearchInsights data={data} onPrepareChartData={() => void prepareChartData()} onViewEvidence={(index) => { setQuantEvidenceIndex(index); setQuantEvidenceTarget(`quant-observation-${index}`); setTab('evidence'); }} />
       <div className={`overview-main-grid${hasSnapshotData || data.po_recommendations.length || savedPoEntries.length || data.evidence_references.length || data.entities.length ? '' : ' is-single-column'}`}>
         <section className="research-panel overview-insights"><div className="overview-section-heading"><OverviewHeading icon="findings" eyebrow="PHÁT HIỆN DO BÁO CÁO CUNG CẤP" title="Phát hiện chính" detail={data.findings.length ? `${data.findings.length} phát hiện` : undefined} />{data.findings.length > 0 && <button className="text-button" onClick={() => setTab('insights')}>Xem tất cả <ResultsIcon name="arrow" /></button>}</div>
-          {data.findings.length > 0 ? <div className="finding-groups"><div className="insight-dashboard-list">{data.findings.map((finding) => {
+          {data.findings.length > 0 ? <div className="finding-groups"><div className="insight-dashboard-list">{overviewFindings.map((finding) => {
             const refs = finding.evidence_references.map((url) => data.evidence_references.find((source) => source.url === url)).filter((source): source is NonNullable<typeof source> => Boolean(source));
             const related = data.entities.filter((entity) => finding.related_entities.includes(entity.key));
             return <article className="finding-map-card" key={finding.key}><button className="insight-dashboard-card" aria-label={`Xem phát hiện: ${finding.title}`} onClick={() => { setActiveFinding(finding.key); setTab('insights'); }}><span className="finding-icon-frame"><ResultsIcon name={findingIcon(finding.finding_type)} /></span><span className="insight-dashboard-copy"><span className="insight-type">{displayResearchType(finding.finding_type)}</span><strong><ResearchTextHighlighter text={finding.title} /></strong><span><ResearchTextHighlighter text={finding.description} /></span></span><span className="insight-open">Xem chi tiết <ResultsIcon name="arrow" /></span></button>
