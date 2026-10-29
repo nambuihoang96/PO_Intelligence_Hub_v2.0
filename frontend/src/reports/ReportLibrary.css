@@ -1,4 +1,4 @@
-.report-history-project {
+.report-history-page {
   display: grid;
   gap: 14px;
   padding: clamp(18px, 2vw, 26px);
@@ -7,7 +7,7 @@
   background: linear-gradient(145deg, #fff 0%, #fffdfa 100%);
   box-shadow: 0 10px 30px rgba(69, 47, 54, .045);
 }
-.content-wrap:has(.report-library-page .report-history-project) > .page-heading { display: none; }
+.content-wrap:has(.report-library-page .report-history-page) > .page-heading { display: none; }
 .report-library-page > .project-journey { display: flex; align-items: center; justify-content: space-between; gap: 8px 18px; padding: 10px 14px; border-color: var(--peachy-line); border-radius: 12px; background: #fff; box-shadow: var(--peachy-shadow); }
 .report-library-page > .project-journey .project-journey-heading { flex: 1 1 260px; min-width: 0; }
 .report-library-page > .project-journey .project-journey-heading > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; }
@@ -74,7 +74,7 @@
   .report-library-page > .project-journey .project-journey-heading strong { max-width: calc(100vw - 170px); }
   .report-library-page > .project-journey .project-journey-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
   .report-library-page > .project-journey .project-journey-steps a { justify-content: center; padding-inline: 4px; }
-  .report-history-project { gap: 12px; padding: 15px; border-radius: 14px; }
+  .report-history-page { gap: 12px; padding: 15px; border-radius: 14px; }
   .report-library-toolbar { grid-template-columns: minmax(0, 1fr); padding: 9px; }
   .report-library-search, .report-library-project-filter, .report-library-secondary-action, .report-library-import { width: 100%; box-sizing: border-box; }
   .report-library-summary { gap: 6px; margin-top: 11px; }

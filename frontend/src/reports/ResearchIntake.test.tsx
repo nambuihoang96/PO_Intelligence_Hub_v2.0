@@ -44,9 +44,9 @@ describe('ChatGPT research intake', () => {
     expect(prompt).not.toContain('iOS and Android findings separate');
   });
 
-  it('searches the shared report library and retains its project decision links', async () => {
-    const linked = { ...report, id: 'linked-report', project_id: 'project-1' };
-    const unlinked = { ...report, id: 'unlinked-report', question: 'Unlinked utility research' };
+  it('searches the shared report library, shows project context and avoids duplicate project decision links', async () => {
+    const linked = { ...report, id: 'linked-report', project_id: 'project-1', research_status: 'STRUCTURED_READY' as const, finding_count: 2, entity_count: 1 };
+    const unlinked = { ...report, id: 'unlinked-report', question: 'Unlinked utility research', parse_status: 'NEEDS_STRUCTURING' as const, research_status: 'TEXT_ONLY' as const, finding_count: 0, entity_count: 0 };
     mockFetch((url) => {
       if (url.includes('/api/v1/reports?')) return { items: [linked, unlinked], next_cursor: null, limit: 10 };
       if (url.includes('/api/v1/projects?')) return { items: [{ id: 'project-1', name: 'Learning apps', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' }], next_cursor: null, limit: 20 };
@@ -54,7 +54,13 @@ describe('ChatGPT research intake', () => {
     });
     render(<ReportHistory />);
     expect(await screen.findByText('How do learning apps engage children?')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Quyết định của dự án · Learning apps/ })).toBeTruthy();
+    expect(screen.getByText('Learning apps')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Quyết định của dự án/ })).toBeNull();
+    const structuredCard = screen.getByRole('link', { name: /Mở báo cáo How do learning apps engage children/ }).closest('article');
+    const textOnlyCard = screen.getByRole('link', { name: /Mở báo cáo Unlinked utility research/ }).closest('article');
+    expect(structuredCard?.querySelector('.report-kind-badge')?.textContent).toBe('Structured');
+    expect(textOnlyCard?.querySelector('.report-kind-badge')?.textContent).toBe('Text-only');
+    expect(textOnlyCard?.textContent).toContain('Chưa cấu trúc lại');
     fireEvent.change(screen.getByLabelText('Tìm báo cáo'), { target: { value: 'utility' } });
     expect(screen.getByText('Unlinked utility research')).toBeTruthy();
     expect(screen.queryByText('How do learning apps engage children?')).toBeNull();
@@ -91,7 +97,7 @@ describe('ChatGPT research intake', () => {
     const decisionLink = await screen.findByRole('link', { name: /Có quyết định đã lưu/ });
     expect(decisionLink.getAttribute('href')).toBe(`/tracking?projectId=${project.id}`);
     expect(screen.queryByRole('link', { name: /Quyết định của dự án/ })).toBeNull();
-    expect(screen.getByLabelText('Lọc theo dự án')).toBeTruthy();
+    expect(screen.getByLabelText('Dự án')).toBeTruthy();
   });
 
   it('opens project-scoped report import directly from the library CTA', async () => {
@@ -133,7 +139,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('link', { name: /Project A report 3/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Project B report 1/ })).toBeNull();
 
-    fireEvent.change(screen.getByLabelText('Lọc theo dự án'), { target: { value: 'project-b' } });
+    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-b' } });
     expect(await screen.findByText('2 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Project B report 2/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Project A report 1/ })).toBeNull();
@@ -161,7 +167,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gắn vào dự án' }));
     expect(await screen.findByText(/Đã gắn .* vào Project A/)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-a/reports/legacy-unassigned', expect.objectContaining({ method: 'PUT' }));
-    expect(screen.getByText('Không có báo cáo phù hợp với bộ lọc này.')).toBeTruthy();
+    expect(screen.getByText('Không tìm thấy báo cáo phù hợp')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-a' } });
     expect(await screen.findByText('1 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Historical report without a project/ }).getAttribute('href')).toBe('/reports/legacy-unassigned');
