@@ -20,6 +20,25 @@ from backend.app.research_data import QuantitativeObservation, UniversalResearch
 
 
 class QuantitativeObservationTest(unittest.TestCase):
+    def test_explicit_two_store_platform_matches_both_but_not_android_only(self):
+        raw = {
+            "metric_id": "source_metric", "metric_definition": "Source reported outcome",
+            "value": 100, "unit": "USD", "entity_id": "segment",
+            "geo": "Worldwide", "platform": "iOS App Store + Android Google Play",
+            "period_start": "2026-01-01", "period_end": "2026-06-30",
+            "methodology": "App store estimate",
+            "source_reference": "https://example.com/market",
+            "evidence_reference": "https://example.com/market",
+            "provenance_type": "research_report", "observation_type": "reported",
+        }
+        combined = assess_observation_readiness(raw, report_geo="Worldwide", report_platform="Android, iOS")
+        self.assertTrue(combined["scope_compatible"])
+        android_only = assess_observation_readiness(raw, report_geo="Worldwide", report_platform="Android")
+        self.assertFalse(android_only["scope_compatible"])
+        opaque = assess_observation_readiness({**raw, "platform": "Unified"},
+                                              report_geo="Worldwide", report_platform="Android, iOS")
+        self.assertFalse(opaque["scope_compatible"])
+
     def test_csv_identity_is_legacy_compatible_across_optional_utf8_bom(self):
         without_bom = b'Unified Name;Downloads\r\nNguy\xe1\xbb\x85n;120\r\n'
         with_bom = b'\xef\xbb\xbf' + without_bom
