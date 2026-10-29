@@ -56,4 +56,4 @@ Browser screenshots are actual captures from the running local app:
 - `.bangiao/screenshots/project-reports-library/`
 - `docs/RECOVERY_BOARD.md`
 
-**Commit:** `d18cab4` (`feat(reports): refine project report library`).
+**Implementation commit:** `47184ebecbe7eb491614f1167358e3978e075113` (`feat(reports): refine project report library`).
