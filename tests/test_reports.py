@@ -65,6 +65,30 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertTrue(duplicate["duplicate"])
         self.assertEqual(len(self.client.get("/api/v1/reports").json()["items"]), 1)
 
+    def test_report_library_summary_exposes_structure_without_full_report_requests(self) -> None:
+        text_only = self.client.post("/api/v1/reports", json=self.payload("Plain text report")).json()
+        structured_payload = self._versioned_payload()
+        structured = self.client.post(
+            "/api/v1/reports",
+            json=self.payload(json.dumps(structured_payload)),
+        ).json()
+        summary_payload = self._versioned_payload()
+        for field in ("key_takeaways", "sections", "entities", "findings", "evidence_references", "benchmark_dimensions", "research_gaps", "po_recommendations"):
+            summary_payload["research_data"][field] = []
+        summary_only = self.client.post(
+            "/api/v1/reports",
+            json=self.payload(json.dumps(summary_payload)),
+        ).json()
+
+        summaries = {item["id"]: item for item in self.client.get("/api/v1/reports").json()["items"]}
+        self.assertEqual(summaries[text_only["id"]]["research_status"], "TEXT_ONLY")
+        self.assertEqual(summaries[text_only["id"]]["finding_count"], 0)
+        self.assertEqual(summaries[structured["id"]]["research_status"], "STRUCTURED_READY")
+        self.assertEqual(summaries[structured["id"]]["finding_count"], 1)
+        self.assertEqual(summaries[structured["id"]]["entity_count"], 1)
+        self.assertEqual(summaries[summary_only["id"]]["research_status"], "STRUCTURED_PARTIAL")
+        self.assertEqual(self.client.get(f"/api/v1/reports/{structured['id']}").json()["content"], structured["content"])
+
     def _structured_payload(self, key: str = "entity-a", url: str = "https://example.com/") -> dict:
         return {
             "sections": [{"heading": "Observed context", "content": "Relevant evidence and a domain-specific observation.", "hierarchy": 1, "source_location": "line:1"}],

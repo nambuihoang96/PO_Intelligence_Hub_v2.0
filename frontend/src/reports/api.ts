@@ -9,6 +9,10 @@ export type ReportSummary = {
   origin: 'chatgpt_user_import';
   imported_at: string;
   verification_status: 'unverified';
+  parse_status?: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING';
+  research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY';
+  finding_count?: number;
+  entity_count?: number;
 };
 
 export type ResearchData = {

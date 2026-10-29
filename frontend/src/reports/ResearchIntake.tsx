@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { reportApi, type ImportedReport, type ReportSummary } from './api';
+import { reportApi, type ReportSummary } from './api';
 import { extractHeadings } from './MarkdownReport';
 import { buildRepairPrompt, buildResearchPrompt } from './researchPrompt';
 import { researchApi, type ResearchProject } from '../research/api';
@@ -132,7 +132,7 @@ export function ResearchIntake() {
   const [environments, setEnvironments] = useState<string[]>(() => initialEnvironments.length ? initialEnvironments : ['Unknown']);
   const [researchFocus, setResearchFocus] = useState('');
   const [researchPeriod, setResearchPeriod] = useState(() => intakeParams.get('period') ?? '');
-  const [showImport, setShowImport] = useState(false);
+  const [showImport, setShowImport] = useState(() => intakeParams.get('action') === 'import');
   const [reportContent, setReportContent] = useState('');
   const [history, setHistory] = useState<ReportSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -275,8 +275,6 @@ export function ResearchIntake() {
 
 export function ReportHistory() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
-  const [reportDetails, setReportDetails] = useState<Record<string, ImportedReport>>({});
-  const [detailsLoading, setDetailsLoading] = useState(false);
   const [decisionReportIds, setDecisionReportIds] = useState<Set<string>>(new Set());
   const [projects, setProjects] = useState<ResearchProject[]>([]);
   const [query, setQuery] = useState('');
@@ -308,25 +306,16 @@ export function ReportHistory() {
   }, []);
   useEffect(() => {
     if (projectFilter === 'all' || projectFilter === 'unassigned' || reports.length === 0) {
-      setReportDetails({});
       setDecisionReportIds(new Set());
       return;
     }
     let active = true;
-    setDetailsLoading(true);
-    Promise.all([
-      Promise.all(reports.filter((report) => report.project_id === projectFilter).map(async (report) => {
-        try { return [report.id, await reportApi.get(report.id)] as const; }
-        catch { return [report.id, null] as const; }
-      })),
-      researchApi.getOpportunities(projectFilter).catch(() => null),
-    ]).then(([details, workspace]) => {
+    researchApi.getOpportunities(projectFilter).catch(() => null).then((workspace) => {
       if (!active) return;
-      setReportDetails(Object.fromEntries(details.filter((entry): entry is readonly [string, ImportedReport] => entry[1] !== null)));
       setDecisionReportIds(new Set((workspace?.candidates ?? []).filter((candidate) => candidate.decision && candidate.decision_target?.report_id).map((candidate) => candidate.decision_target!.report_id!)));
-    }).finally(() => { if (active) setDetailsLoading(false); });
+    });
     return () => { active = false; };
-  }, [projectFilter, reports]);
+  }, [projectFilter, reports.length]);
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -335,17 +324,15 @@ export function ReportHistory() {
   }, [reports, projectFilter, query, projectNames]);
   const scopedProject = projects.find((project) => project.id === projectFilter);
   const reportKind = (report: ReportSummary): 'structured' | 'one-finding' | 'text-only' | 'unclassified' => {
-    const detail = reportDetails[report.id];
-    if (!detail) return 'unclassified';
-    if (detail.research_status === 'TEXT_ONLY' || detail.parse_status === 'NEEDS_STRUCTURING') return 'text-only';
-    const research = detail.research_data;
-    if (research?.findings?.length === 1) return 'one-finding';
-    if (research && (research.findings?.length || research.entities?.length || research.executive_summary || research.benchmark_dimensions?.length)) return 'structured';
+    if (report.research_status === 'TEXT_ONLY' || report.parse_status === 'NEEDS_STRUCTURING') return 'text-only';
+    if (report.finding_count === 1) return 'one-finding';
+    if (report.research_status === 'STRUCTURED_READY' || report.research_status === 'STRUCTURED_PARTIAL' || (report.finding_count ?? 0) > 1 || (report.entity_count ?? 0) > 0) return 'structured';
     return 'unclassified';
   };
   const kindLabels = { structured: 'Structured', 'one-finding': 'Một phát hiện', 'text-only': 'Text-only', unclassified: 'Chưa phân loại' } as const;
   const scopedReports = scopedProject ? reports.filter((report) => report.project_id === scopedProject.id) : [];
-  const kindCounts = scopedReports.reduce((counts, report) => { counts[reportKind(report)] += 1; return counts; }, { structured: 0, 'one-finding': 0, 'text-only': 0, unclassified: 0 });
+  const countKinds = (items: ReportSummary[]) => items.reduce((counts, report) => { counts[reportKind(report)] += 1; return counts; }, { structured: 0, 'one-finding': 0, 'text-only': 0, unclassified: 0 });
+  const kindCounts = countKinds(scopedReports);
   function changeProjectFilter(value: string) {
     setProjectFilter(value);
     const url = new URL(window.location.href);
@@ -374,17 +361,16 @@ export function ReportHistory() {
   }
   return <div className="report-library-page">{scopedProject && <ProjectJourneyNav projectId={scopedProject.id} active="report" />}
     {scopedProject ? <section className="research-panel report-history-page report-history-project">
-      <header className="report-library-heading"><div><span className="field-label">THƯ VIỆN CỦA DỰ ÁN</span><h2>Báo cáo nghiên cứu</h2><p>Các báo cáo đã nhập cho {scopedProject.name}.</p><div className="report-library-summary" aria-label="Phân loại báo cáo">{([['Tổng số', scopedReports.length], ['Structured', kindCounts.structured], ['Một phát hiện', kindCounts['one-finding']], ['Text-only', kindCounts['text-only']], ['Chưa phân loại', kindCounts.unclassified]] as const).map(([label, count]) => <span className="report-library-chip" key={label}><strong>{detailsLoading ? '…' : count}</strong>{label}</span>)}</div></div></header>
-      <div className="report-library-toolbar"><label className="report-library-search" htmlFor="report-search"><span className="sr-only">Tìm báo cáo</span><ResultsIcon name="search" /><input id="report-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm theo tên, thị trường hoặc kỳ nghiên cứu" /></label><label className="report-library-project-filter" htmlFor="report-project-filter"><span className="sr-only">Lọc theo dự án</span><select id="report-project-filter" value={projectFilter} onChange={(event) => changeProjectFilter(event.target.value)}><option value="all">Tất cả báo cáo</option><option value="unassigned">Chưa gắn dự án</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label><a className="primary-action report-library-import" href={`/?projectId=${encodeURIComponent(scopedProject.id)}`}>Nhập báo cáo</a></div>
-      {error && <div className="research-alert" role="alert">{error}</div>}{linkNotice && <div className="research-success" role="status">{linkNotice}</div>}{loading && <p role="status">Đang tải báo cáo…</p>}{!loading && reports.length === 0 ? <div className="report-library-empty"><strong>Chưa có báo cáo nghiên cứu</strong><span>{scopedProject ? 'Nhập báo cáo ChatGPT để lưu kết quả vào dự án này.' : 'Báo cáo bạn nhập sẽ xuất hiện tại đây.'}</span></div> : !loading && filtered.length === 0 ? <div className="report-library-empty"><strong>Không tìm thấy báo cáo phù hợp</strong><span>Thử từ khóa khác hoặc đổi bộ lọc dự án.</span></div> : <><p className="report-library-count" role="status">{filtered.length} báo cáo{detailsLoading ? ' · đang nhận diện cấu trúc' : ''}</p><div className="report-library-list">{filtered.map((report) => {
-        const detail = reportDetails[report.id];
+      <header className="report-library-heading"><div><span className="field-label">THƯ VIỆN CỦA DỰ ÁN</span><h2>Báo cáo nghiên cứu</h2><p>Các báo cáo đã nhập cho {scopedProject.name}.</p><div className="report-library-summary" aria-label="Phân loại báo cáo">{([['Tổng số', scopedReports.length], ['Structured', kindCounts.structured], ['Một phát hiện', kindCounts['one-finding']], ['Text-only', kindCounts['text-only']], ['Chưa phân loại', kindCounts.unclassified]] as const).map(([label, count]) => <span className="report-library-chip" key={label}><strong>{count}</strong>{label}</span>)}</div></div></header>
+      <div className="report-library-toolbar"><label className="report-library-search" htmlFor="report-search"><span className="sr-only">Tìm báo cáo</span><ResultsIcon name="search" /><input id="report-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm theo tên, thị trường hoặc kỳ nghiên cứu" /></label><label className="report-library-project-filter" htmlFor="report-project-filter"><span className="sr-only">Lọc theo dự án</span><select id="report-project-filter" value={projectFilter} onChange={(event) => changeProjectFilter(event.target.value)}><option value="all">Tất cả báo cáo</option><option value="unassigned">Chưa gắn dự án</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label><a className="primary-action report-library-import" href={`/?projectId=${encodeURIComponent(scopedProject.id)}&action=import`}>Nhập báo cáo</a></div>
+      {error && <div className="research-alert" role="alert">{error}</div>}{linkNotice && <div className="research-success" role="status">{linkNotice}</div>}{loading && <p role="status">Đang tải báo cáo…</p>}{!loading && reports.length === 0 ? <div className="report-library-empty"><strong>Chưa có báo cáo nghiên cứu</strong><span>{scopedProject ? 'Nhập báo cáo ChatGPT để lưu kết quả vào dự án này.' : 'Báo cáo bạn nhập sẽ xuất hiện tại đây.'}</span></div> : !loading && filtered.length === 0 ? <div className="report-library-empty"><strong>Không tìm thấy báo cáo phù hợp</strong><span>Thử từ khóa khác hoặc đổi bộ lọc dự án.</span></div> : <><p className="report-library-count" role="status">{filtered.length} báo cáo</p><div className="report-library-list">{filtered.map((report) => {
         const kind = reportKind(report);
-        const findingCount = detail?.research_data?.findings?.length ?? 0;
-        const entityCount = detail?.research_data?.entities?.length ?? 0;
+        const findingCount = report.finding_count ?? 0;
+        const entityCount = report.entity_count ?? 0;
         return <article className="report-library-card" key={report.id}>
           <a className="report-library-card-main" href={`/reports/${encodeURIComponent(report.id)}${projectFilter === 'unassigned' ? '?from=unassigned' : ''}`} aria-label={`Mở báo cáo ${recentTitle(report)}`}>
             <span className="report-library-card-icon" aria-hidden="true"><ResultsIcon name="reports" /></span>
-            <span className="report-library-card-copy"><span className={`report-kind-badge report-kind-${kind}`}>{kindLabels[kind]}</span><strong>{recentTitle(report)}</strong><small className="report-library-scope">{localizedGeo(report.geo)} <span>·</span> {localizedEnvironment(report.os)} <span>·</span> {report.research_period || 'Chưa ghi kỳ nghiên cứu'}</small><span className="report-library-summary-line">{kind === 'text-only' ? 'Chưa cấu trúc lại' : kind === 'unclassified' ? 'Chưa có dữ liệu cấu trúc' : detail ? `${findingCount} phát hiện · ${entityCount} đối tượng nghiên cứu` : 'Đang nhận diện nội dung báo cáo'}</span></span>
+            <span className="report-library-card-copy"><span className={`report-kind-badge report-kind-${kind}`}>{kindLabels[kind]}</span><strong>{recentTitle(report)}</strong><small className="report-library-scope">{localizedGeo(report.geo)} <span>·</span> {localizedEnvironment(report.os)} <span>·</span> {report.research_period || 'Chưa ghi kỳ nghiên cứu'}</small><span className="report-library-summary-line">{kind === 'text-only' ? 'Chưa cấu trúc lại' : kind === 'unclassified' ? 'Chưa có dữ liệu cấu trúc' : `${findingCount} phát hiện · ${entityCount} đối tượng nghiên cứu`}</span></span>
             <span className="report-library-card-date">{new Date(report.imported_at).toLocaleDateString('vi-VN')}</span><span className="report-library-card-open">Mở báo cáo <span aria-hidden="true">→</span></span>
           </a>
           {projectFilter === 'unassigned' && !report.project_id && <div className="report-project-link"><span>Chưa gắn với dự án</span><div className="report-link-controls"><label className="sr-only" htmlFor={`link-report-${report.id}`}>Chọn dự án cho {recentTitle(report)}</label><select id={`link-report-${report.id}`} value={linkTargets[report.id] ?? ''} disabled={Boolean(linkingReportId)} onChange={(event) => setLinkTargets((current) => ({ ...current, [report.id]: event.target.value }))}><option value="">Chọn dự án…</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select><button className="secondary-action" type="button" disabled={!linkTargets[report.id] || Boolean(linkingReportId)} onClick={() => void linkReport(report)}>{linkingReportId === report.id ? 'Đang liên kết…' : 'Gắn vào dự án'}</button></div>{linkErrors[report.id] && <span className="report-link-error" role="alert">{linkErrors[report.id]}</span>}</div>}

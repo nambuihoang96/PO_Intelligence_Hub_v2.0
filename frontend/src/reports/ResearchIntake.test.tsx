@@ -66,16 +66,14 @@ describe('ChatGPT research intake', () => {
   it('shows a project report library with report types derived from saved structure and one shared decision action', async () => {
     const project = { id: 'project-qa', name: 'QA Demo Project', owner: null, category: null, created_at: '2026-10-29', updated_at: '2026-10-29' };
     const reports = [
-      { ...report, id: 'structured-report', project_id: project.id, question: 'Structured market research', parse_status: 'PARSED' as const, research_status: 'STRUCTURED_READY' as const, research_data: { ...report.research_data, findings: [{ key: 'one', title: 'Finding one' }, { key: 'two', title: 'Finding two' }], entities: [{ key: 'entity', name: 'Product A' }] } },
-      { ...report, id: 'single-report', project_id: project.id, question: 'One-finding report', parse_status: 'PARSED' as const, research_status: 'STRUCTURED_PARTIAL' as const, research_data: { ...report.research_data, findings: [{ key: 'one', title: 'Finding one' }] } },
-      { ...report, id: 'text-report', project_id: project.id, question: 'Text-only report', parse_status: 'NEEDS_STRUCTURING' as const, research_status: 'TEXT_ONLY' as const },
+      { ...report, id: 'structured-report', project_id: project.id, question: 'Structured market research', parse_status: 'PARSED' as const, research_status: 'STRUCTURED_READY' as const, finding_count: 2, entity_count: 1 },
+      { ...report, id: 'single-report', project_id: project.id, question: 'One-finding report', parse_status: 'PARSED' as const, research_status: 'STRUCTURED_PARTIAL' as const, finding_count: 1, entity_count: 0 },
+      { ...report, id: 'text-report', project_id: project.id, question: 'Text-only report', parse_status: 'NEEDS_STRUCTURING' as const, research_status: 'TEXT_ONLY' as const, finding_count: 0, entity_count: 0 },
     ];
-    const details = Object.fromEntries(reports.map((item) => [item.id, item]));
     window.history.replaceState({}, '', `/reports?projectId=${project.id}`);
     mockFetch((url) => {
       if (url.includes('/api/v1/reports?')) return { items: reports, next_cursor: null, limit: 10 };
       if (url.includes('/api/v1/projects?')) return { items: [project], next_cursor: null, limit: 20 };
-      if (url.includes('/api/v1/reports/')) return details[url.split('/').pop()!];
       if (url.includes(`/api/v1/projects/${project.id}/opportunities`)) return { candidates: [{ candidate_id: 'c', name: 'Decision', stale: false, decision_target: { kind: 'report_finding', target_id: 'one', report_id: 'structured-report' }, decision: { decision_status: 'hold', next_action: 'Review' } }], reports: [], shortlist_dataset_id: null, shortlist_valid: true, shortlist_warning: null };
       if (url.includes(`/api/v1/projects/${project.id}/plans`)) return { items: [], next_cursor: null, limit: 100 };
       if (url.includes(`/api/v1/projects/${project.id}`)) return project;
@@ -83,16 +81,30 @@ describe('ChatGPT research intake', () => {
     });
     render(<ReportHistory />);
     expect(await screen.findByRole('heading', { name: 'Báo cáo nghiên cứu' })).toBeTruthy();
-    expect(await screen.findByText('Structured')).toBeTruthy();
+    expect((await screen.findAllByText('Structured')).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Một phát hiện').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Text-only').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('2 phát hiện · 1 đối tượng nghiên cứu')).toBeTruthy();
     expect(screen.getByText('1 phát hiện · 0 đối tượng nghiên cứu')).toBeTruthy();
     expect(screen.getByText('Chưa cấu trúc lại')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Mở báo cáo Structured market research' }).getAttribute('href')).toBe('/reports/structured-report');
-    expect(screen.getByRole('link', { name: /Có quyết định đã lưu/ }).getAttribute('href')).toBe(`/tracking?projectId=${project.id}`);
+    const decisionLink = await screen.findByRole('link', { name: /Có quyết định đã lưu/ });
+    expect(decisionLink.getAttribute('href')).toBe(`/tracking?projectId=${project.id}`);
     expect(screen.queryByRole('link', { name: /Quyết định của dự án/ })).toBeNull();
     expect(screen.getByLabelText('Lọc theo dự án')).toBeTruthy();
+  });
+
+  it('opens project-scoped report import directly from the library CTA', async () => {
+    window.history.replaceState({}, '', '/?projectId=project-qa&action=import');
+    mockFetch((url) => {
+      if (url.includes('/api/v1/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (url.includes('/api/v1/projects/project-qa/plans')) return { items: [], next_cursor: null, limit: 100 };
+      if (url.includes('/api/v1/projects/project-qa')) return { id: 'project-qa', name: 'QA Demo Project', owner: null, category: null, created_at: '2026-10-29', updated_at: '2026-10-29' };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ResearchIntake />);
+    expect(await screen.findByRole('heading', { name: 'Dán một lần, xem kết quả có cấu trúc' })).toBeTruthy();
+    expect(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT')).toBeTruthy();
   });
 
   it('shows the same five reports from the shared library and filters three for Project A and two for Project B', async () => {

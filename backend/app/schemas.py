@@ -937,6 +937,48 @@ class ImportedReportSummary(APIModel):
     origin: str
     imported_at: datetime
     verification_status: str = "unverified"
+    parse_status: str = "NEEDS_STRUCTURING"
+    research_status: str = "TEXT_ONLY"
+    finding_count: int = 0
+    entity_count: int = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def include_structure_summary(cls, value: Any) -> Any:
+        """Expose small list-card metadata without fetching each full report."""
+        if isinstance(value, dict):
+            return value
+        research = getattr(value, "research_data_json", None) or {}
+        findings = research.get("findings", []) or []
+        entities = research.get("entities", []) or []
+        has_results = bool(
+            findings
+            or entities
+            or research.get("benchmark_dimensions")
+            or research.get("quantitative_observations")
+        )
+        has_structure = bool(
+            has_results
+            or research.get("executive_summary")
+            or research.get("key_takeaways")
+            or research.get("research_gaps")
+            or research.get("po_recommendations")
+        )
+        result = {
+            field: getattr(value, field)
+            for field in (
+                "id", "project_id", "question", "geo", "os", "research_period",
+                "content_sha256", "origin", "imported_at",
+            )
+        }
+        result.update(
+            verification_status="unverified",
+            parse_status=getattr(value, "parse_status", "NEEDS_STRUCTURING"),
+            research_status="STRUCTURED_READY" if has_results else ("STRUCTURED_PARTIAL" if has_structure else "TEXT_ONLY"),
+            finding_count=len(findings),
+            entity_count=len(entities),
+        )
+        return result
 
 
 class BenchmarkSelection(APIModel):
