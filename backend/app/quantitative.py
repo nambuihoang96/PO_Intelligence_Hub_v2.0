@@ -138,6 +138,27 @@ def _scope_values(value: str) -> set[str]:
     return {part.strip().casefold() for part in re.split(r"[,;|/]", value) if part.strip()}
 
 
+def _store_platform_set(value: str) -> set[str] | None:
+    """Recognise only explicit iOS/Android store-scope labels.
+
+    A combined iOS+Android observation is compatible with a combined report,
+    never with an Android-only or iOS-only report. Unknown provider strings are
+    intentionally NOT guessed or silently broadened.
+    """
+    aliases = {
+        "ios": "ios", "ios app store": "ios", "app store ios": "ios",
+        "android": "android", "android google play": "android",
+        "google play android": "android", "android play store": "android",
+    }
+    folded = value.strip().casefold()
+    if folded in {"both", "ios and android", "android and ios"}:
+        return {"ios", "android"}
+    pieces = [part.strip() for part in re.split(r"[,;+|/&]", folded) if part.strip()]
+    if pieces and all(part in aliases for part in pieces):
+        return {aliases[part] for part in pieces}
+    return None
+
+
 def _scope_compatible(observation: str | None, report_scope: str, dimension: str) -> bool:
     if not observation:
         return True
@@ -148,6 +169,10 @@ def _scope_compatible(observation: str | None, report_scope: str, dimension: str
     if dimension == "platform":
         if scope.intersection({"cross-platform", "cross platform"}):
             return True
+        source_stores = _store_platform_set(observation)
+        report_stores = _store_platform_set(report_scope)
+        if source_stores and report_stores:
+            return source_stores.issubset(report_stores)
         if "both" in scope:
             return supplied in {"ios", "android", "both"}
     if scope.intersection({"unknown", "not applicable", "n/a"}):
