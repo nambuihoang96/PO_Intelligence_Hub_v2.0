@@ -138,7 +138,7 @@ class ProjectTrendUpdate(Base):
 
     __tablename__ = "project_trend_updates"
     __table_args__ = (
-        UniqueConstraint("project_id", "subject_id", "id", name="uq_project_trend_updates_project_subject_id"),
+        Index("uq_project_trend_updates_project_subject_id", "project_id", "subject_id", "id", unique=True),
         ForeignKeyConstraint(["project_id"], ["research_projects.id"], ondelete="RESTRICT",
                              name="fk_project_trend_updates_project"),
         ForeignKeyConstraint(["project_id", "subject_id"], ["research_subjects.project_id", "research_subjects.id"],

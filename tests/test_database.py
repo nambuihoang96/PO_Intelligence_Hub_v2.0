@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
@@ -52,6 +53,17 @@ class DatabaseMigrationTest(unittest.TestCase):
                 self.assertIn("uq_research_plans_project_version", {
                     constraint["name"] for constraint in inspector.get_unique_constraints("research_plans")
                 })
+                trend_indexes = {
+                    row[1]: row[2]
+                    for row in connection.exec_driver_sql("PRAGMA index_list('project_trend_updates')").all()
+                }
+                trend_index = "uq_project_trend_updates_project_subject_id"
+                self.assertEqual(trend_indexes.get(trend_index), 1)
+                self.assertEqual(
+                    [row[2] for row in connection.exec_driver_sql(f"PRAGMA index_info('{trend_index}')").all()],
+                    ["project_id", "subject_id", "id"],
+                )
+                self.assertEqual(connection.exec_driver_sql("PRAGMA foreign_key_check").all(), [])
         finally:
             engine.dispose()
 
@@ -92,8 +104,12 @@ class DatabaseMigrationTest(unittest.TestCase):
             connection.close()
 
     def test_historical_research_migrates_restores_and_reopens_through_apis(self) -> None:
-        """Exercise a representative v0008 workspace before/after the real 0009 migration."""
+        """Exercise a representative v0008 workspace through the current migration head."""
+        current_head = ScriptDirectory.from_config(self.config).get_current_head()
+        self.assertEqual(current_head, "20261027_0015")
         command.upgrade(self.config, "20261023_0008")
+        with closing(sqlite3.connect(get_database_path())) as historical:
+            self.assertEqual(historical.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261023_0008")
         test_app = create_app()
         client_context = TestClient(test_app)
         client = client_context.__enter__()
@@ -202,7 +218,9 @@ class DatabaseMigrationTest(unittest.TestCase):
         database_path = get_database_path()
         pre_migration_backup = Path(self.temp_dir.name) / "historical-v0008-backup.sqlite3"
         with closing(sqlite3.connect(database_path)) as source, closing(sqlite3.connect(pre_migration_backup)) as backup:
+            self.assertEqual(source.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261023_0008")
             source.backup(backup)
+            self.assertEqual(backup.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261023_0008")
             self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
         # This is the actual release migration path under test: v0008 -> v0009.
@@ -255,14 +273,14 @@ class DatabaseMigrationTest(unittest.TestCase):
                 self.assertEqual(candidate_after_restore["decision"]["rationale"], decision_payload["rationale"])
                 with closing(sqlite3.connect(restored_database)) as restored:
                     self.assertEqual(restored.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-                    self.assertEqual(restored.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261027_0012")
+                    self.assertEqual(restored.execute("SELECT version_num FROM alembic_version").fetchone()[0], current_head)
             finally:
                 restored_client_context.__exit__(None, None, None)
                 restored_app.state.session_factory.kw["bind"].dispose()
 
         with closing(sqlite3.connect(database_path)) as migrated:
             self.assertEqual(migrated.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-            self.assertEqual(migrated.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261027_0012")
+            self.assertEqual(migrated.execute("SELECT version_num FROM alembic_version").fetchone()[0], current_head)
 
     def _assert_historical_fixture_reopened(self, client: TestClient, project_id: str, report_id: str, run_id: str,
                                             report_dataset_id: str, workspace_dataset_id: str, manifest_checksum: str,
