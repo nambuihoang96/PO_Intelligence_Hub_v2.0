@@ -17,6 +17,21 @@ function observation(overrides: Partial<QuantitativeObservation> = {}): Quantita
 }
 
 describe('QuantitativeEvidence', () => {
+  it('renders comparable GEO observations without mixing other formats or metrics', () => {
+    const evidence = vi.fn();
+    render(<QuantitativeEvidence observations={[
+      observation({ metric_id: 'ecpm', metric_definition: 'Rewarded eCPM', unit: 'USD/1000 impressions', entity_id: 'rewarded', entity_name: 'Rewarded', geo: 'US', value: 19.2 }),
+      observation({ metric_id: 'ecpm', metric_definition: 'Rewarded eCPM', unit: 'USD/1000 impressions', entity_id: 'rewarded', entity_name: 'Rewarded', geo: 'JP', value: 13.1 }),
+      observation({ metric_id: 'ecpm', metric_definition: 'Rewarded eCPM', unit: 'USD/1000 impressions', entity_id: 'rewarded', entity_name: 'Rewarded', geo: 'VN', value: 2.7 }),
+      observation({ metric_id: 'ecpm', metric_definition: 'Rewarded eCPM', unit: 'USD/1000 impressions', entity_id: 'banner', entity_name: 'Banner', geo: 'US', value: 0.3 }),
+    ]} onViewEvidence={evidence} />);
+    expect(screen.getByRole('heading', { name: 'So sánh theo GEO' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Xem bằng chứng: JP/ }));
+    expect(evidence).toHaveBeenCalledWith(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem bảng' }));
+    expect(screen.getByRole('region', { name: 'Bảng so sánh theo GEO' })).toBeTruthy();
+  });
+
   afterEach(cleanup);
   it('shows a report-supplied multi-entity comparison with clickable evidence', () => {
     const openEvidence = vi.fn();
