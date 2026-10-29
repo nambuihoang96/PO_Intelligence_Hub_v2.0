@@ -109,4 +109,4 @@ To close the genuine-report gate, provide either exact report as a readable `.md
 **Verification:** 235 frontend tests, TypeScript, production build, two targeted backend tests and actual desktop browser walkthrough; final mobile correction and genuine report are not verified.
 **Decision:** `TECHNICAL PASS for isolated Golden Demo / PRODUCT NEEDS FIX / OWNER ACCEPTANCE PENDING`.
 
-**Implementation commit:** pending.
+**Implementation commit:** `773f3ae9fa1515cf7af7525aa7dc2c6577fa36ea` (`fix(reports): recover reader and add golden QA walkthrough`).
