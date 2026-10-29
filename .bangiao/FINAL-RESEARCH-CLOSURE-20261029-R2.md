@@ -113,4 +113,4 @@ Unrelated local `scripts/setup.ps1` changes, QA databases, source inputs, logs, 
 
 ## Commit
 
-Implementation/documentation commit: to be filled after the scoped handoff and Recovery Board update are committed.
+Handoff and screenshot commit: `730c1f0` (`docs: close genuine Puzzle 2026 research UAT`). This SHA is recorded by the follow-up metadata commit that contains the final document version.
