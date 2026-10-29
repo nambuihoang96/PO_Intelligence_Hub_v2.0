@@ -62,38 +62,32 @@ class PresentationContractTest(unittest.TestCase):
         self.assertEqual(reloaded.research_data.presentation_plan.highlighted_finding_keys, ["finding-a"])
         self.assertNotIn("chart_data", saved["research_data"]["presentation_plan"])
 
-    def test_rejects_unknown_finding_and_out_of_range_metric_index(self):
-        base = {
+    def test_invalid_optional_references_are_discarded_without_losing_report(self):
+        hints = {
             "version": "presentation_v1",
             "headline": "A headline",
-            "highlighted_finding_keys": ["missing"],
-            "featured_observation_indexes": [0],
-            "chart_observation_indexes": [],
+            "highlighted_finding_keys": ["missing", "finding-a", "finding-a"],
+            "featured_observation_indexes": [-1, 0, 0, 1000],
+            "chart_observation_indexes": [1000, 0, 0],
         }
-        with self.assertRaises(ValidationError):
-            POResearchPayload.model_validate(payload(base))
-        base["highlighted_finding_keys"] = ["finding-a"]
-        base["chart_observation_indexes"] = [1]
-        with self.assertRaises(ValidationError):
-            POResearchPayload.model_validate(payload(base))
-        base["chart_observation_indexes"] = [-1]
-        with self.assertRaises(ValidationError):
-            POResearchPayload.model_validate(payload(base))
+        saved = POResearchPayload.model_validate(payload(hints))
+        plan = saved.research_data.presentation_plan
+        self.assertEqual(plan.highlighted_finding_keys, ["finding-a"])
+        self.assertEqual(plan.featured_observation_indexes, [0])
+        self.assertEqual(plan.chart_observation_indexes, [0])
+        self.assertEqual(saved.research_data.findings[0].key, "finding-a")
 
-    def test_rejects_invented_visualization_values_and_duplicates(self):
-        bad = {
+    def test_rejects_untrusted_extra_chart_values(self):
+        hints = {
             "version": "presentation_v1",
             "headline": None,
             "highlighted_finding_keys": [],
-            "featured_observation_indexes": [0, 0],
+            "featured_observation_indexes": [0],
             "chart_observation_indexes": [0],
             "invented_kpi": 99999,
         }
         with self.assertRaises(ValidationError):
-            POResearchPayload.model_validate(payload(bad))
-        del bad["invented_kpi"]
-        with self.assertRaises(ValidationError):
-            POResearchPayload.model_validate(payload(bad))
+            POResearchPayload.model_validate(payload(hints))
 
 
 if __name__ == "__main__":
