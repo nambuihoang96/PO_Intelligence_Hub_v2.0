@@ -44,7 +44,7 @@ describe('ChatGPT research intake', () => {
     expect(prompt).not.toContain('iOS and Android findings separate');
   });
 
-  it('searches the report library and filters reports by project while keeping workspace decisions linked', async () => {
+  it('searches the shared report library and retains its project decision links', async () => {
     const linked = { ...report, id: 'linked-report', project_id: 'project-1' };
     const unlinked = { ...report, id: 'unlinked-report', question: 'Unlinked utility research' };
     mockFetch((url) => {
@@ -58,8 +58,41 @@ describe('ChatGPT research intake', () => {
     fireEvent.change(screen.getByLabelText('Tìm báo cáo'), { target: { value: 'utility' } });
     expect(screen.getByText('Unlinked utility research')).toBeTruthy();
     expect(screen.queryByText('How do learning apps engage children?')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Tìm báo cáo'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-1' } });
-    expect(screen.getByText('Không có báo cáo phù hợp với bộ lọc này.')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: /How do learning apps engage children/ })).toBeTruthy();
+  });
+
+  it('shows a project report library with report types derived from saved structure and one shared decision action', async () => {
+    const project = { id: 'project-qa', name: 'QA Demo Project', owner: null, category: null, created_at: '2026-10-29', updated_at: '2026-10-29' };
+    const reports = [
+      { ...report, id: 'structured-report', project_id: project.id, question: 'Structured market research', parse_status: 'PARSED' as const, research_status: 'STRUCTURED_READY' as const, research_data: { ...report.research_data, findings: [{ key: 'one', title: 'Finding one' }, { key: 'two', title: 'Finding two' }], entities: [{ key: 'entity', name: 'Product A' }] } },
+      { ...report, id: 'single-report', project_id: project.id, question: 'One-finding report', parse_status: 'PARSED' as const, research_status: 'STRUCTURED_PARTIAL' as const, research_data: { ...report.research_data, findings: [{ key: 'one', title: 'Finding one' }] } },
+      { ...report, id: 'text-report', project_id: project.id, question: 'Text-only report', parse_status: 'NEEDS_STRUCTURING' as const, research_status: 'TEXT_ONLY' as const },
+    ];
+    const details = Object.fromEntries(reports.map((item) => [item.id, item]));
+    window.history.replaceState({}, '', `/reports?projectId=${project.id}`);
+    mockFetch((url) => {
+      if (url.includes('/api/v1/reports?')) return { items: reports, next_cursor: null, limit: 10 };
+      if (url.includes('/api/v1/projects?')) return { items: [project], next_cursor: null, limit: 20 };
+      if (url.includes('/api/v1/reports/')) return details[url.split('/').pop()!];
+      if (url.includes(`/api/v1/projects/${project.id}/opportunities`)) return { candidates: [{ candidate_id: 'c', name: 'Decision', stale: false, decision_target: { kind: 'report_finding', target_id: 'one', report_id: 'structured-report' }, decision: { decision_status: 'hold', next_action: 'Review' } }], reports: [], shortlist_dataset_id: null, shortlist_valid: true, shortlist_warning: null };
+      if (url.includes(`/api/v1/projects/${project.id}/plans`)) return { items: [], next_cursor: null, limit: 100 };
+      if (url.includes(`/api/v1/projects/${project.id}`)) return project;
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ReportHistory />);
+    expect(await screen.findByRole('heading', { name: 'Báo cáo nghiên cứu' })).toBeTruthy();
+    expect(await screen.findByText('Structured')).toBeTruthy();
+    expect(screen.getAllByText('Một phát hiện').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Text-only').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('2 phát hiện · 1 đối tượng nghiên cứu')).toBeTruthy();
+    expect(screen.getByText('1 phát hiện · 0 đối tượng nghiên cứu')).toBeTruthy();
+    expect(screen.getByText('Chưa cấu trúc lại')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở báo cáo Structured market research' }).getAttribute('href')).toBe('/reports/structured-report');
+    expect(screen.getByRole('link', { name: /Có quyết định đã lưu/ }).getAttribute('href')).toBe(`/tracking?projectId=${project.id}`);
+    expect(screen.queryByRole('link', { name: /Quyết định của dự án/ })).toBeNull();
+    expect(screen.getByLabelText('Lọc theo dự án')).toBeTruthy();
   });
 
   it('shows the same five reports from the shared library and filters three for Project A and two for Project B', async () => {
@@ -88,7 +121,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('link', { name: /Project A report 3/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Project B report 1/ })).toBeNull();
 
-    fireEvent.change(screen.getByLabelText('Dự án'), { target: { value: 'project-b' } });
+    fireEvent.change(screen.getByLabelText('Lọc theo dự án'), { target: { value: 'project-b' } });
     expect(await screen.findByText('2 báo cáo')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Project B report 2/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Project A report 1/ })).toBeNull();

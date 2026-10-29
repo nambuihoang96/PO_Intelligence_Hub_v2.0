@@ -533,3 +533,15 @@ User rejected existing 15195 UX and asked for direct code changes rather than ad
 - **Implementation commit:** `d113adfd030e7f8f503bf6d44e61d25e44b36c97` (`feat: add persistent research QA recovery demo`).
 - **G3-06 follow-up check:** On the same isolated QA browser, saved a clearly labeled QA-only profile question and verified it reopens after refresh. Attempted exact 1440×900 and 390×844 screenshot capture with task-owned headless Chrome; Chrome exited with code 21 before startup and produced no screenshot. This partial save/reopen check does not close the outstanding viewport visual UAT.
 - **Status/cursor:** scoped Research recovery demo is `DEV_DONE / TECHNICAL BROWSER UAT PASS / OWNER REVIEW PENDING`; G2-04 genuine-report acceptance remains pending owner artifact. G3-06 remains `DEV_DONE / EXACT DESKTOP + 390px VISUAL UAT NOT VERIFIED`; resume that existing verification before G3-07. Do not begin new Data Analysis feature implementation from this audit.
+
+### G2-02 — Project Reports library UX follow-up — 2026-10-29
+
+- **Owner request:** Refine only Project → Báo cáo for the persistent QA Demo project: replace the loose administrative rows with a readable Peachy-style report library, classify saved report types, integrate search/filter/import, remove repetitive project-decision links, and verify desktop/mobile screenshots.
+- **Classification / impact:** Bounded UI/UX refinement of the existing G2-02 Project → Report context. Affects only `ResearchIntake.tsx`, its focused test, report-library CSS and handoff/screenshots. No API, backend, schema, report, benchmark, PO decision or SQLite changes.
+- **Implementation:** Project-scoped report cards derive classification/counts from saved status and structure; project-wide summary remains stable while searching; report open retains the original `report_id`; a compact Tracking action is shown only for an explicitly linked saved decision. Global Reports library behavior is unchanged.
+- **Verification:** Real local app with isolated QA SQLite at `15312`/`15313`; desktop 1440×900 and mobile 390×844 captures; three labeled QA reports (structured, one finding, text-only); search narrowed to the text-only record; opening it navigated to its same report ID; no mobile horizontal overflow. Focused frontend tests: 49 passed; TypeScript/production build passed. The first restricted Vitest attempt hit Windows temp-folder `EPERM`; rerun with host permissions passed. No backend tests run because the backend was untouched.
+- **Evidence / handoff:** `.bangiao/PROJECT-REPORT-LIBRARY-UX.md` and `.bangiao/screenshots/project-reports-library/{before,after}/`.
+- **Product Acceptance:** `TECHNICAL PASS` for this bounded screen; owner visual review remains pending. QA data is synthetic and explicitly labeled, so it is not evidence of research truth. This does not mark G1 or overall Product Recovery accepted.
+- **Current status:** G2-02 report library UX follow-up is `DEV_DONE / BROWSER UAT PASS / OWNER REVIEW PENDING`; no merge or deployment.
+
+**Last updated:** 2026-10-29 — bounded G2-02 Project Reports library visual/UAT follow-up recorded; owner review pending.
