@@ -1,8 +1,8 @@
 # Final Research Visual & Workflow Recovery — Review Handoff
 
-Date: 2026-10-29  
-Branch: `feat/ux-recovery-01-research-results`  
-Starting HEAD: `21721562f0ef6eebef8aba36506b33688204e68f`  
+Date: 2026-10-29
+Branch: `feat/ux-recovery-01-research-results`
+Starting HEAD: `21721562f0ef6eebef8aba36506b33688204e68f`
 Status: `SCOPED G2-02 TECHNICAL PASS — BROADER RECOVERY NEEDS FIX / OWNER REVIEW PENDING`
 
 ## Scope and outcome
@@ -81,11 +81,8 @@ No backend, API source, schema, migration, original QA database or saved report 
 
 - Starting HEAD: `21721562f0ef6eebef8aba36506b33688204e68f`.
 - Implementation commit: `adc9e60` (`fix(reports): unify report library cards`).
-- Evidence / Recovery Board commit: pending. Push verification: pending.
+- Evidence / Recovery Board and screenshot commit: `8cb00bf` (`docs(recovery): record report library round 3 UAT`). Current branch push is reported in the delivery result.
 
 ## Next action
 
 Continue the existing Recovery Board cursor at G3-06 exact 1440×900 and 390×844 visual UAT. Keep G2-04 genuine-report verification pending until a genuine PO report is available. Do not mark broader G1/G2 tasks Product Accepted.
-
-
-
