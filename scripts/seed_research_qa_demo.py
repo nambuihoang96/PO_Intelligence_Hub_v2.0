@@ -30,6 +30,8 @@ PROJECT_NAME = "[QA DEMO] Puzzle Research — US Android 2026"
 COLLECTION_NAME = "[QA DEMO] Report-linked puzzle comparison"
 QA_MARKER = "[QA DEMO]"
 QA_URLS = [f"https://example.invalid/qa/puzzle-fixture-{index}" for index in range(1, 6)]
+GOLDEN_REPORT_TITLE = "[QA DEMO] Puzzle Research — Full Product Walkthrough"
+GOLDEN_URLS = [f"https://example.invalid/qa/puzzle-walkthrough/{index}" for index in range(1, 6)]
 
 
 def ensure_isolated_qa_database() -> Path:
@@ -127,6 +129,121 @@ def rich_report_data() -> dict[str, Any]:
     }
 
 
+def golden_report_data() -> dict[str, Any]:
+    entities = [
+        {"key": "walkthrough-alpha", "entity_type": "game concept", "name": "[QA DEMO] Khái niệm Alpha", "attributes": {"description": "Khái niệm puzzle tổng hợp chỉ dùng để kiểm thử giao diện."}, "evidence_references": [GOLDEN_URLS[0], GOLDEN_URLS[1]]},
+        {"key": "walkthrough-beta", "entity_type": "game concept", "name": "[QA DEMO] Khái niệm Beta", "attributes": {"description": "Khái niệm puzzle tổng hợp với cách trình bày tiến độ khác."}, "evidence_references": [GOLDEN_URLS[2]]},
+        {"key": "walkthrough-gamma", "entity_type": "game concept", "name": "[QA DEMO] Khái niệm Gamma", "attributes": {"description": "Khái niệm puzzle tổng hợp có nội dung mở rộng theo chủ đề."}, "evidence_references": [GOLDEN_URLS[3]]},
+        {"key": "walkthrough-delta", "entity_type": "game concept", "name": "[QA DEMO] Khái niệm Delta", "attributes": {"description": "Khái niệm puzzle tổng hợp dùng để kiểm tra trạng thái thiếu dữ liệu."}, "evidence_references": [GOLDEN_URLS[4]]},
+    ]
+    findings = [
+        {"key": "walkthrough-finding-1", "finding_type": "qualitative_pattern", "title": "[QA DEMO] Phản hồi ngay sau một bước giải", "description": "Báo cáo mô phỏng mô tả mỗi lượt bắt đầu bằng một thao tác đơn giản, sau đó trò chơi phản hồi rõ ràng để người chơi biết bước vừa làm đã có tác dụng. Đây là nội dung tổng hợp cho QA, không phải quan sát người chơi thật.", "related_entities": ["walkthrough-alpha"], "evidence_references": [GOLDEN_URLS[0]], "source_locations": ["line:23"], "scope": {"geo": "US", "environment": "Android", "research_period": "2026 · QA fixture"}, "evidence_status": "unverified", "confidence": None, "uncertainty": "Không có phiên chơi, mẫu người dùng hoặc phép đo hành vi thật.", "po_implications": "Nếu hướng này phù hợp với sản phẩm, PO có thể yêu cầu kiểm tra mức độ dễ hiểu bằng nghiên cứu người dùng thật."},
+        {"key": "walkthrough-finding-2", "finding_type": "qualitative_pattern", "title": "[QA DEMO] Tiến độ dễ nhìn được nhắc tới", "description": "Nội dung fixture mô tả dấu hiệu tiến độ xuất hiện giữa các thử thách, giúp người đọc hình dung người chơi đang ở đâu trong một chuỗi nhiệm vụ. Mô tả này không chứng minh rằng tiến độ khiến người chơi quay lại.", "related_entities": ["walkthrough-alpha", "walkthrough-beta"], "evidence_references": [GOLDEN_URLS[1], GOLDEN_URLS[2]], "source_locations": ["line:29"], "scope": {"geo": "US", "environment": "Android", "research_period": "2026 · QA fixture"}, "evidence_status": "unverified", "confidence": None, "uncertainty": "Chưa có thử nghiệm khả năng hiểu tiến độ hoặc dữ liệu quay lại theo thời gian.", "po_implications": "PO có thể cân nhắc kiểm tra xem người chơi có hiểu trạng thái và mục tiêu tiếp theo hay không."},
+        {"key": "walkthrough-finding-3", "finding_type": "qualitative_pattern", "title": "[QA DEMO] Chủ đề nội dung được tách khỏi độ khó", "description": "Một khái niệm trong báo cáo mô phỏng thay đổi bối cảnh hình ảnh nhưng giữ nguyên thao tác giải. Đây là cách fixture minh họa một khác biệt về nội dung; không có dữ liệu cho thấy chủ đề nào được ưa thích hơn.", "related_entities": ["walkthrough-gamma"], "evidence_references": [GOLDEN_URLS[3]], "source_locations": ["line:35"], "scope": {"geo": "US", "environment": "Android", "research_period": "2026 · QA fixture"}, "evidence_status": "unverified", "confidence": None, "uncertainty": "Không có so sánh phản hồi người dùng giữa các chủ đề.", "po_implications": "Nếu cần ra quyết định về nội dung, PO có thể tách câu hỏi chủ đề khỏi câu hỏi cơ chế chơi."},
+        {"key": "walkthrough-finding-4", "finding_type": "research_gap", "title": "[QA DEMO] Chưa có căn cứ về nhịp nội dung dài hạn", "description": "Fixture không mô tả lịch phát hành, độ dài vòng đời nội dung hoặc cách các thử thách được làm mới. Đây là khoảng trống có chủ đích để kiểm tra cách ứng dụng trình bày điều chưa biết.", "related_entities": ["walkthrough-delta"], "evidence_references": [GOLDEN_URLS[4]], "source_locations": ["line:41"], "scope": {"geo": "US", "environment": "Android", "research_period": "2026 · QA fixture"}, "evidence_status": "unverified", "confidence": None, "uncertainty": "Thông tin về lịch nội dung không được cung cấp.", "po_implications": "PO có thể yêu cầu bổ sung nguồn hoặc giữ câu hỏi này ở trạng thái chưa quyết định."},
+        {"key": "walkthrough-finding-5", "finding_type": "qualitative_pattern", "title": "[QA DEMO] Chia sẻ chỉ là lựa chọn được mô tả", "description": "Báo cáo fixture nêu một hành động chia sẻ tùy chọn sau khi hoàn tất thử thách. Không có bằng chứng về số người sử dụng hoặc ảnh hưởng của hành động đó tới mức độ gắn bó.", "related_entities": ["walkthrough-beta"], "evidence_references": [GOLDEN_URLS[2]], "source_locations": ["line:29"], "scope": {"geo": "US", "environment": "Android", "research_period": "2026 · QA fixture"}, "evidence_status": "unverified", "confidence": None, "uncertainty": "Chưa có hành vi sử dụng hoặc tác động được đo lường.", "po_implications": "Chỉ đưa nội dung này vào thảo luận nếu chia sẻ là một lựa chọn sản phẩm đang được cân nhắc."},
+    ]
+    evidence_lines = (23, 29, 29, 35, 41)
+    evidence = [{"url": url, "title": f"[QA DEMO] Nguồn fixture {index}", "source_location": f"line:{evidence_lines[index - 1]}", "verified": False} for index, url in enumerate(GOLDEN_URLS, 1)]
+    dimensions = [
+        {"key": "walkthrough-loop", "name": "Mô tả lượt chơi", "related_entities": ["walkthrough-alpha", "walkthrough-beta"], "evidence_references": [GOLDEN_URLS[0], GOLDEN_URLS[2]], "observations": [
+            {"entity_key": "walkthrough-alpha", "value": "Fixture mô tả thao tác rồi phản hồi ngay.", "evidence_references": [GOLDEN_URLS[0]], "source_locations": ["line:23"], "evidence_status": "unverified", "uncertainty": "Mô phỏng QA, chưa có quan sát thật."},
+            {"entity_key": "walkthrough-beta", "value": "Fixture mô tả chuỗi bước có chỉ báo tiến độ.", "evidence_references": [GOLDEN_URLS[2]], "source_locations": ["line:29"], "evidence_status": "unverified", "uncertainty": "Không có dữ liệu kiểm thử khả năng hiểu."},
+        ], "po_notes": None},
+        {"key": "walkthrough-progression", "name": "Thông tin tiến độ được nêu", "related_entities": ["walkthrough-alpha", "walkthrough-beta"], "evidence_references": [GOLDEN_URLS[1], GOLDEN_URLS[2]], "observations": [
+            {"entity_key": "walkthrough-alpha", "value": "Fixture nêu dấu hiệu cho biết bước tiếp theo.", "evidence_references": [GOLDEN_URLS[1]], "source_locations": ["line:29"], "evidence_status": "unverified", "uncertainty": "Chưa đo mức độ hiểu."},
+            {"entity_key": "walkthrough-beta", "value": "Fixture nêu mốc tiến độ giữa chuỗi thử thách.", "evidence_references": [GOLDEN_URLS[2]], "source_locations": ["line:29"], "evidence_status": "unverified", "uncertainty": "Không suy ra tác động retention."},
+        ], "po_notes": None},
+        {"key": "walkthrough-content", "name": "Cách trình bày nội dung", "related_entities": ["walkthrough-gamma"], "evidence_references": [GOLDEN_URLS[3]], "observations": [
+            {"entity_key": "walkthrough-gamma", "value": "Fixture thay bối cảnh hình ảnh, giữ nguyên thao tác giải.", "evidence_references": [GOLDEN_URLS[3]], "source_locations": ["line:35"], "evidence_status": "unverified", "uncertainty": "Không có so sánh sở thích."},
+        ], "po_notes": None},
+        {"key": "walkthrough-content-cadence", "name": "Nhịp cập nhật nội dung", "related_entities": ["walkthrough-delta"], "evidence_references": [GOLDEN_URLS[4]], "observations": [], "po_notes": None},
+    ]
+    return {
+        "executive_summary": "[QA DEMO — DỮ LIỆU MÔ PHỎNG] Báo cáo này minh họa cách một nghiên cứu định tính có thể nối phát hiện, đối tượng, nguồn tham khảo, khoảng trống và câu hỏi dành cho PO. Các đoạn mô tả không đến từ sản phẩm hoặc người dùng thật; không có số liệu định lượng và không được dùng làm bằng chứng ra quyết định.",
+        "key_takeaways": ["Fixture mô tả phản hồi sau thao tác và cách thể hiện tiến độ.", "Các ví dụ gắn với bốn khái niệm tổng hợp, không phải game thật.", "Tác động lên hành vi người chơi chưa được đo.", "Mọi liên kết nguồn đều là fixture .invalid, chưa xác minh và không thể truy cập."],
+        "sections": [], "entities": entities, "findings": findings, "evidence_references": evidence,
+        "benchmark_dimensions": dimensions,
+        "research_gaps": ["Không có nghiên cứu người dùng hoặc mẫu quan sát thật.", "Không có dữ liệu về retention, tải xuống, doanh thu hay tăng trưởng.", "Chưa biết người chơi có hiểu dấu hiệu tiến độ hay không.", "Chưa có lịch cập nhật nội dung cho các khái niệm được mô tả."],
+        "po_recommendations": ["Dùng báo cáo này để kiểm tra điều hướng, traceability, Benchmark và lưu ghi chú trong QA; thay bằng báo cáo thật trước khi đưa ra quyết định sản phẩm."],
+        "quantitative_observations": [],
+    }
+
+
+def golden_report_content() -> str:
+    return """# [QA DEMO] Puzzle Research — Full Product Walkthrough
+
+> **QA DEMO — DỮ LIỆU MÔ PHỎNG.** Báo cáo tổng hợp này chỉ để kiểm thử giao diện và luồng lưu trữ. Không mô tả game, người chơi, thị trường hay nguồn thật. Không dùng làm bằng chứng hoặc quyết định sản phẩm.
+
+## Câu hỏi nghiên cứu
+
+Làm thế nào một báo cáo puzzle định tính có thể giúp PO đọc kết luận, xem điều hỗ trợ, nhận biết khoảng trống và ghi lại bước tiếp theo mà không nhầm nội dung mô phỏng với nghiên cứu thật?
+
+## Phạm vi
+
+US · Android · kỳ tham chiếu 2026 (fixture QA). Không có dữ liệu đo lường, khảo sát hoặc quan sát người dùng.
+
+## Kết luận tổng quan
+
+Fixture dùng bốn khái niệm puzzle tổng hợp để minh họa một vòng thao tác có phản hồi, cách biểu diễn tiến độ, một biến thể nội dung và một trường hợp thiếu thông tin về lịch làm mới. Các mô tả được nối với nguồn minh họa nội bộ dành riêng cho QA. Chúng không xác nhận chất lượng sản phẩm, nhu cầu thị trường hoặc tác động lên hành vi.
+
+## Phát hiện và nội dung hỗ trợ
+
+### Phản hồi sau thao tác — khái niệm Alpha
+
+Đoạn mô phỏng mô tả một thao tác giải đơn giản, phản hồi ngay sau thao tác và cho người đọc thấy bước vừa thực hiện đã được ghi nhận. Ví dụ này giúp kiểm tra cách màn hình ưu tiên mô tả finding rồi mới trình bày nguồn và điều chưa rõ.
+
+Nguồn fixture: {0}
+
+### Tiến độ giữa các thử thách — Alpha và Beta
+
+Một ví dụ nêu dấu hiệu tiến độ sau mỗi chặng; ví dụ còn lại mô tả mục tiêu kế tiếp trong chuỗi bước. Hai nội dung chỉ minh họa các observation định tính khác nhau. Không có phép thử để kết luận cách nào dễ hiểu hơn hoặc khiến người chơi quay lại.
+
+Nguồn fixture: {1} · {2}
+
+### Bối cảnh hình ảnh — khái niệm Gamma
+
+Fixture thay bối cảnh hình ảnh nhưng giữ nguyên thao tác giải. Đây là một thuộc tính được nêu trong nội dung mô phỏng; không phải so sánh mức độ yêu thích và không đại diện cho một thương hiệu hay game đang phát hành.
+
+Nguồn fixture: {3}
+
+### Nhịp nội dung — khái niệm Delta
+
+Không có thông tin về lịch cập nhật, số lượng thử thách hoặc cách nội dung được làm mới. Hệ thống cần giữ nguyên điều này như một khoảng trống, không tự suy luận cadence.
+
+Nguồn fixture: {4}
+
+## Đối tượng trong fixture
+
+- **Khái niệm Alpha:** phản hồi được mô tả sau thao tác.
+- **Khái niệm Beta:** chuỗi bước và tín hiệu tiến độ được mô tả.
+- **Khái niệm Gamma:** đổi bối cảnh hình ảnh trong ví dụ mô phỏng.
+- **Khái niệm Delta:** dùng để thể hiện trường hợp chưa có thông tin về nhịp nội dung.
+
+Đây là các nhãn giả lập dành cho QA, không phải entity sản phẩm thực.
+
+## Khoảng trống và độ không chắc chắn
+
+- Không có dữ liệu từ người chơi hoặc thử nghiệm usability.
+- Không có retention, downloads, revenue, growth hay market sizing.
+- Không biết người chơi có hiểu trạng thái tiến độ hay không.
+- Không có lịch phát hành nội dung để so sánh.
+- Các URL `example.invalid` là địa chỉ fixture không thể truy cập và không xác minh bất kỳ kết luận nào.
+
+## Gợi ý dành cho PO trong báo cáo
+
+Nếu những câu hỏi này có liên quan tới một quyết định thật, PO có thể yêu cầu nghiên cứu người dùng phù hợp để kiểm tra độ dễ hiểu của phản hồi và tiến độ. Gợi ý này thuộc fixture; nó không phải Project Decision đã được phê duyệt.
+
+## Dữ liệu so sánh định tính
+
+Các khía cạnh được cung cấp trong structured data: mô tả lượt chơi, tín hiệu tiến độ, cách trình bày nội dung và nhịp cập nhật. Observation chỉ xuất hiện khi fixture nêu rõ một mô tả; trường còn thiếu phải hiển thị là chưa có dữ liệu.
+
+## Bước tiếp theo trong QA
+
+Kiểm tra PO có mở được Evidence liên quan, chọn đối tượng vào Benchmark, ghi chú báo cáo, xem quyết định Project riêng tại Tracking, refresh và mở lại mà không mất dữ liệu hay không.
+""".format(*GOLDEN_URLS)
+
+
 def report_content(title: str, url_list: list[str], extra: str = "") -> str:
     source_lines = "\n".join(f"- Fixture nguồn {index}: {url}" for index, url in enumerate(url_list, 1))
     return (
@@ -162,6 +279,7 @@ def seed(client: httpx.Client) -> dict[str, Any]:
             "research_gaps": [],
             "po_recommendations": [],
         }),
+        ("golden", GOLDEN_REPORT_TITLE, golden_report_content(), golden_report_data()),
     ]
     reports: dict[str, dict[str, Any]] = {}
     for key, question, content, data in report_specs:
@@ -192,6 +310,29 @@ def seed(client: httpx.Client) -> dict[str, Any]:
     response_json(client.put(f"/api/v1/reports/{report_id}/benchmark-state", json={
         "custom_dimensions": report_a.get("benchmark_workspace", {}).get("custom_dimensions", []),
         "entries": list(entries_by_key.values()), "selections": selections,
+    }))
+
+    # Give the richer walkthrough its own report-level note and two explicit
+    # subjects in the report comparison. Preserve any existing entries/selections.
+    golden = reports["golden"]
+    golden_id = golden["id"]
+    golden_entries = golden.get("benchmark_workspace", {}).get("entries", [])
+    golden_entries_by_key = {(entry["item_type"], entry["item_key"]): entry for entry in golden_entries}
+    note_key = ("finding", "walkthrough-finding-1")
+    if note_key not in golden_entries_by_key:
+        golden_entries_by_key[note_key] = {
+            "item_type": "finding", "item_key": note_key[1],
+            "po_assessment": "", "notes": "[QA DEMO] Ghi chú của PO trên báo cáo walkthrough; không phải quyết định Project.",
+            "next_action": "", "dimension_assessments": {}, "observation_finding_links": {},
+        }
+    golden_selections = list(golden.get("benchmark_selections", []))
+    golden_selection_ids = {(item["item_type"], item["item_key"]) for item in golden_selections}
+    for entity_key in ("walkthrough-alpha", "walkthrough-beta"):
+        if ("entity", entity_key) not in golden_selection_ids:
+            golden_selections.append({"item_type": "entity", "item_key": entity_key})
+    response_json(client.put(f"/api/v1/reports/{golden_id}/benchmark-state", json={
+        "custom_dimensions": golden.get("benchmark_workspace", {}).get("custom_dimensions", []),
+        "entries": list(golden_entries_by_key.values()), "selections": golden_selections,
     }))
 
     # Create project-scoped subjects/collection explicitly from report entity keys.
@@ -247,6 +388,7 @@ def seed(client: httpx.Client) -> dict[str, Any]:
         }))
 
     reports["structured"] = response_json(client.get(f"/api/v1/reports/{report_id}"))
+    reports["golden"] = response_json(client.get(f"/api/v1/reports/{golden_id}"))
     return {"project": project, "reports": reports, "collection": collection, "subjects": list(subject_for_entity.values())}
 
 
@@ -275,7 +417,7 @@ def main() -> None:
     print(f"Database: {database}")
     print(f"Project ID: {project_id}")
     print(f"Project Home: {base}/research?projectId={project_id}")
-    for key, label in (("structured", "Structured report"), ("single", "Single-item report"), ("text", "Text-only report")):
+    for key, label in (("golden", "Golden product walkthrough"), ("structured", "Structured report"), ("single", "Single-item report"), ("text", "Text-only report")):
         report = result["reports"][key]
         print(f"{label}: {base}/reports/{report['id']}")
     print(f"Findings: {base}/reports/{result['reports']['structured']['id']}?section=insights")

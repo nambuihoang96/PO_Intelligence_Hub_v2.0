@@ -1743,6 +1743,37 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
 .analytics-selection-details { margin-top: 12px; border-top: 1px solid #e3eaf2; padding-top: 10px; }
 .analytics-selection-details > summary { width: fit-content; cursor: pointer; color: #52647a; font-size: 13px; font-weight: 600; }
 .analytics-selection-details[open] > summary { margin-bottom: 12px; }
+
+/* Report Reader recovery: keep qualitative data provenance visible without
+   turning the top of every report into a dataset form or an empty dashboard. */
+.report-viewer .quantitative-foundation.is-qualitative,
+.report-viewer .quantitative-foundation.has-observations {
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.quant-data-compact { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; min-height: 30px; color: #586980; font-size: 12px; }
+.quant-data-compact > .quant-state { font-weight: 600; }
+.quant-data-manage-link { color: #45679a; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.quant-data-details { display: inline-flex; }
+.quant-data-details > summary { color: #586980; font-size: 12px; font-weight: 600; cursor: pointer; }
+.quant-data-expanded { display: grid; width: min(100%, 980px); gap: 12px; margin: 12px 0 8px; padding: 14px; border: 1px solid var(--peachy-line, #eadbd4); border-radius: 12px; background: var(--peachy-surface, #fff); }
+.quant-data-qualitative-note { margin: 0; color: var(--peachy-muted, #5e6b81); font-size: 13px; line-height: 1.5; }
+.source-fixture-link { display: inline-grid; justify-items: start; gap: 2px; color: #6f6470; overflow-wrap: anywhere; }
+.source-fixture-link > small { color: #776d75; font-size: 12px; line-height: 1.4; }
+.insight-detail-panel > section { padding: 12px 0 !important; border-radius: 0; border-bottom: 1px solid var(--peachy-line, #eadfdc); background: transparent !important; }
+.insight-detail-panel > section > h5 { color: var(--peachy-muted, #5e6b81); font-size: 12px; text-transform: none; letter-spacing: 0; }
+.insight-detail-panel > section.insight-po-recommendation { padding: 13px 15px !important; border: 0; border-left: 3px solid #8aa9d5; border-radius: 8px; background: var(--peachy-blue, #edf4ff) !important; }
+.insight-detail-panel > section.finding-po-decision { border-bottom: 0; }
+.report-reading-source-list .source-fixture-link { max-width: 100%; }
+@media (max-width: 640px) {
+  .quant-data-compact { align-items: flex-start; gap: 6px 10px; }
+  .quant-data-expanded { padding: 11px; }
+  .insight-detail-panel { padding: 16px !important; }
+}
+
 @media (max-width: 700px) {
   .quant-bar-entity { grid-template-columns: 1fr; gap: 6px; }
   .quant-bar-point { grid-template-columns: minmax(95px, 1fr) minmax(60px, 1.2fr) minmax(80px, auto); gap: 4px 7px; padding-inline: 4px; }

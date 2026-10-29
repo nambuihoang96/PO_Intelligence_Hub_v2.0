@@ -5,6 +5,8 @@ type Heading = { level: number; text: string; id: string };
 function safeHref(value: string): string | null {
   try {
     const url = new URL(value);
+    const host = url.hostname.toLocaleLowerCase();
+    if (host === 'invalid' || host.endsWith('.invalid')) return null;
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
   } catch {
     return null;

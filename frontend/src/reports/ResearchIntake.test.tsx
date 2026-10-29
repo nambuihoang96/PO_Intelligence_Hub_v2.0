@@ -364,6 +364,54 @@ describe('ChatGPT research intake', () => {
     expect(screen.getAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
   });
 
+  it('keeps quantitative controls compact and closed for qualitative reports while retaining the project data path', async () => {
+    const qualitative = { ...report, project_id: 'project-qa' };
+    mockFetch(() => qualitative);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: report.question });
+
+    expect(screen.getByText('Nghiên cứu định tính · Chưa liên kết bộ dữ liệu định lượng')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Quản lý dữ liệu' }).getAttribute('href')).toBe('/research?projectId=project-qa&view=data#project-csv-data');
+    const disclosure = document.querySelector('.quant-data-details') as HTMLDetailsElement;
+    expect(disclosure.open).toBe(false);
+    expect(document.querySelector('.quant-readiness-counts')).toBeNull();
+    expect(document.querySelector('.analytics-data-selection')).toBeNull();
+
+    fireEvent.click(screen.getByText('Nhập dữ liệu gắn trực tiếp với báo cáo'));
+    expect(disclosure.open).toBe(true);
+    expect(screen.getByText(/Báo cáo định tính vẫn dùng được độc lập/)).toBeTruthy();
+  });
+
+  it('labels report positions clearly and never offers QA fixture links as real external sources', async () => {
+    const fixtureUrl = 'https://example.invalid/qa/research-evidence';
+    const qaReport = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      research_data: {
+        ...report.research_data,
+        executive_summary: 'Tóm tắt fixture chỉ dùng để kiểm thử cách xử lý nguồn.',
+        findings: [{ key: 'qa-finding', finding_type: 'observation', title: 'Finding used for interface QA', description: 'A clearly synthetic finding for checking source handling.', related_entities: [], evidence_references: [fixtureUrl], source_locations: ['line:19'], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: 'This source is intentionally not reachable.', po_implications: null }],
+        evidence_references: [{ url: fixtureUrl, title: '[QA DEMO] Fixture only', source_location: 'line:19', verified: false }],
+      },
+    };
+    mockFetch(() => qaReport);
+    render(<ReportViewer reportId="saved-report" />);
+    await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByText('Liên kết fixture QA · không truy cập được · không phải bằng chứng thật')).toBeTruthy();
+    expect(screen.getAllByText(/Vị trí trong báo cáo · dòng 19/).length).toBeGreaterThan(0);
+    expect(document.querySelector('a[href="https://example.invalid/qa/research-evidence"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Bằng chứng' }));
+    expect(await screen.findByRole('heading', { name: 'Tham chiếu nguồn' })).toBeTruthy();
+    expect(document.querySelector('a[href="https://example.invalid/qa/research-evidence"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' }));
+    expect(await screen.findByRole('heading', { name: 'Nội dung nghiên cứu' })).toBeTruthy();
+    expect(screen.getByText('Nội dung nghiên cứu')).toBeTruthy();
+    expect(document.querySelector('a[href="https://example.invalid/qa/research-evidence"]')).toBeNull();
+  });
+
   it('uses consistent report-supplied ranking, category, metric, and period highlights in Overview and Insight Detail', async () => {
     const text = {
       ...report,
@@ -560,7 +608,9 @@ describe('ChatGPT research intake', () => {
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Structured report layout fixture — not research' })).toBeTruthy();
     expect(screen.getAllByText('[QA ONLY] Example finding').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: '[QA ONLY] Fixture source link' })[0].getAttribute('href')).toBe('https://example.invalid/qa-source');
+    expect(screen.getAllByText('[QA ONLY] Fixture source link').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Liên kết fixture QA · không truy cập được · không phải bằng chứng thật').length).toBeGreaterThan(0);
+    expect(document.querySelector('a[href="https://example.invalid/qa-source"]')).toBeNull();
     expect(screen.getAllByText('[QA ONLY] Recommendation layout sample.').length).toBeGreaterThan(0);
     expect(screen.getByRole('complementary', { name: 'Nguồn và ghi chú hỗ trợ' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
