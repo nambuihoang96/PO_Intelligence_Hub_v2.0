@@ -19,12 +19,22 @@ describe('TrendUpdatesPanel', () => {
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValue(page(updatePage));
   }
 
+  async function selectExistingSubject() {
+    await waitFor(() => {
+      const radio = screen.getByText('Dùng hồ sơ đã lưu').closest('label')?.querySelector('input');
+      expect(radio).toBeTruthy();
+      expect(radio?.disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByText('Dùng hồ sơ đã lưu'));
+    await screen.findByLabelText('Sản phẩm hoặc chủ đề');
+  }
+
   it('saves exact attributed text to an explicitly selected subject and collection, then reopens it', async () => {
     mockReads();
     const create = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(saved);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([saved]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.click(await screen.findByText('Dùng hồ sơ đã lưu'));
+    await selectExistingSubject();
     fireEvent.change(screen.getByLabelText('Sản phẩm hoặc chủ đề'), { target: { value: subject.id } });
     fireEvent.change(screen.getByLabelText(/Bộ so sánh/), { target: { value: collection.id } });
     fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: '2026-10-21' } });
@@ -50,7 +60,7 @@ describe('TrendUpdatesPanel', () => {
     mockReads();
     vi.spyOn(researchApi, 'createTrendUpdate').mockRejectedValue(new Error('Could not save update.'));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.click(await screen.findByText('Dùng hồ sơ đã lưu'));
+    await selectExistingSubject();
     fireEvent.change(screen.getByLabelText('Sản phẩm hoặc chủ đề'), { target: { value: subject.id } });
     fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: '2026-10-21' } });
     fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: 'Keep this exact draft.' } });
@@ -66,7 +76,7 @@ describe('TrendUpdatesPanel', () => {
     const create = vi.spyOn(researchApi, 'createTrendUpdate').mockResolvedValue(saved);
     vi.spyOn(researchApi, 'listTrendUpdates').mockResolvedValueOnce(page([])).mockResolvedValue(page([saved]));
     render(<TrendUpdatesPanel projectId={projectId} />);
-    fireEvent.click(await screen.findByText('Dùng hồ sơ đã lưu'));
+    await selectExistingSubject();
     fireEvent.change(screen.getByLabelText('Sản phẩm hoặc chủ đề'), { target: { value: subject.id } });
     fireEvent.change(screen.getByLabelText('Ngày nguồn được đăng'), { target: { value: saved.published_on } });
     fireEvent.change(screen.getByLabelText('Bạn đã quan sát thấy gì?'), { target: { value: saved.exact_claim } });
