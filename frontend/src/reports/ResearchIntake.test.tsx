@@ -35,6 +35,9 @@ describe('ChatGPT research intake', () => {
     expect(prompt).toContain('po_research_v1');
     expect(prompt).toContain('schema_version');
     expect(prompt).toContain('quantitative_observations');
+    expect(prompt).toContain('presentation_v1');
+    expect(prompt).toContain('featured_observation_indexes');
+    expect(prompt).toContain('chart_observation_indexes');
     expect(prompt).toContain('source explicitly states a numeric measurement');
     expect(prompt).toContain('value_precision="approximate"');
     expect(prompt).toContain('Do not derive growth rates or precise changes from approximate values');
