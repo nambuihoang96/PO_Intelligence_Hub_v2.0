@@ -28,7 +28,7 @@ function periodLabel(row: QuantitativeObservation): string {
 export function AutoResearchInsights({ data, onViewEvidence, onPrepareChartData }: Props) {
   const rows = data.quantitative_observations ?? [];
   const selection = selectAutoPresentation(data);
-  const sourceCount = new Set(selection.chartIndexes.map((index) => rows[index].source_reference).filter(Boolean)).size;
+  const sourceCount = new Set([...selection.chartIndexes, ...selection.featuredIndexes].map((index) => rows[index].source_reference).filter(Boolean)).size;
 
   if (selection.mode === 'qualitative') {
     return <div className="auto-insights-qualitative" role="note">
@@ -76,7 +76,7 @@ export function AutoResearchInsights({ data, onViewEvidence, onPrepareChartData 
       })}
     </div>
 
-    <div className="auto-insights-visual-grid">
+    {selection.view ? <div className="auto-insights-visual-grid">
       <div className="auto-insights-visual" aria-label="Biểu đồ của nhóm quan sát đủ điều kiện">
         <div className="auto-insights-chart-header">
           <span className="auto-insights-eyebrow">BIỂU ĐỒ · CÁC QUAN SÁT TƯƠNG THÍCH</span>
@@ -99,7 +99,10 @@ export function AutoResearchInsights({ data, onViewEvidence, onPrepareChartData 
           <li>Nhấn vào KPI hoặc giá trị biểu đồ để xem đúng quan sát và bằng chứng gốc.</li>
         </ul>
       </aside>
-    </div>
+    </div> : <div className="auto-insights-not-ready">
+      <strong>Những chỉ số riêng lẻ — không ghép thành biểu đồ</strong>
+      <p>Các phép đo có tên, đơn vị hoặc phạm vi khác nhau. Mỗi thẻ KPI giữ đúng nguồn và kỳ đo; không được tự coi chúng là một chuỗi hay một phép so sánh.</p>
+    </div>}
     {otherRows.length > 0 && <details className="auto-insights-other">
       <summary>{otherRows.length} quan sát khác trong báo cáo · Xem thêm</summary>
       <QuantitativeEvidence observations={otherRows} onViewEvidence={(localIndex) => onViewEvidence(selection.otherIndexes[localIndex])} onPrepareChartData={onPrepareChartData} />
