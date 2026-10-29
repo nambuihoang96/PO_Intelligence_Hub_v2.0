@@ -288,6 +288,20 @@ class QuantitativeObservation(ResearchModel):
         return self
 
 
+class ResearchPresentationPlan(ResearchModel):
+    """Optional, source-bound layout preferences proposed by ChatGPT.
+
+    References point only to records already present in the immutable research
+    payload. PO Hub chooses a safe visualisation after checking comparability.
+    """
+
+    version: Literal["presentation_v1"] = "presentation_v1"
+    headline: str | None = Field(default=None, max_length=500)
+    highlighted_finding_keys: list[str] = Field(default_factory=list, max_length=8)
+    featured_observation_indexes: list[int] = Field(default_factory=list, max_length=8)
+    chart_observation_indexes: list[int] = Field(default_factory=list, max_length=40)
+
+
 class UniversalResearchData(ResearchModel):
     executive_summary: str | None = Field(default=None, max_length=10000)
     key_takeaways: list[str] = Field(default_factory=list, max_length=100)
@@ -299,6 +313,7 @@ class UniversalResearchData(ResearchModel):
     research_gaps: list[str] = Field(default_factory=list, max_length=1000)
     po_recommendations: list[str] = Field(default_factory=list, max_length=1000)
     quantitative_observations: list[QuantitativeObservation] = Field(default_factory=list, max_length=10000)
+    presentation_plan: ResearchPresentationPlan | None = None
 
     @model_validator(mode="after")
     def validate_relations(self) -> "UniversalResearchData":
@@ -310,6 +325,18 @@ class UniversalResearchData(ResearchModel):
         for label, keys in (("entity", entity_keys), ("finding", finding_keys), ("benchmark dimension", dimension_keys)):
             if len(keys) != len(set(keys)):
                 raise ValueError(f"{label} keys must be unique")
+        if self.presentation_plan is not None:
+            plan = self.presentation_plan
+            if unknown_findings := sorted(set(plan.highlighted_finding_keys) - set(finding_keys)):
+                raise ValueError("presentation plan references unknown findings: " + ", ".join(unknown_findings))
+            for label, indexes in (
+                ("featured observations", plan.featured_observation_indexes),
+                ("chart observations", plan.chart_observation_indexes),
+            ):
+                if len(indexes) != len(set(indexes)):
+                    raise ValueError(f"presentation plan {label} contain duplicate indexes")
+                if any(not isinstance(index, int) or isinstance(index, bool) or index < 0 or index >= len(self.quantitative_observations) for index in indexes):
+                    raise ValueError(f"presentation plan {label} reference observations outside this report")
         known_entities = set(entity_keys)
         known_urls = {source.url for source in self.evidence_references}
         references = [url for item in self.entities for url in item.evidence_references]
