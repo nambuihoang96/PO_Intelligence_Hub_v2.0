@@ -326,17 +326,21 @@ class UniversalResearchData(ResearchModel):
             if len(keys) != len(set(keys)):
                 raise ValueError(f"{label} keys must be unique")
         if self.presentation_plan is not None:
+            # Presentation hints are optional. Bad local references must NEVER
+            # make an otherwise valid source report impossible to import.
+            # Invalid/duplicate hints are dropped; PO Hub selects a safe
+            # layout from the report's actual validated observations.
             plan = self.presentation_plan
-            if unknown_findings := sorted(set(plan.highlighted_finding_keys) - set(finding_keys)):
-                raise ValueError("presentation plan references unknown findings: " + ", ".join(unknown_findings))
-            for label, indexes in (
-                ("featured observations", plan.featured_observation_indexes),
-                ("chart observations", plan.chart_observation_indexes),
-            ):
-                if len(indexes) != len(set(indexes)):
-                    raise ValueError(f"presentation plan {label} contain duplicate indexes")
-                if any(not isinstance(index, int) or isinstance(index, bool) or index < 0 or index >= len(self.quantitative_observations) for index in indexes):
-                    raise ValueError(f"presentation plan {label} reference observations outside this report")
+            plan.highlighted_finding_keys = [
+                key for key in dict.fromkeys(plan.highlighted_finding_keys) if key in finding_keys
+            ]
+            limit = len(self.quantitative_observations)
+            plan.featured_observation_indexes = [
+                index for index in dict.fromkeys(plan.featured_observation_indexes) if 0 <= index < limit
+            ]
+            plan.chart_observation_indexes = [
+                index for index in dict.fromkeys(plan.chart_observation_indexes) if 0 <= index < limit
+            ]
         known_entities = set(entity_keys)
         known_urls = {source.url for source in self.evidence_references}
         references = [url for item in self.entities for url in item.evidence_references]
