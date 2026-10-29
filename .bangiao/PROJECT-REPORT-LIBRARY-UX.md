@@ -57,3 +57,43 @@ Browser screenshots are actual captures from the running local app:
 - `docs/RECOVERY_BOARD.md`
 
 **Implementation commit:** `47184ebecbe7eb491614f1167358e3978e075113` (`feat(reports): refine project report library`).
+
+## Review follow-up — Project report library, round 2 (2026-10-29)
+
+This is a bounded follow-up to the same G2-02 screen, not a redesign of the global Reports library.
+
+### Changes
+
+- The Project report list now receives report classification, finding count and entity count in the existing list response. This removes the per-report detail request fan-out while preserving the original report IDs and detail route.
+- Classification distinguishes structured reports, one-finding reports, text-only reports and records that cannot be classified from available structure. A report with only a supplied executive summary remains structured-partial.
+- “Nhập báo cáo” now opens the import panel directly and retains the Project ID, so the PO can paste without an extra navigation action.
+- The shared Project context strip is compact only on this report route. Its mobile layout no longer reserves a blank desktop-sized flex row. The global Reports page and other Project tabs were not changed in this round.
+- The saved-decision link remains conditional on an explicitly report-linked saved decision; no decision is inferred from project-level state.
+
+### Before / after screenshots
+
+- Before, desktop 1440×900: `screenshots/project-reports-library/round-2/before-desktop-1440x900.png`
+- After, desktop 1440×900: `screenshots/project-reports-library/round-2/after-desktop-1440x900.png`
+- Before, mobile 390×844: `screenshots/project-reports-library/round-2/before-mobile-390x844.png`
+- After, mobile 390×844: `screenshots/project-reports-library/round-2/after-mobile-390x844.png`
+
+### Round 2 verification
+
+- Browser UAT used the running local preview at `http://127.0.0.1:15315/reports?projectId=09eb2703-22f3-4ced-aa6f-ee1767e56f9e` with a copied, isolated QA SQLite database. The app was captured at exact 1440×900 and 390×844. The project library showed its three QA reports and all three report types; mobile document width was 390px with no horizontal page overflow.
+- Search narrowed the project list to the one-finding report. Opening the text-only card navigated to its existing report ID `3dfd648e-67ac-4b9c-b864-7f5c0bd96d1c`. The Project CTA opened `/?projectId=09eb2703-22f3-4ced-aa6f-ee1767e56f9e&action=import` with the import content field already visible. Switching the project filter to all showed all five reports in the isolated library.
+- Actual QA data contains no report-scoped decision on these three demo records; the conditional Tracking action is covered by the component test and is not claimed as browser-demonstrated on this dataset.
+- Frontend: `npm test -- --maxWorkers=1` — 26 files / 233 tests passed. `npm run typecheck` passed. `npm run build` passed; Vite retains its existing advisory for the >500 kB JavaScript chunk.
+- Backend: `tests/test_reports.py` — 32 passed, 1 deprecation warning. No database migration or production DB access. Report-summary metadata is derived from saved report JSON in the response schema; original content, benchmarks and PO data are untouched.
+- `git diff --check` passed for the task changes.
+
+### Product Acceptance — round 2
+
+- **PO goal:** identify the reports already in a Project and continue with the right one without technical setup.
+- **User journey:** Project → Báo cáo → distinguish report type → search/filter → open the same report, or click Nhập báo cáo and paste directly in that Project.
+- **Automated work:** derive list labels/counts from persisted structure, avoid N+1 detail requests, and preserve the project context for direct import.
+- **Expected result:** three report types and their truthful summaries are scannable, report navigation keeps the original ID, and import starts immediately in the selected Project.
+- **Remaining friction:** QA records are synthetic, not research truth. No report-scoped decision exists in the QA project to demonstrate the conditional Tracking action in browser.
+- **Verification:** real browser screenshots, desktop/mobile layout, search, filter, report navigation, direct import entry, frontend/backend tests, TypeScript and production build as listed above.
+- **Decision:** `TECHNICAL PASS`; owner visual/product review remains pending. This is not Product Accepted.
+
+**Round 2 implementation commit:** `48712e5` (`fix(reports): refine project report library UX`).
