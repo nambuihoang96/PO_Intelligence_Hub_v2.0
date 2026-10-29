@@ -30,11 +30,28 @@ export function selectAutoPresentation(data: ResearchData): AutoPresentationSele
     ? views.find((view) => suggestions.every((index) => view.observations.some((point) => point.index === index)))
     : undefined;
   const score = (view: QuantitativeView): number => {
-    const kind = view.kind === 'comparison' || view.kind === 'grouped_bar' || view.kind === 'time_series' || view.kind === 'two_point' ? 3
+    const kind = view.kind === 'comparison' || view.kind === 'scope_comparison' || view.kind === 'grouped_bar' || view.kind === 'time_series' || view.kind === 'two_point' ? 3
       : view.kind === 'ranking' || view.kind === 'period_matrix' ? 2 : 1;
     return kind * 100 + Math.min(view.observations.length, 20);
   };
-  const chosen = matched ?? [...views].sort((a, b) => score(b) - score(a))[0];
+  const chartViews = views.filter((view) => view.kind !== 'observation');
+  if (!chartViews.length) {
+    // Several individually valid measurements (for example cohort D1/D7/D30)
+    // are useful as KPI cards but must not be plotted as one comparable metric.
+    const usable = [...new Set(views.flatMap((view) => view.observations.map(({ index }) => index)))];
+    const preferred = data.presentation_plan?.featured_observation_indexes ?? [];
+    const selected = [...new Set([
+      ...preferred.filter((index) => usable.includes(index)),
+      ...usable,
+    ])].slice(0, 3);
+    return {
+      mode: 'visual', view: null, chartIndexes: [], featuredIndexes: selected,
+      otherIndexes: rawIndexes.filter((index) => !selected.includes(index)),
+      usedSuggestedChart: false,
+    };
+  }
+  const chosen = (matched && matched.kind !== 'observation' ? matched : undefined)
+    ?? [...chartViews].sort((a, b) => score(b) - score(a))[0];
   const chartIndexes = chosen.observations.map(({ index }) => index);
   const chartSet = new Set(chartIndexes);
   const preferredKpis = data.presentation_plan?.featured_observation_indexes ?? [];
