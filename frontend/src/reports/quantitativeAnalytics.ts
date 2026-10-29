@@ -1,7 +1,8 @@
 import type { QuantitativeObservation } from './api';
 
 export type QuantitativeView = {
-  kind: 'comparison' | 'grouped_bar' | 'time_series' | 'two_point' | 'period_matrix' | 'ranking' | 'observation';
+  kind: 'comparison' | 'scope_comparison' | 'grouped_bar' | 'time_series' | 'two_point' | 'period_matrix' | 'ranking' | 'observation';
+  dimension?: 'geo' | 'platform';
   label: string;
   observations: { index: number; row: QuantitativeObservation }[];
   explanation?: string;
@@ -157,7 +158,44 @@ export function selectQuantitativeViews(rows: QuantitativeObservation[]): Quanti
       views.push({ kind: 'observation', label: group[0].row.metric_definition || group[0].row.metric_id || 'Reported metric', observations: [...group] });
     }
   }
-  return views;
+  // Cross-GEO/platform comparisons can be valid, but only when the dimension
+  // under comparison is the *sole* material scope difference. Retain identical
+  // metric, methodology, period, entity, source and the other scope dimension.
+  // This is dimension-driven, not an eCPM/IAP/retention name check.
+  const scopeViews: QuantitativeView[] = [];
+  for (const dimension of ['geo', 'platform'] as const) {
+    const groups = new Map<string, typeof eligible>();
+    for (const point of eligible) {
+      const row = point.row;
+      const dimensionValue = row[dimension];
+      if (!dimensionValue || (row.value ?? 0) < 0) continue;
+      const key = JSON.stringify([
+        row.metric_id, row.metric_definition, row.unit,
+        row.methodology?.trim().toLocaleLowerCase() || '',
+        row.granularity, row.period_start, row.period_end,
+        row.period_semantics, row.entity_id, row.source_reference,
+        row.evidence_reference, row.source_provider,
+        dimension === 'geo' ? row.platform : row.geo,
+      ]);
+      groups.set(key, [...(groups.get(key) ?? []), point]);
+    }
+    for (const group of groups.values()) {
+      const labels = group.map(({ row }) => row[dimension]);
+      if (group.length < 2 || labels.some((value) => !value) || new Set(labels).size !== group.length) continue;
+      scopeViews.push({
+        kind: 'scope_comparison',
+        dimension,
+        label: group[0].row.metric_definition || group[0].row.metric_id || 'Quan sát',
+        observations: [...group].sort((a, b) => (a.row[dimension] || '').localeCompare(b.row[dimension] || '')),
+        explanation: `Các quan sát chỉ khác ${dimension === 'geo' ? 'GEO' : 'nền tảng'}; cùng chỉ số, kỳ đo, đối tượng, phương pháp và nguồn. Đây là các giá trị do báo cáo cung cấp, chưa xác minh.`,
+      });
+    }
+  }
+  // A single-value chart duplicates data already represented by a valid
+  // across-scope comparison. Keep non-singleton views and show scope groups once.
+  const covered = new Set(scopeViews.flatMap((view) => view.observations.map(({ index }) => index)));
+  const distinctViews = views.filter((view) => !(view.kind === 'observation' && view.observations.every(({ index }) => covered.has(index))));
+  return [...scopeViews, ...distinctViews];
 }
 
 export function quantitativeLimitations(rows: QuantitativeObservation[]): string[] {
