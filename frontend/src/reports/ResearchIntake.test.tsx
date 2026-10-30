@@ -667,7 +667,40 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByRole('navigation', { name: 'Đối tượng trong báo cáo' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Dataset two/ }));
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Dataset two' })).toBeTruthy();
-    expect(screen.getAllByText('dataset').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Bộ dữ liệu').length).toBeGreaterThan(0);
+  });
+
+  it('uses PO-friendly entity type labels in Findings, Entity, Benchmark, and PO assessment views', async () => {
+    const linkedEntityReport = {
+      ...report,
+      benchmark_selections: [{ item_type: 'entity' as const, item_key: 'royal-match' }],
+      research_data: {
+        ...report.research_data,
+        entities: [{ key: 'royal-match', entity_type: 'mobile_game_genre', name: 'Royal Match', attributes: {}, evidence_references: ['https://example.com/source'] }],
+        findings: [{ key: 'genre-finding', finding_type: 'observation', title: 'Genre finding', description: 'Fixture statement.', related_entities: ['royal-match'], evidence_references: ['https://example.com/source'], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }],
+        evidence_references: [{ url: 'https://example.com/source', title: 'Fixture source', source_location: null, verified: false }],
+        benchmark_dimensions: [{ key: 'genre-fit', name: 'Genre fit', related_entities: ['royal-match'], evidence_references: ['https://example.com/source'], observations: [{ entity_key: 'royal-match', value: 'Puzzle', evidence_references: ['https://example.com/source'], source_locations: [], evidence_status: 'unverified', uncertainty: null }], po_notes: null }],
+      },
+    };
+    mockFetch(() => linkedEntityReport);
+    render(<ReportViewer reportId="saved-report" />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Phát hiện' }));
+    expect(await screen.findByText('Thể loại trò chơi di động')).toBeTruthy();
+    expect(screen.queryByText('mobile_game_genre')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Đối tượng' }));
+    expect(await screen.findByText('Thể loại trò chơi di động')).toBeTruthy();
+    expect(screen.queryByText('mobile_game_genre')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'So sánh' }));
+    expect(await screen.findByText('Thể loại trò chơi di động · được chọn rõ ràng')).toBeTruthy();
+    expect(screen.queryByText('mobile_game_genre')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Đánh giá của PO' }));
+    expect(await screen.findByText('Thể loại trò chơi di động')).toBeTruthy();
+    expect(screen.queryByText('mobile_game_genre')).toBeNull();
+    expect(linkedEntityReport.research_data.entities[0].entity_type).toBe('mobile_game_genre');
   });
 
   it('separates report recommendations from a saved PO assessment in finding detail', async () => {
