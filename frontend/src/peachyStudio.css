@@ -227,7 +227,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .report-viewer .report-reading-support { position: static; grid-column: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .report-viewer .report-reading-context { grid-column: 1 / -1; }
 }
+@media (max-width: 900px) {
+  .report-viewer .project-journey { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .report-viewer .results-title-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .report-viewer .results-title-copy,
+  .report-viewer .results-header-actions { box-sizing: border-box; width: 100%; min-width: 0; }
+  .report-viewer .results-header-actions { flex-wrap: wrap; justify-content: flex-start; }
+}
 @media (max-width: 760px) {
+  .app-shell:has(.report-viewer) { display: block; }
   .sidebar { width: 100%; flex-basis: auto; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--peachy-line); }
   .brand { padding: 0 4px 10px; }
   .mobile-nav-toggle { color: var(--peachy-ink); border-color: #eadbd4; background: #fff; }
@@ -371,6 +379,19 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .report-viewer .report-reading-layout.is-overview .auto-insights-kpi { min-height: 112px; padding: 11px 12px 10px; gap: 4px; }
   .report-viewer .report-reading-layout.is-overview .auto-insights-visual,
   .report-viewer .report-reading-layout.is-overview .auto-insights-context { padding: 12px; }
+}
+@media (min-width: 761px) and (max-width: 900px) {
+  .report-viewer .project-journey { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .report-viewer .project-journey-steps { border-top: 1px solid var(--peachy-line); padding-top: 5px; }
+  .report-viewer .report-reading-layout,
+  .report-viewer .report-reading-layout.is-overview { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .report-viewer .report-reading-index,
+  .report-viewer .report-reading-main,
+  .report-viewer .report-reading-support,
+  .report-viewer .report-reading-layout.is-overview > .report-reading-main,
+  .report-viewer .report-reading-layout.is-overview > .report-reading-support { position: static; grid-column: 1; }
+  .report-viewer .report-reading-support,
+  .report-viewer .report-reading-layout.is-overview > .report-reading-support { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
   .report-viewer .report-reading-layout.is-overview { grid-template-columns: minmax(0, 1fr); }
