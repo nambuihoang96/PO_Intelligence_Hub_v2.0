@@ -58,4 +58,4 @@ All images are captures from the running QA application except the comparison pa
 - **Verification:** Focused tests, TypeScript, production build, Chrome QA screenshots and browser interactions listed above.
 - **Decision:** **TECHNICAL PASS / PRODUCT ACCEPTANCE PENDING OWNER REVIEW**.
 
-**Implementation commit:** pending.
+**Implementation commit:** `3131370d824c8911efc85e720035134e80680f0c`.
