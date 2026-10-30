@@ -334,3 +334,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .report-viewer .project-journey-heading > a { flex: 0 0 auto; }
   .report-viewer .project-journey-steps a { display: flex; flex-wrap: wrap; justify-content: center; white-space: normal !important; overflow-wrap: anywhere; }
 }
+
+/* Auto-adaptive Overview follows the approved wide report hierarchy: keep the
+   section index beside results, and let source/PO support follow the findings. */
+.report-viewer .report-reading-layout.is-overview { grid-template-columns: 168px minmax(0, 1fr); }
+.report-viewer .report-reading-layout.is-overview > .report-reading-main { grid-column: 2; }
+.report-viewer .report-reading-layout.is-overview > .report-reading-support {
+  position: static;
+  grid-column: 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .report-viewer .report-reading-layout.is-overview { grid-template-columns: minmax(0, 1fr); }
+  .report-viewer .report-reading-layout.is-overview > .report-reading-main,
+  .report-viewer .report-reading-layout.is-overview > .report-reading-support { grid-column: 1; }
+  .report-viewer .report-reading-layout.is-overview > .report-reading-support { grid-template-columns: minmax(0, 1fr); }
+}

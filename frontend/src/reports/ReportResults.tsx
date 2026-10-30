@@ -600,7 +600,7 @@ export function ReportViewer({ reportId }: { reportId: string }) {
     </section>
     {error && <div className="research-alert" role="alert">{error}</div>}{notice && <div className="research-success" role="status">{notice}</div>}
     {(report.orphaned_benchmark_selections?.length || report.orphaned_benchmark_entries?.length) ? <div className="research-alert" role="alert">Có {(report.orphaned_benchmark_selections?.length || 0) + (report.orphaned_benchmark_entries?.length || 0)} liên kết so sánh hoặc ghi chú PO đang tham chiếu tới mục không còn trong dữ liệu đã cấu trúc. Dữ liệu được giữ nguyên; mở tab So sánh để xem khi cần.</div> : null}
-    <div className="report-reading-layout">
+    <div className={`report-reading-layout${tab === 'overview' ? ' is-overview' : ''}`}>
     <aside className="report-reading-index" aria-label="Điều hướng báo cáo">
       <span className="report-reading-eyebrow">TRONG BÁO CÁO</span>
       <nav className="report-tabs" aria-label="Các phần kết quả nghiên cứu" role="tablist">{visibleTabs.map((item, index) => <button id={`report-tab-${item.id}`} aria-controls="report-content" key={item.id} role="tab" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? 'active' : ''} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => setTab(item.id)}><ResultsIcon name={item.icon} />{item.label}</button>)}</nav>
