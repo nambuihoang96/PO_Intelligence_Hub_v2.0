@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-local.ps1"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-local.ps1" -PythonExecutable "%PO_HUB_PYTHON_EXECUTABLE%"
 set "run_exit=%ERRORLEVEL%"
 if not "%run_exit%"=="0" (
     echo.

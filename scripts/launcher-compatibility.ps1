@@ -59,3 +59,41 @@ function Test-PoHubLauncherOwnership {
         ($recordPython.Equals($expectedPython, [System.StringComparison]::OrdinalIgnoreCase)) -and
         ($recordStart -eq $ActualProcessStartTime.ToUniversalTime().Ticks)
 }
+
+function Test-PoHubFrontendOwnership {
+    param(
+        [Parameter(Mandatory = $true)]$Record,
+        [Parameter(Mandatory = $true)][int]$ListenerProcessId,
+        [Parameter(Mandatory = $true)][datetime]$ActualProcessStartTime,
+        [Parameter(Mandatory = $true)][string]$Workspace,
+        [Parameter(Mandatory = $true)][string]$NodeExecutable,
+        [Parameter(Mandatory = $true)][string]$FrontendPath
+    )
+
+    try {
+        $recordWorkspace = [System.IO.Path]::GetFullPath([string]$Record.workspace)
+        $recordFrontend = [System.IO.Path]::GetFullPath([string]$Record.frontend_path)
+        $recordNode = [System.IO.Path]::GetFullPath([string]$Record.node_executable)
+        $recordStart = [DateTimeOffset]::Parse([string]$Record.process_started_utc).UtcDateTime.Ticks
+    } catch { return $false }
+
+    return ([int]$Record.process_id -eq $ListenerProcessId) -and
+        ($recordWorkspace.Equals([System.IO.Path]::GetFullPath($Workspace), [System.StringComparison]::OrdinalIgnoreCase)) -and
+        ($recordFrontend.Equals([System.IO.Path]::GetFullPath($FrontendPath), [System.StringComparison]::OrdinalIgnoreCase)) -and
+        ($recordNode.Equals([System.IO.Path]::GetFullPath($NodeExecutable), [System.StringComparison]::OrdinalIgnoreCase)) -and
+        ($recordStart -eq $ActualProcessStartTime.ToUniversalTime().Ticks)
+}
+
+function Test-PoHubBuildMatch {
+    param(
+        [Parameter(Mandatory = $true)]$Record,
+        [Parameter(Mandatory = $true)][string]$BuildId,
+        [string]$DataRoot
+    )
+
+    if ([string]::IsNullOrWhiteSpace([string]$Record.source_fingerprint) -or [string]$Record.source_fingerprint -cne $BuildId) { return $false }
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) { return $true }
+    try {
+        return [System.IO.Path]::GetFullPath([string]$Record.data_root).Equals([System.IO.Path]::GetFullPath($DataRoot), [System.StringComparison]::OrdinalIgnoreCase)
+    } catch { return $false }
+}

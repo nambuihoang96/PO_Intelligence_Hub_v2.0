@@ -13,3 +13,5 @@ logs/
 coverage/
 *.zip
 PO_Intelligence_Hub_V2_Blueprint/
+/.auto-presentation-qa/
+/frontend/.auto-presentation-qa/
