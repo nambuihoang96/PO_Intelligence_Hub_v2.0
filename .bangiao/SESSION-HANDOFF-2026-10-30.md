@@ -38,8 +38,8 @@ The `D:\AI\PO Analysis\PO_Intelligence_Hub_v2.0\run.bat` belongs to a separate w
 
 - Disposable test clone and temporary browser profile: removed from `.auto-presentation-qa/research-core-v1-copy/` after verifying the QA snapshot had already been restored and the run screenshots were retained elsewhere.
 - Frontend test scratch cache: removed from `frontend/.auto-presentation-qa/`.
+- Unused QA Chrome profile: confirmed no Chrome process referenced it, then removed `.auto-presentation-qa/chrome-core-audit/` (180.4 MB).
 - Genuine report input, QA database/data, original capture scripts and cited design/reference screenshots are retained locally.
-- The separate `.auto-presentation-qa/chrome-core-audit/` browser profile was retained because Windows denied process-command-line inspection; it could not be proven unused.
 - Root `.auto-presentation-qa/` and frontend scratch directory are ignored to keep local-only QA content out of Git.
 - Git reported about 34.6 MB of stale/incomplete objects in the shared multi-worktree object store. Automatic-review rejected pruning because it could irreversibly delete unreachable work from another worktree. Those Git internals were left untouched.
 - Windows denied process-command-line inspection for the retained Chrome profile, so that profile was not deleted. This is an unresolved safe-cleanup item, not assumed junk.
