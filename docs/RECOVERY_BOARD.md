@@ -2,7 +2,7 @@
 
 **Mode:** B — Autonomous implementation with milestone reporting, explicitly authorized by the Product Owner on 2026-10-27.  
 **Target:** 2026-10-31 (aggressive target; not a completion promise).  
-**Current branch:** `feat/ux-recovery-01-research-results`  
+**Current branch:** `feat/research-auto-presentation-v1`
 **Planning source:** [Unified Product Recovery — October 2026](../.bangiao/UNIFIED-PRODUCT-RECOVERY-OCT-2026.md)  
 **Audit baseline:** [Product Recovery Audit](../.bangiao/PRODUCT-RECOVERY-AUDIT.md)  
 **Authority:** This board is the single status/backlog source for G1–G4. Detailed product decisions stay in the linked approved plan and historical handoffs. Do not create a competing roadmap.
@@ -64,6 +64,16 @@ These are historical recorded results, not a fresh full-suite run against every 
 - Frontend latest audit: **167 tests PASS**, TypeScript PASS, production build PASS (existing bundle-size advisory).
 - Backend latest audit: **15 workspace tests PASS**; full backend and report-focused suites **NOT VERIFIED** after environment hangs.
 - SQLite QA copy: integrity `ok`, revision `20261024_0009`; production SQLite was not written.
+
+### Research Auto-Presentation — final Overview P1 feedback round — 2026-10-30
+
+- **Original owner feedback:** Functional QA passed; only P1 remained in information priority and seeing results immediately. Compact the report/project headers and summary/takeaways; show title/scope, conclusion, at least two eligible KPIs and the start of a chart in the Puzzle 2026 desktop first viewport; provide a short findings preview that honors valid `highlighted_finding_keys`; regress eCPM-by-GEO, separate D1/D7/D30 and qualitative-only states. Do not expand Research features or continue P2 polish.
+- **Classification:** Bounded UI/UX rework and adaptive KPI-label readability adjustment; no research feature or data contract change.
+- **Impact analysis:** `ReportResults.tsx` controls Overview composition and finding preview; `AutoResearchInsights.tsx` labels source-supplied KPIs; `peachyStudio.css` controls desktop/mobile density. No backend/API/schema/database changes. Existing report data, source provenance, chart validation and eligibility remain unchanged.
+- **Updated acceptance:** At 1440×900, the genuine Puzzle report shows title/scope, conclusion, eligible KPIs and chart start without scrolling; findings preview is limited to two report-supplied findings with evidence status and one full-list action; at 390×844 the page has no horizontal overflow; eCPM, retention and qualitative states do not mix incompatible metrics or fabricate data.
+- **Implementation reference:** `.bangiao/FINAL-RESEARCH-OVERVIEW-P1.md`; screenshots in `.bangiao/screenshots/final-research-overview-p1/`.
+- **Verification:** Chrome on isolated QA app `15331`/`15332`: Puzzle 2026 showed 3 KPIs, compatible chart, 2/6 findings, expand summary/all 6 takeaways, navigate to all 6 Findings; mobile width 390 with document/body width 390; eCPM labels United States/Vietnam/Japan with Rewarded ad eCPM chart; retention labels D1/D7/D30 separately and no chart; qualitative-only fixture had no KPI/chart. Its stored findings count is 0, so qualitative finding-card rendering was not demonstrated by that browser fixture. Focused frontend tests 14/14, TypeScript and production build PASS. Production SQLite not accessed.
+- **Current status:** This bounded P1 implementation is `DEV_DONE / TARGETED BROWSER UAT PASS / OWNER REVIEW PENDING`. The qualitative-only fixture limitation remains explicit; no Product Pass or Owner Acceptance is implied. No further Research Overview redesign is authorized by this round.
 - Browser: screenshots in `.bangiao/screenshots/product-recovery-audit/` captured from the running localhost app using an isolated SQLite copy. The rendered current audit views do not prove all interactions or genuine-data acceptance.
 - G3-02 subject identity: 21 targeted backend tests PASS; 170 frontend tests PASS; TypeScript and production build PASS; isolated Chrome/SQLite explicit report + CSV subject mapping survived refresh. Screenshot: `.bangiao/screenshots/g3-02-subject-identity/subject-report-csv-links-after-refresh.png`. Full backend suite collection NOT VERIFIED in this Windows environment.
 - G3-03 benchmark collections: original commit `e1728be`; follow-up trend integration delivered with G3-04. Original 23 focused backend/171 frontend tests and isolated collection Chrome UAT are recorded in `.bangiao/G3-03-BENCHMARK-COLLECTIONS.md`. Trend integration has 26 focused backend/173 frontend tests plus TypeScript/build PASS; its browser UAT NOT VERIFIED. Broad `DatabaseMigrationTest` and mobile UAT remain NOT VERIFIED. No genuine owner trend input was available.

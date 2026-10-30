@@ -79,4 +79,23 @@ describe('AutoResearchInsights', () => {
     expect(screen.getByText(/Có 1 quan sát số liệu được báo cáo/)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Số liệu nổi bật' })).toBeNull();
   });
+
+  it('labels multi-GEO metrics by GEO while retaining the shared entity', () => {
+    render(<AutoResearchInsights data={report([
+      observation({ geo: 'US', entity_name: 'Game', value: 12 }),
+      observation({ geo: 'VN', entity_name: 'Game', value: 8 }),
+      observation({ geo: 'JP', entity_name: 'Game', value: 21 }),
+    ])} onViewEvidence={() => undefined} />);
+    expect([...document.querySelectorAll('.auto-kpi-label')].map((element) => element.textContent)).toEqual(['US', 'VN', 'JP']);
+  });
+
+  it('keeps D1, D7 and D30 as separately named metrics instead of identical entity labels', () => {
+    render(<AutoResearchInsights data={report([
+      observation({ metric_id: 'retention_d1', metric_definition: 'Retention D1', value: 38, unit: '%' }),
+      observation({ metric_id: 'retention_d7', metric_definition: 'Retention D7', value: 14, unit: '%' }),
+      observation({ metric_id: 'retention_d30', metric_definition: 'Retention D30', value: 5, unit: '%' }),
+    ])} onViewEvidence={() => undefined} />);
+    for (const day of ['Retention D1', 'Retention D7', 'Retention D30']) expect(screen.getByText(day)).toBeTruthy();
+    expect(document.querySelector('.auto-insights-visual')).toBeNull();
+  });
 });

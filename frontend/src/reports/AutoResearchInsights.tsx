@@ -24,6 +24,15 @@ function periodLabel(row: QuantitativeObservation): string {
   return 'Chưa rõ kỳ đo';
 }
 
+function kpiLabel(row: QuantitativeObservation, featuredRows: QuantitativeObservation[]): string {
+  const metricDefinitions = new Set(featuredRows.map((item) => item.metric_definition).filter(Boolean));
+  if (metricDefinitions.size > 1) return row.metric_definition || row.entity_name || row.entity_id || 'Quan sát';
+  const sameEntityAcrossGeos = new Set(featuredRows.map((item) => item.entity_name).filter(Boolean)).size === 1
+    && new Set(featuredRows.map((item) => item.geo).filter(Boolean)).size > 1;
+  if (sameEntityAcrossGeos) return row.geo || row.entity_name || row.metric_definition || 'Quan sát';
+  return row.entity_name || row.entity_id || row.metric_definition || 'Quan sát';
+}
+
 /** Evidence-index references always point back to the original report observations. */
 export function AutoResearchInsights({ data, onViewEvidence, onPrepareChartData }: Props) {
   const rows = data.quantitative_observations ?? [];
@@ -49,6 +58,7 @@ export function AutoResearchInsights({ data, onViewEvidence, onPrepareChartData 
   }
 
   const chartRows = selection.chartIndexes.map((index) => rows[index]);
+  const featuredRows = selection.featuredIndexes.map((index) => rows[index]);
   const otherRows = selection.otherIndexes.map((index) => rows[index]);
   const highlight = data.presentation_plan?.headline?.trim();
   const chartName = selection.view?.label || 'Quan sát số liệu trong báo cáo';
@@ -68,7 +78,7 @@ export function AutoResearchInsights({ data, onViewEvidence, onPrepareChartData 
         const row = rows[index];
         return <button type="button" className="auto-insights-kpi" key={index} onClick={() => onViewEvidence(index)}
           aria-label={`Xem bằng chứng cho ${row.entity_name || row.entity_id || row.metric_definition || 'quan sát'}: ${formatAutoValue(row)}`}>
-          <span className="auto-kpi-label">{row.entity_name || row.entity_id || row.metric_definition || 'Quan sát'}</span>
+          <span className="auto-kpi-label">{kpiLabel(row, featuredRows)}</span>
           <strong>{formatAutoValue(row)}</strong>
           <span className="auto-kpi-period">{periodLabel(row)} · {row.geo || 'GEO chưa rõ'} · {row.platform || 'Nền tảng chưa rõ'}</span>
           <small>{sourceName(row, data)} · {row.value_precision === 'approximate' ? 'Ước tính' : 'Theo báo cáo'} · Chưa xác minh</small>

@@ -345,9 +345,41 @@ button, a { -webkit-tap-highlight-color: transparent; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
 }
+/* Final P1 overview density: keep the project path and report identity compact
+   so a valid conclusion and the start of its actual results fit immediately. */
+.report-viewer .project-journey { gap: 5px; margin-bottom: 10px; padding: 9px 14px 7px; }
+.report-viewer .project-journey-heading strong { font-size: 15px; }
+.report-viewer .project-journey-heading small { font-size: 11px; }
+.report-viewer .project-journey-steps { gap: 4px; padding-top: 5px; }
+.report-viewer .project-journey-steps a { min-height: 34px; padding: 4px 9px; font-size: 13px; }
+.report-viewer .project-journey-steps a > span { width: 20px; height: 20px; }
+.report-viewer .report-meta.results-header { gap: 5px; padding: 11px 18px; }
+.report-viewer .results-title-copy > h2 { margin-bottom: 4px; font-size: clamp(22px, 1.8vw, 26px); line-height: 1.16; }
+.report-viewer .results-breadcrumb { margin-bottom: 3px; }
+.report-viewer .results-title-copy > .results-context { gap: 3px 9px; font-size: 11px; }
+.report-viewer .overview-synthesis-grid { gap: 9px; }
+.report-viewer .executive-card, .report-viewer .overview-takeaways { padding: 12px 15px; }
+.report-viewer .executive-card .overview-section-heading, .report-viewer .overview-takeaways .overview-section-heading { margin-bottom: 4px; }
+.report-viewer .overview-takeaways ol { gap: 4px; }
+.report-viewer .overview-takeaways li { grid-template-columns: 19px minmax(0, 1fr); gap: 6px; font-size: 12px; line-height: 1.34; }
+.report-viewer .overview-takeaways li > .takeaway-number { width: 18px; height: 18px; }
+.report-viewer .overview-takeaways > .text-button { min-height: 25px; }
+.report-viewer .overview-findings-more { min-height: 36px; margin-top: 8px; }
+@media (min-width: 761px) {
+  .report-viewer .project-journey { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .report-viewer .project-journey-steps { border-top: 0; padding-top: 0; }
+  .report-viewer .report-reading-layout.is-overview .auto-insights-kpi { min-height: 112px; padding: 11px 12px 10px; gap: 4px; }
+  .report-viewer .report-reading-layout.is-overview .auto-insights-visual,
+  .report-viewer .report-reading-layout.is-overview .auto-insights-context { padding: 12px; }
+}
 @media (max-width: 760px) {
   .report-viewer .report-reading-layout.is-overview { grid-template-columns: minmax(0, 1fr); }
   .report-viewer .report-reading-layout.is-overview > .report-reading-main,
   .report-viewer .report-reading-layout.is-overview > .report-reading-support { grid-column: 1; }
   .report-viewer .report-reading-layout.is-overview > .report-reading-support { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .report-viewer .project-journey { gap: 5px; padding: 9px 11px 7px; }
+  .report-viewer .report-meta.results-header { padding: 10px 13px; }
+  .report-viewer .overview-takeaways li { font-size: 13px; }
 }
