@@ -78,4 +78,23 @@ describe('ProjectHome data entry', () => {
     expect(decision.getAttribute('href')).toBe(expectedHref);
     expect(screen.getByRole('heading', { name: 'Quyết định PO' })).toBeTruthy();
   });
+  it('shows generated research candidates separately from saved PO decisions above reports', async () => {
+    vi.mocked(researchApi.getOpportunities).mockResolvedValue({ candidates: [{
+      candidate_id: 'finding-pending', name: 'Puzzle finding requiring review', stale: false,
+      target_kind: 'report_finding', decision_target: { kind: 'report_finding', target_id: 'f-1', report_id: 'r-1', report_content_sha256: 'hash-1', item_key: 'key-1' },
+      decision: null,
+    }, {
+      candidate_id: 'project-pending', name: 'Project candidate', stale: false, target_kind: 'project',
+      decision_target: { kind: 'project', target_id: 'project-a' }, decision: null,
+    }], reports: [], shortlist_dataset_id: null, shortlist_valid: true, shortlist_warning: null } as never);
+    render(<ProjectHome projectId="project-a" />);
+    expect(await screen.findByRole('heading', { name: 'Quyết định PO' })).toBeTruthy();
+    expect(screen.getByText('Puzzle finding requiring review')).toBeTruthy();
+    expect(screen.getByText(/Chúng không phải quyết định do AI hoặc PO phê duyệt/)).toBeTruthy();
+    expect(screen.getByText('Chưa có quyết định nào được PO lưu.')).toBeTruthy();
+    const candidate = screen.getByRole('link', { name: /Puzzle finding requiring review/ });
+    expect(candidate.getAttribute('href')).toContain('decisionKind=report_finding');
+    expect(screen.getByRole('link', { name: /Mở bảng theo dõi/ }).getAttribute('href')).toBe('/tracking?projectId=project-a');
+  });
+
 });
