@@ -40,4 +40,23 @@ describe('Tracking workspace', () => {
     expect(await screen.findByText('Finding: save progress')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Mở quyết định →' }).getAttribute('href')).toBe('/research?projectId=project-1&view=opportunities&decisionKind=report_finding&decisionReportId=report-9&decisionReportHash=sha-9&decisionItemKey=progression');
   });
+  it('counts due reviews from saved decisions only and exposes the original report', async () => {
+    mockFetch((url) => url.endsWith('/opportunities') ? { project_id: project.id, shortlist_dataset_id: null, shortlist_valid: false, shortlist_warning: null, reports: [], candidates: [{
+      candidate_id: 'pending', name: 'Unreviewed candidate', stale: false, decision: null,
+    }, {
+      candidate_id: 'due', name: 'Old decision', stale: false,
+      decision_target: { kind: 'report_finding', target_id: 'f-1', report_id: 'report-2', report_content_sha256: 'hash-2', item_key: 'finding' },
+      decision: { decision_status: 'investigate', rationale: 'Need data', next_action: 'Inspect source', review_date: '2020-01-01' },
+    }, {
+      candidate_id: 'later', name: 'Later decision', stale: false,
+      decision: { decision_status: 'hold', rationale: '', next_action: '', review_date: '2099-01-01' },
+    }] } : project);
+    render(<TrackingWorkspace projectId="project-1" />);
+    expect(await screen.findByText('Old decision')).toBeTruthy();
+    expect(screen.queryByText('Unreviewed candidate')).toBeNull();
+    expect(screen.getByText('Quá ngày dự kiến xem lại')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở báo cáo nguồn →' }).getAttribute('href')).toBe('/reports/report-2');
+    expect(screen.getAllByRole('link', { name: 'Mở quyết định →' })).toHaveLength(2);
+  });
+
 });
