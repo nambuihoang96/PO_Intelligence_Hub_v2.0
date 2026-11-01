@@ -52,7 +52,7 @@ describe('OpportunityReview', () => {
 
   it('shows source measurements as unverified and does not auto-attach similarly named report findings', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
-    expect(await screen.findByRole('heading', { name: 'Theo dõi quyết định sản phẩm' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Đánh giá & quyết định PO' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Product Alpha' })).toBeTruthy();
     expect(await screen.findByLabelText('Gắn Downloads ở dòng dữ liệu 2')).toBeTruthy();
     expect(screen.getByText(/dòng dữ liệu 2.*chưa xác minh/i)).toBeTruthy();
