@@ -2396,3 +2396,11 @@ button.research-map-node:hover, button.research-map-node:focus-visible { border-
   }
   .quant-sort-instruction { width: 100%; }
 }
+
+/* P0: report decision entry stays visible on the report overview. */
+.report-overview-decision-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border: 1px solid #bdd7ee; background: #f3f8fd; border-radius: 11px; margin-bottom: 16px; }
+.report-overview-decision-entry strong { color: #254e73; font-size: 14px; }
+.report-overview-decision-entry p { margin: 4px 0 0; color: #4c6478; font-size: 13px; line-height: 1.45; }
+.report-overview-decision-entry .primary-action { white-space: nowrap; }
+.finding-card-evidence > a.text-button { margin-left: auto; flex: 0 0 auto; font-size: 12px; }
+@media (max-width: 760px) { .report-overview-decision-entry { align-items: stretch; flex-direction: column; } .report-overview-decision-entry .primary-action { white-space: normal; text-align: center; } .finding-card-evidence > a.text-button { width: 100%; margin-left: 0; } }
