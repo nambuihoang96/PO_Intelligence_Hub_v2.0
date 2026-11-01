@@ -93,7 +93,8 @@ export function ProjectHome({ projectId }: { projectId: string }) {
   const candidates = opportunityWorkspace?.candidates ?? [];
   const pendingCandidates = candidates.filter((candidate) => !candidate.decision);
   const reviewCandidates = [...pendingCandidates].sort((a, b) => Number(b.target_kind === 'report_finding') - Number(a.target_kind === 'report_finding')).slice(0, 3);
-  const savedDecisions = candidates.filter((candidate) => candidate.decision).slice(0, 4);
+  const allSavedDecisions = candidates.filter((candidate) => candidate.decision);
+  const savedDecisions = allSavedDecisions.slice(0, 4);
   const decisionHref = `${home}&view=opportunities`;
   const trackingHref = `/tracking?projectId=${encodeURIComponent(projectId)}`;
 
@@ -111,7 +112,7 @@ export function ProjectHome({ projectId }: { projectId: string }) {
         <a className="project-home-action project-home-action-primary" href={deepResearch}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="search" /></span><span><strong>Nghiên cứu chuyên sâu</strong><small>Tạo câu hỏi nghiên cứu và lưu báo cáo ChatGPT</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
         <a className="project-home-action" href={saveInformation}><span className="project-home-action-mark peach" aria-hidden="true"><ResultsIcon name="runs" /></span><span><strong>Lưu thông tin</strong><small>Lưu quan sát, bài viết, liên kết hoặc ảnh</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
         <a className="project-home-action" href={csvImport}><span className="project-home-action-mark lilac" aria-hidden="true"><ResultsIcon name="metric" /></span><span><strong>Phân tích CSV</strong><small>Khám phá số liệu và chọn sản phẩm cần tìm hiểu</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
-        <a className="project-home-action" href={decisionHref}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="decision" /></span><span><strong>Quyết định &amp; theo dõi</strong><small>{savedDecisions.length} đã lưu · {pendingCandidates.length} ứng viên chưa đánh giá</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action" href={decisionHref}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="decision" /></span><span><strong>Quyết định &amp; theo dõi</strong><small>{allSavedDecisions.length} đã lưu · {pendingCandidates.length} ứng viên chưa đánh giá</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
       </div>
     </section>
 
