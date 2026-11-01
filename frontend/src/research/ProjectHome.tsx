@@ -90,7 +90,12 @@ export function ProjectHome({ projectId }: { projectId: string }) {
   const deepResearch = `${home}&view=plan`;
   const saveInformation = `${home}&view=data#project-saved-information`;
   const csvImport = `${home}&view=data&action=import-csv#project-csv-data`;
-  const savedDecisions = (opportunityWorkspace?.candidates ?? []).filter((candidate) => candidate.decision).slice(0, 4);
+  const candidates = opportunityWorkspace?.candidates ?? [];
+  const pendingCandidates = candidates.filter((candidate) => !candidate.decision);
+  const reviewCandidates = [...pendingCandidates].sort((a, b) => Number(b.target_kind === 'report_finding') - Number(a.target_kind === 'report_finding')).slice(0, 3);
+  const savedDecisions = candidates.filter((candidate) => candidate.decision).slice(0, 4);
+  const decisionHref = `${home}&view=opportunities`;
+  const trackingHref = `/tracking?projectId=${encodeURIComponent(projectId)}`;
 
   return <div className="project-home">
     <header className="project-home-header">
@@ -106,6 +111,31 @@ export function ProjectHome({ projectId }: { projectId: string }) {
         <a className="project-home-action project-home-action-primary" href={deepResearch}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="search" /></span><span><strong>Nghiên cứu chuyên sâu</strong><small>Tạo câu hỏi nghiên cứu và lưu báo cáo ChatGPT</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
         <a className="project-home-action" href={saveInformation}><span className="project-home-action-mark peach" aria-hidden="true"><ResultsIcon name="runs" /></span><span><strong>Lưu thông tin</strong><small>Lưu quan sát, bài viết, liên kết hoặc ảnh</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
         <a className="project-home-action" href={csvImport}><span className="project-home-action-mark lilac" aria-hidden="true"><ResultsIcon name="metric" /></span><span><strong>Phân tích CSV</strong><small>Khám phá số liệu và chọn sản phẩm cần tìm hiểu</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+        <a className="project-home-action" href={decisionHref}><span className="project-home-action-mark" aria-hidden="true"><ResultsIcon name="decision" /></span><span><strong>Quyết định &amp; theo dõi</strong><small>{savedDecisions.length} đã lưu · {pendingCandidates.length} ứng viên chưa đánh giá</small></span><span className="project-home-arrow" aria-hidden="true">→</span></a>
+      </div>
+    </section>
+
+    <section className="project-home-decision-center" aria-labelledby="project-home-decisions-title">
+      <div className="project-home-section-heading">
+        <div><span className="project-home-kicker">TỪ NGHIÊN CỨU ĐẾN HÀNH ĐỘNG</span><h2 id="project-home-decisions-title">Quyết định PO</h2></div>
+        <a href={decisionHref}>Mở không gian quyết định <span aria-hidden="true">→</span></a>
+      </div>
+      <p className="project-home-decision-explain">Hệ thống tự tổng hợp các <strong>ứng viên cần xem xét</strong> từ dự án, phát hiện, đối tượng và dữ liệu đã lưu. Chúng <strong>không phải quyết định do AI hoặc PO phê duyệt</strong>. Chỉ nội dung anh chủ động lưu mới nằm trong mục Theo dõi.</p>
+      <div className="project-home-decision-columns">
+        <div className="project-home-decision-column">
+          <h3>Cần xem xét <span>{pendingCandidates.length}</span></h3>
+          {reviewCandidates.length ? <div className="project-home-decision-list">
+            {reviewCandidates.map((candidate) => <a className="project-home-decision-row" href={opportunityDecisionHref(projectId, candidate)} key={candidate.candidate_id}>
+              <span className="project-home-row-copy"><strong>{candidate.name}</strong><small>{candidate.target_kind === 'report_finding' ? 'Phát hiện từ báo cáo' : candidate.target_kind === 'report_entity' ? 'Đối tượng từ báo cáo' : 'Nội dung nghiên cứu'} · Chưa có quyết định PO</small></span><span className="project-home-arrow" aria-hidden="true">›</span>
+            </a>)}
+          </div> : <p className="project-home-decision-empty">Chưa có ứng viên cần đánh giá. Thêm báo cáo hoặc dữ liệu để bắt đầu.</p>}
+          <a className="project-home-inline-link" href={decisionHref}>Xem toàn bộ ứng viên →</a>
+        </div>
+        <div className="project-home-decision-column">
+          <h3>Đã lưu &amp; cần theo dõi <span>{candidates.length - pendingCandidates.length}</span></h3>
+          {savedDecisions.length ? <div className="project-home-decision-list">{savedDecisions.map((candidate) => <a className="project-home-decision-row" href={opportunityDecisionHref(projectId, candidate)} key={candidate.candidate_id}><span className="project-home-row-copy"><strong>{candidate.name}</strong><small>{decisionStatusLabel(candidate.decision?.decision_status)}{candidate.decision?.next_action ? ` · ${candidate.decision.next_action}` : ''}</small></span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div> : <p className="project-home-decision-empty">Chưa có quyết định nào được PO lưu.</p>}
+          <a className="project-home-inline-link" href={trackingHref}>Mở bảng theo dõi →</a>
+        </div>
       </div>
     </section>
 
@@ -121,13 +151,13 @@ export function ProjectHome({ projectId }: { projectId: string }) {
       </section>}
     </div>
 
-    {(collections.length > 0 || subjects.length > 0 || datasets.length > 0 || savedDecisions.length > 0) && <section className="project-home-support" aria-labelledby="project-support-title">
+    {(collections.length > 0 || subjects.length > 0 || datasets.length > 0) && <section className="project-home-support" aria-labelledby="project-support-title">
       <div className="project-home-section-heading"><div><span className="project-home-kicker">THEO NGỮ CẢNH DỰ ÁN</span><h2 id="project-support-title">Thông tin đã lưu</h2></div></div>
       <div className="project-home-support-grid">
         {collections.length > 0 && <section className="project-home-support-group" aria-labelledby="project-collections-title"><div className="project-home-support-heading"><ResultsIcon name="comparison" /><h3 id="project-collections-title">Bộ so sánh</h3><a href={`${home}&view=data#project-benchmark-collections`}>Mở <span aria-hidden="true">→</span></a></div><div className="project-home-compact-list">{collections.slice(0, 4).map((collection) => <a className="project-home-compact-row project-home-dataset" href={`${home}&view=data&collectionId=${encodeURIComponent(collection.id)}#project-benchmark-collections`} aria-label={`Mở bộ so sánh ${collection.name}`} key={collection.id}><span className="project-home-row-copy"><strong>{collection.name}</strong><small>{collection.members.length} hồ sơ</small></span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div></section>}
         {subjects.length > 0 && <section className="project-home-support-group" aria-labelledby="project-subjects-title"><div className="project-home-support-heading"><ResultsIcon name="search" /><h3 id="project-subjects-title">Hồ sơ nghiên cứu</h3><a href={`${home}&view=data#project-subject-profiles`}>Mở <span aria-hidden="true">→</span></a></div><div className="project-home-subject-list">{subjects.slice(0, 6).map((subject) => <a className="project-home-subject" href={`${home}&view=data&subjectId=${encodeURIComponent(subject.id)}#project-subject-profiles`} aria-label={`Mở hồ sơ ${subject.name}`} key={subject.id}>{subject.name}<span aria-hidden="true"> →</span></a>)}</div></section>}
         {datasets.length > 0 && <section className="project-home-support-group" aria-labelledby="project-data-title"><div className="project-home-support-heading"><ResultsIcon name="metric" /><h3 id="project-data-title">Tệp dữ liệu</h3><a href={`${home}&view=data#project-csv-data`}>Mở <span aria-hidden="true">→</span></a></div><div className="project-home-compact-list">{datasets.slice(0, 4).map((dataset) => <a className="project-home-compact-row project-home-dataset" href={`${home}&view=data&datasetId=${encodeURIComponent(dataset.id)}#project-csv-data`} aria-label={`Mở số liệu từ ${dataset.filename}`} key={dataset.id}><span className="project-home-row-copy"><strong>{dataset.filename}</strong><small>{dataset.source_apps} sản phẩm · {dataset.metrics.length} chỉ số · {datasetReadinessLabel(dataset.compatibility_status)}</small></span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div>{opportunityWorkspace?.shortlist_dataset_id && <p className="project-home-data-note">Đã có danh sách sản phẩm được lưu để xem lại.</p>}</section>}
-        {savedDecisions.length > 0 && <section className="project-home-support-group" aria-labelledby="project-home-decisions-title"><div className="project-home-support-heading"><ResultsIcon name="decision" /><h3 id="project-home-decisions-title">Quyết định PO</h3><a href={`${home}&view=opportunities`}>Mở <span aria-hidden="true">→</span></a></div><div className="project-home-decision-list">{savedDecisions.map((candidate) => <a className="project-home-decision-row" href={opportunityDecisionHref(projectId, candidate)} key={candidate.candidate_id}><span className="project-home-row-copy"><strong>{candidate.name}</strong><small>{decisionStatusLabel(candidate.decision?.decision_status)}{candidate.decision?.next_action ? ` · ${candidate.decision.next_action}` : ''}</small></span><span className="project-home-arrow" aria-hidden="true">›</span></a>)}</div></section>}
+
       </div>
     </section>}
 
