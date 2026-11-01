@@ -90,7 +90,7 @@ describe('ProjectHome data entry', () => {
     render(<ProjectHome projectId="project-a" />);
     expect(await screen.findByRole('heading', { name: 'Quyết định PO' })).toBeTruthy();
     expect(screen.getByText('Puzzle finding requiring review')).toBeTruthy();
-    expect(screen.getByText(/Chúng không phải quyết định do AI hoặc PO phê duyệt/)).toBeTruthy();
+    expect(document.querySelector('.project-home-decision-explain')?.textContent).toContain('không phải quyết định do AI hoặc PO phê duyệt');
     expect(screen.getByText('Chưa có quyết định nào được PO lưu.')).toBeTruthy();
     const candidate = screen.getByRole('link', { name: /Puzzle finding requiring review/ });
     expect(candidate.getAttribute('href')).toContain('decisionKind=report_finding');
