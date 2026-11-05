@@ -56,4 +56,9 @@ def downgrade() -> None:
         batch.drop_column("project_id")
         batch.alter_column("report_id", existing_type=sa.String(length=36), nullable=False)
         batch.create_unique_constraint("uq_quant_datasets_report_hash", ["report_id", "content_sha256"])
-    op.drop_column("imported_research_reports", "project_id")
+    # SQLite refuses ALTER TABLE ... DROP COLUMN for a column that is part of a
+    # foreign key (project_id has an inline REFERENCES research_projects).
+    # Rebuild the table instead. env.py turns foreign_keys OFF on this
+    # connection, so rebuilding the parent does not trip quantitative_datasets.
+    with op.batch_alter_table("imported_research_reports", recreate="always") as batch:
+        batch.drop_column("project_id")

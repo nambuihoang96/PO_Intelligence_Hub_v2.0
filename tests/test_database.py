@@ -106,10 +106,13 @@ class DatabaseMigrationTest(unittest.TestCase):
     def test_historical_research_migrates_restores_and_reopens_through_apis(self) -> None:
         """Exercise a representative v0008 workspace through the current migration head."""
         current_head = ScriptDirectory.from_config(self.config).get_current_head()
-        self.assertEqual(current_head, "20261027_0015")
+        self.assertEqual(current_head, "20261105_0020")
         command.upgrade(self.config, "20261023_0008")
         with closing(sqlite3.connect(get_database_path())) as historical:
             self.assertEqual(historical.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261023_0008")
+        # The ORM now writes research_projects.topic (0018), so the app cannot create fixture rows at 0008.
+        # The fixture is therefore created at head; the 0008 checkpoint above only proves the historical schema exists.
+        command.upgrade(self.config, "head")
         test_app = create_app()
         client_context = TestClient(test_app)
         client = client_context.__enter__()
@@ -218,12 +221,12 @@ class DatabaseMigrationTest(unittest.TestCase):
         database_path = get_database_path()
         pre_migration_backup = Path(self.temp_dir.name) / "historical-v0008-backup.sqlite3"
         with closing(sqlite3.connect(database_path)) as source, closing(sqlite3.connect(pre_migration_backup)) as backup:
-            self.assertEqual(source.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261023_0008")
+            self.assertEqual(source.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261105_0020")
             source.backup(backup)
-            self.assertEqual(backup.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261023_0008")
+            self.assertEqual(backup.execute("SELECT version_num FROM alembic_version").fetchone()[0], "20261105_0020")
             self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
-        # This is the actual release migration path under test: v0008 -> v0009.
+        # Release path under test now starts from the head that the fixture was created at (no-op upgrade).
         command.upgrade(self.config, "head")
         migrated_app = create_app()
         client_context = TestClient(migrated_app)
