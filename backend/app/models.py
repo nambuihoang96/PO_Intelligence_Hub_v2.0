@@ -38,6 +38,7 @@ class ResearchProject(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     owner: Mapped[str | None] = mapped_column(String(200))
     category: Mapped[str | None] = mapped_column(String(120))
+    topic: Mapped[str | None] = mapped_column(String(300))
     workspace_state_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
@@ -362,13 +363,14 @@ class ImportedResearchReport(Base):
     __tablename__ = "imported_research_reports"
     __table_args__ = (
         UniqueConstraint("content_sha256", name="uq_imported_research_reports_content_sha256"),
-        CheckConstraint("origin = 'chatgpt_user_import'", name="ck_imported_research_reports_origin"),
+        CheckConstraint("origin IN ('chatgpt_user_import','codex_cli_research')", name="ck_imported_research_reports_origin"),
         Index("ix_imported_research_reports_imported_id", "imported_at", "id"),
         ForeignKeyConstraint(["project_id"], ["research_projects.id"]),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     project_id: Mapped[str | None] = mapped_column(String(36))
+    previous_report_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("imported_research_reports.id", ondelete="RESTRICT"))
     question: Mapped[str] = mapped_column(Text, nullable=False)
     geo: Mapped[str] = mapped_column(String(100), nullable=False)
     os: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -379,8 +381,13 @@ class ImportedResearchReport(Base):
     extraction_error: Mapped[str | None] = mapped_column(Text)
     benchmark_selections_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     benchmark_workspace_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    comparison_review_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     origin: Mapped[str] = mapped_column(String(40), nullable=False, default="chatgpt_user_import", server_default=text("'chatgpt_user_import'"))
+    # Which assistant produced a pasted answer. Null for reports saved before this column existed.
+    source_assistant: Mapped[str | None] = mapped_column(String(20))
+    # Link to the CSV dataset and the top-N games shown with it. Null for reports without a link.
+    source_selection: Mapped[dict | None] = mapped_column("source_selection_json", JSON)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
