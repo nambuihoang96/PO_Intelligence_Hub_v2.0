@@ -100,7 +100,7 @@ export function MarkdownReport({ markdown }: { markdown: string }) {
       index += 2;
       const rows: string[][] = [];
       while (index < lines.length && lines[index].includes('|') && lines[index].trim()) rows.push(splitTableRow(lines[index++]));
-      blocks.push(<div className="report-table-wrap" key={`table-${index}`}><table><thead><tr>{headers.map((cell, cellIndex) => <th key={cellIndex}>{inline(cell)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex}>{inline(row[cellIndex] ?? '')}</td>)}</tr>)}</tbody></table></div>);
+      blocks.push(<div className="report-table-wrap" key={`table-${index}`} role="region" aria-label="Bảng trong báo cáo · cuộn ngang để xem thêm cột" tabIndex={0}><table><thead><tr>{headers.map((cell, cellIndex) => <th key={cellIndex} scope="col">{inline(cell)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex}>{inline(row[cellIndex] ?? '')}</td>)}</tr>)}</tbody></table></div>);
       continue;
     }
     const listMatch = line.match(/^\s*([-*+] |\d+\. )/);

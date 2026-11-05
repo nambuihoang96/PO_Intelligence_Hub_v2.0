@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportHistory, ReportViewer, ResearchIntake, buildResearchPrompt } from './ResearchIntake';
 
 const report = {
@@ -23,6 +23,7 @@ function jsonResponse(value: unknown, status = 200) {
 }
 
 describe('ChatGPT research intake', () => {
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('po-hub.codex-research-settings.v1', JSON.stringify({ enabled: false, model_slug: '' })); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState({}, '', '/'); });
 
   it('builds a scoped prompt with market-first and anti-inference safeguards', () => {
@@ -58,8 +59,8 @@ describe('ChatGPT research intake', () => {
     expect(screen.queryByRole('link', { name: /Quyết định của dự án/ })).toBeNull();
     const structuredCard = screen.getByRole('link', { name: /Mở báo cáo How do learning apps engage children/ }).closest('article');
     const textOnlyCard = screen.getByRole('link', { name: /Mở báo cáo Unlinked utility research/ }).closest('article');
-    expect(structuredCard?.querySelector('.report-kind-badge')?.textContent).toBe('Structured');
-    expect(textOnlyCard?.querySelector('.report-kind-badge')?.textContent).toBe('Text-only');
+    expect(structuredCard?.querySelector('.report-kind-badge')?.textContent).toBe('Có cấu trúc');
+    expect(textOnlyCard?.querySelector('.report-kind-badge')?.textContent).toBe('Chỉ văn bản');
     expect(textOnlyCard?.textContent).toContain('Chưa cấu trúc lại');
     fireEvent.change(screen.getByLabelText('Tìm báo cáo'), { target: { value: 'utility' } });
     expect(screen.getByText('Unlinked utility research')).toBeTruthy();
@@ -87,9 +88,9 @@ describe('ChatGPT research intake', () => {
     });
     render(<ReportHistory />);
     expect(await screen.findByRole('heading', { name: 'Báo cáo nghiên cứu' })).toBeTruthy();
-    expect((await screen.findAllByText('Structured')).length).toBeGreaterThanOrEqual(2);
+    expect((await screen.findAllByText('Có cấu trúc')).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Một phát hiện').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Text-only').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Chỉ văn bản').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('2 phát hiện · 1 đối tượng nghiên cứu')).toBeTruthy();
     expect(screen.getByText('1 phát hiện · 0 đối tượng nghiên cứu')).toBeTruthy();
     expect(screen.getByText('Chưa cấu trúc lại')).toBeTruthy();
@@ -100,17 +101,27 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByLabelText('Dự án')).toBeTruthy();
   });
 
-  it('opens project-scoped report import directly from the library CTA', async () => {
-    window.history.replaceState({}, '', '/?projectId=project-qa&action=import');
-    mockFetch((url) => {
+  it('opens a one-step CSV answer import with the research question already attached', async () => {
+    const fetchMock = mockFetch((url, init) => {
       if (url.includes('/api/v1/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (url === '/api/v1/reports' && init.method === 'POST') return { ...report, project_id: 'project-qa' };
       if (url.includes('/api/v1/projects/project-qa/plans')) return { items: [], next_cursor: null, limit: 100 };
       if (url.includes('/api/v1/projects/project-qa')) return { id: 'project-qa', name: 'QA Demo Project', owner: null, category: null, created_at: '2026-10-29', updated_at: '2026-10-29' };
       throw new Error(`Unexpected request ${url}`);
     });
+    window.history.replaceState({}, '', '/?projectId=project-qa&action=import&source=csv&question=Research%20these%20CSV%20products');
     render(<ResearchIntake />);
-    expect(await screen.findByRole('heading', { name: 'Dán một lần, xem kết quả có cấu trúc' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Dán câu trả lời nghiên cứu' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Bắt đầu với câu hỏi sản phẩm' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sao chép yêu cầu cho ChatGPT/ })).toBeNull();
+    expect((screen.getByLabelText('Câu hỏi hoặc tên báo cáo') as HTMLInputElement).value).toBe('Research these CSV products');
     expect(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
+    const post = fetchMock.mock.calls.find(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST');
+    expect(post).toBeTruthy();
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ question: 'Research these CSV products', project_id: 'project-qa', content: report.content });
   });
 
   it('shows the same five reports from the shared library and filters three for Project A and two for Project B', async () => {
@@ -198,7 +209,182 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sao chép yêu cầu cho ChatGPT/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText.mock.calls[0][0]).toContain('do not assume an industry or taxonomy');
-    expect(await screen.findByText(/Prompt đã được sao chép/)).toBeTruthy();
+    expect(await screen.findByText('Chỉ cần một lượt ChatGPT')).toBeTruthy();
+    expect(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' })).toBeTruthy();
+  });
+
+  it('keeps research-again in one v4 flow, requires a distinct new period, and links the saved report to its source', async () => {
+    const project = { id: 'project-qa', name: 'QA Demo Project', owner: null, category: null, created_at: '2026-10-29', updated_at: '2026-10-29' };
+    const previous = { ...report, id: 'old-report', project_id: project.id, question: 'Compare puzzle games', geo: 'US', os: 'Web' as const, research_period: 'Week 44' };
+    const saved = { ...report, id: 'new-report', project_id: project.id, question: previous.question, geo: previous.geo, os: previous.os, research_period: 'Week 45', previous_report_id: previous.id };
+    let submitted: Record<string, unknown> | undefined;
+    mockFetch((url, init) => {
+      if (url.endsWith(`/api/v1/reports/${previous.id}`)) return previous;
+      if (url.includes(`/api/v1/projects/${project.id}/plans`)) return { items: [], next_cursor: null, limit: 100 };
+      if (url.includes(`/api/v1/projects/${project.id}`)) return project;
+      if (url === '/api/v1/reports' && init.method === 'POST') { submitted = JSON.parse(String(init.body)); return saved; }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    window.history.replaceState({}, '', `/?projectId=${project.id}&question=${encodeURIComponent(previous.question)}&geo=US&environment=Web&fromReportId=${previous.id}&action=research-again`);
+
+    render(<ResearchIntake />);
+    expect(await screen.findByRole('heading', { name: 'Cập nhật nghiên cứu cho kỳ mới' })).toBeTruthy();
+    expect(await screen.findByText(/Week 44/)).toBeTruthy();
+    expect((screen.getByLabelText('Bạn muốn nghiên cứu gì?') as HTMLTextAreaElement).value).toBe(previous.question);
+    expect(screen.queryByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' })).toBeNull();
+    expect(screen.queryByLabelText('Các bước đưa nghiên cứu vào PO Hub')).toBeNull();
+    expect(screen.getByLabelText('Dán báo cáo kỳ mới từ ChatGPT')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Kỳ nghiên cứu mới'), { target: { value: 'Week 45' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép lời nhắc' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0][0]).toContain(previous.question);
+    expect(writeText.mock.calls[0][0]).toContain('- Research period: Week 45');
+    expect(await screen.findByText(/Mở ChatGPT, dán và gửi lời nhắc một lần/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Kỳ nghiên cứu mới'), { target: { value: 'Week 44' } });
+    fireEvent.change(screen.getByLabelText('Dán báo cáo kỳ mới từ ChatGPT'), { target: { value: '# Week 45 update\n\nA new observation.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo kỳ mới' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('đang trùng với kỳ cũ');
+    expect(submitted).toBeUndefined();
+
+    fireEvent.change(screen.getByLabelText('Kỳ nghiên cứu mới'), { target: { value: 'Week 45' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo kỳ mới' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/report-updates'));
+    const destination = new URL(window.location.href);
+    expect(destination.searchParams.get('projectId')).toBe(project.id);
+    expect(destination.searchParams.get('before')).toBe(previous.id);
+    expect(destination.searchParams.get('after')).toBe(saved.id);
+    expect(destination.searchParams.get('newReportSaved')).toBe('1');
+    expect(submitted).toMatchObject({ question: previous.question, geo: previous.geo, os: previous.os, research_period: 'Week 45', project_id: project.id, previous_report_id: previous.id, content: '# Week 45 update\n\nA new observation.' });
+  });
+
+  it('runs one Codex request on Enter, previews the answer, then saves it with Codex provenance', async () => {
+    localStorage.setItem('po-hub.codex-research-settings.v1', JSON.stringify({ enabled: true, model_slug: '' }));
+    const fetchMock = mockFetch((url, init) => {
+      if (url === '/api/v1/codex/models') return { available: true, models: [{ slug: 'gpt-codex-mini', display_name: 'Codex Mini', is_default: false, recommended_for_testing: true }], recommended_model_slug: 'gpt-codex-mini', message: null };
+      if (url === '/api/v1/codex/research' && init.method === 'POST') return { content: report.content, model_slug: 'gpt-codex-mini' };
+      if (url.includes('/api/v1/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (url === '/api/v1/reports' && init.method === 'POST') return { ...report, origin: 'codex_cli_research' };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ResearchIntake />);
+    const question = await screen.findByLabelText('Bạn muốn nghiên cứu gì?');
+    fireEvent.change(question, { target: { value: 'Compare kids learning apps' } });
+    await waitFor(() => expect((screen.getByLabelText('Model trả lời') as HTMLSelectElement).value).toBe('gpt-codex-mini'));
+    fireEvent.keyDown(question, { key: 'Enter', shiftKey: false });
+    expect(await screen.findByRole('heading', { name: 'Xem kết quả trước khi lưu' })).toBeTruthy();
+    expect(screen.getByLabelText('Kết quả Codex đã tạo')).toHaveProperty('value', report.content);
+    expect(screen.getByText('Chưa xác minh độc lập')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
+    const run = fetchMock.mock.calls.find(([url, init]) => String(url) === '/api/v1/codex/research' && init?.method === 'POST');
+    expect(JSON.parse(String(run?.[1]?.body))).toMatchObject({ model_slug: 'gpt-codex-mini' });
+    expect(JSON.parse(String(run?.[1]?.body)).prompt).toContain('Compare kids learning apps');
+    const saved = fetchMock.mock.calls.find(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST');
+    expect(JSON.parse(String(saved?.[1]?.body))).toMatchObject({ origin: 'codex_cli_research', content: report.content });
+  });
+
+  it('keeps the question after a Codex timeout and explains the four-minute limit', async () => {
+    localStorage.setItem('po-hub.codex-research-settings.v1', JSON.stringify({ enabled: true, model_slug: '' }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url === '/api/v1/codex/models') return jsonResponse({ available: true, models: [{ slug: 'gpt-codex-mini', display_name: 'Codex Mini', is_default: false, recommended_for_testing: true }], recommended_model_slug: 'gpt-codex-mini', message: null });
+      if (url === '/api/v1/codex/research' && init.method === 'POST') return jsonResponse({ detail: 'Codex timeout. Mã kiểm tra: abcdef123456.' }, 504);
+      if (url.includes('/api/v1/reports?')) return jsonResponse({ items: [], next_cursor: null, limit: 10 });
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ResearchIntake />);
+    const question = await screen.findByLabelText('Bạn muốn nghiên cứu gì?');
+    fireEvent.change(question, { target: { value: 'How does onboarding completion change?' } });
+    await waitFor(() => expect((screen.getByLabelText('Model trả lời') as HTMLSelectElement).value).toBe('gpt-codex-mini'));
+    fireEvent.click(screen.getByRole('button', { name: 'Chạy nghiên cứu bằng Codex' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('giới hạn chờ 4 phút');
+    expect(screen.getByRole('alert').textContent).toContain('abcdef123456');
+    expect(screen.getByLabelText('Bạn muốn nghiên cứu gì?')).toHaveProperty('value', 'How does onboarding completion change?');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/codex/research')).toHaveLength(1);
+  });
+
+  it('labels a research-again Codex answer without asking for another ChatGPT copy step', async () => {
+    window.history.replaceState({}, '', '/?projectId=qa-project&fromReportId=old-report&action=research-again&question=QA%20fixture&geo=US&environment=iOS');
+    localStorage.setItem('po-hub.codex-research-settings.v1', JSON.stringify({ enabled: true, model_slug: 'gpt-codex-mini' }));
+    const fetchMock = mockFetch((url, init) => {
+      if (url === '/api/v1/codex/models') return { available: true, models: [{ slug: 'gpt-codex-mini', display_name: 'Codex Mini', recommended_for_testing: true }], recommended_model_slug: 'gpt-codex-mini' };
+      if (url === '/api/v1/codex/research' && init.method === 'POST') return { content: '# QA ONLY\n\nTotal: 12.', model_slug: 'gpt-codex-mini' };
+      if (url.endsWith('/reports/old-report')) return { ...report, id: 'old-report', project_id: 'qa-project', research_period: 'QA baseline' };
+      if (url.includes('/api/v1/projects/qa-project/plans')) return { items: [], next_cursor: null, limit: 100 };
+      if (url === '/api/v1/projects/qa-project') return { id: 'qa-project', name: 'QA only' };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ResearchIntake />);
+    await waitFor(() => expect((screen.getByLabelText('Model trả lời') as HTMLSelectElement).value).toBe('gpt-codex-mini'));
+    fireEvent.click(screen.getByRole('button', { name: 'Chạy bằng Codex' }));
+    expect(await screen.findByText(/Kết quả Codex đã được điền bên dưới/)).toBeTruthy();
+    expect(screen.queryByText(/Dán toàn bộ câu trả lời của ChatGPT một lần vào đây/)).toBeNull();
+    expect(screen.getByLabelText('Kết quả Codex đã tạo')).toHaveProperty('value', '# QA ONLY\n\nTotal: 12.');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/codex/research')).toHaveLength(1);
+  });
+
+  it('keeps ChatGPT copy available while Codex is enabled but has no selected model', async () => {
+    localStorage.setItem('po-hub.codex-research-settings.v1', JSON.stringify({ enabled: true, model_slug: '' }));
+    const fetchMock = mockFetch((url) => {
+      if (url === '/api/v1/codex/models') return { available: true, models: [{ slug: 'gpt-codex-mini', display_name: 'Codex Mini', is_default: false, recommended_for_testing: true }], recommended_model_slug: null, message: 'Chưa nhận diện model nhẹ trong danh sách.' };
+      if (url.includes('/api/v1/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    render(<ResearchIntake />);
+    const question = await screen.findByLabelText('Bạn muốn nghiên cứu gì?');
+    fireEvent.change(question, { target: { value: 'Compare kids learning apps' } });
+    expect(await screen.findByRole('button', { name: /Sao chép yêu cầu cho ChatGPT/ })).toBeTruthy();
+    fireEvent.keyDown(question, { key: 'Enter', shiftKey: false });
+    expect(await screen.findByText(/Chưa chọn model Codex/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/codex/research')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /Sao chép yêu cầu cho ChatGPT/ }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('heading', { name: 'Dán câu trả lời nghiên cứu' })).toBeTruthy();
+  });
+
+  it('keeps a research-again prompt editable and copies the exact PO-edited text', async () => {
+    localStorage.setItem('po-hub.codex-research-settings.v1', JSON.stringify({ enabled: true, model_slug: 'gpt-codex-mini' }));
+    window.history.replaceState({}, '', '/?projectId=follow-project&question=How%20does%20onboarding%20work%3F&geo=US&environment=iOS&fromReportId=old-report&action=research-again');
+    const previous = { ...report, id: 'old-report', project_id: 'follow-project', question: 'How does onboarding work?', geo: 'US', os: 'iOS' as const, research_period: null };
+    mockFetch((url) => {
+      if (url === '/api/v1/codex/models') return { available: true, models: [{ slug: 'gpt-codex-mini', display_name: 'Codex Mini', recommended_for_testing: true }], recommended_model_slug: 'gpt-codex-mini', message: null };
+      if (url.endsWith('/api/v1/reports/old-report')) return previous;
+      if (url.includes('/api/v1/projects/follow-project/plans')) return { items: [], next_cursor: null, limit: 100 };
+      if (url === '/api/v1/projects/follow-project') return { id: 'follow-project', name: 'Follow-up project', owner: null, category: null, created_at: '2026-01-01', updated_at: '2026-01-02' };
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    render(<ResearchIntake />);
+    expect(await screen.findByText(/Chưa ghi kỳ/)).toBeTruthy();
+    const settings = await screen.findByText(/Model Codex: Codex Mini/);
+    expect(settings.closest('details')?.open).toBe(false);
+    fireEvent.click(settings);
+    expect(screen.getAllByRole('combobox', { name: 'Model trả lời' })).toHaveLength(1);
+    expect((screen.getByRole('combobox', { name: 'Model trả lời' }) as HTMLSelectElement).value).toBe('gpt-codex-mini');
+    expect(screen.getByLabelText('Bạn muốn nghiên cứu gì?')).toHaveProperty('value', 'How does onboarding work?');
+    expect(screen.getByLabelText('Kỳ nghiên cứu mới')).toHaveProperty('value', '');
+    const editor = screen.getByLabelText('Yêu cầu gửi ChatGPT');
+    expect((editor as HTMLTextAreaElement).value).toContain('How does onboarding work?');
+    fireEvent.change(editor, { target: { value: 'PO-edited: compare the February onboarding flow and cite only supplied sources.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép lời nhắc' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('PO-edited: compare the February onboarding flow and cite only supplied sources.'));
+    expect(screen.getByLabelText('Dán báo cáo kỳ mới từ ChatGPT')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Kỳ nghiên cứu mới'), { target: { value: '2026-02' } });
+    expect((screen.getByLabelText('Yêu cầu gửi ChatGPT') as HTMLTextAreaElement).value).toContain('2026-02');
+    expect((screen.getByLabelText('Yêu cầu gửi ChatGPT') as HTMLTextAreaElement).value).not.toContain('PO-edited:');
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép lời nhắc' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(writeText.mock.calls[1][0]).toContain('- Research period: 2026-02');
   });
 
   it('continues a saved project brief into report import and preserves project context', async () => {
@@ -222,7 +408,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     expect((screen.getByLabelText('Bạn muốn nghiên cứu gì?') as HTMLTextAreaElement).value).toBe('How do players use creative tools?');
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
@@ -250,7 +436,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     const file = new File([report.content], 'market-report.md', { type: 'text/markdown' });
     fireEvent.change(screen.getByLabelText('Chọn file .md, .txt hoặc .json'), { target: { files: [file] } });
     expect(await screen.findByText('market-report.md')).toBeTruthy();
@@ -261,7 +447,7 @@ describe('ChatGPT research intake', () => {
     mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     const content = JSON.stringify({ sections: [], entities: [], findings: [] });
     fireEvent.change(screen.getByLabelText('Chọn file .md, .txt hoặc .json'), { target: { files: [new File([content], 'research.json', { type: 'application/json' })] } });
     expect(await screen.findByText('research.json')).toBeTruthy();
@@ -283,7 +469,30 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
+    fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
+    expect(await screen.findByText(/2 tiêu đề.*Định dạng: Markdown/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/reports' && init?.method === 'POST')).toBe(true);
+  });
+
+  it('records the assistant chosen for a pasted answer, so a Claude answer is not labelled as ChatGPT', async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.includes('/reports?')) return { items: [], next_cursor: null, limit: 10 };
+      if (url === '/api/v1/reports' && init.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        expect(body.source_assistant).toBe('claude');
+        expect(body.origin).toBeUndefined();
+        return { ...report, source_assistant: 'claude' };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    render(<ResearchIntake />);
+    await screen.findByText('Chưa có báo cáo nào');
+    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
+    fireEvent.change(screen.getByLabelText('Trợ lý đã viết câu trả lời'), { target: { value: 'claude' } });
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     expect(await screen.findByText(/2 tiêu đề.*Định dạng: Markdown/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
@@ -299,7 +508,7 @@ describe('ChatGPT research intake', () => {
     cleanup();
     window.history.replaceState({}, '', '/reports/saved-report');
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Báo cáo đầy đủ' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Bản gốc' }));
     expect(await screen.findByRole('heading', { name: 'Executive summary' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Câu hỏi còn mở' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Source' }).getAttribute('href')).toBe('https://example.com/');
@@ -330,15 +539,18 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' })).toBeTruthy();
     expect(screen.getByText('Players value quick creative sessions and visible progress.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Phát hiện chính' })).toBeTruthy();
+    expect(screen.getAllByRole('tab')).toHaveLength(6);
+    expect(screen.queryByRole('tab', { name: 'Ghi chú PO trong báo cáo' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Điểm chính' })).toBeTruthy();
     expect(screen.getByText('Tổng quan nghiên cứu')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'Research source' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('heading', { name: 'Bản đồ nghiên cứu' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Liên hệ trong báo cáo' })).toBeTruthy();
+    expect(document.querySelector('.insight-type')?.textContent).toBe('Động lực người dùng');
     expect(document.querySelector('.research-map-entities')?.textContent).toContain('Product A');
     expect(document.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
     expect(document.querySelector('.finding-icon-frame svg')).toBeTruthy();
     expect(screen.getAllByText('1 nguồn tham khảo').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Chưa liên kết bộ dữ liệu định lượng/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Báo cáo chưa cung cấp số liệu định lượng/).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Xem cả 5 điểm chính' })).toBeTruthy();
     expect(screen.queryByText('Takeaway four.')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Xem cả 5 điểm chính' }));
@@ -349,9 +561,9 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Đọc toàn bộ kết luận' }));
     expect(screen.getByRole('button', { name: 'Thu gọn' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByText(/retention|revenue|market size/i)).toBeNull();
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Tổng quan' }), { key: 'ArrowRight' });
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Tóm tắt' }), { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Phát hiện' }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('tab', { name: 'Tổng quan' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Tóm tắt' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: Creative control supports engagement' }));
     expect(await screen.findAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
     expect(document.querySelector('.insight-list-item.active')).toBeNull();
@@ -364,20 +576,61 @@ describe('ChatGPT research intake', () => {
     expect(screen.getAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
   });
 
+  it('hides the relationship map when the report contains no real finding-to-entity links', async () => {
+    const structured = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      parse_status: 'PARSED' as const,
+      research_data: {
+        ...report.research_data,
+        entities: [],
+        findings: [{ key: 'finding-a', finding_type: 'market_structure', title: 'Market context', description: 'A report supplied finding.', related_entities: [], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }],
+      },
+    };
+    mockFetch(() => structured);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: 'Phát hiện chính' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Liên hệ trong báo cáo' })).toBeNull();
+    expect(screen.queryByText('Báo cáo chưa liên kết đối tượng')).toBeNull();
+  });
+
+  it('hides the PO recommendation column when linked findings contain no recommendation', async () => {
+    const structured = {
+      ...report,
+      research_status: 'STRUCTURED_READY' as const,
+      parse_status: 'PARSED' as const,
+      research_data: {
+        ...report.research_data,
+        entities: [{ key: 'entity-a', entity_type: 'product', name: 'Product A', attributes: {}, evidence_references: [] }],
+        findings: [{ key: 'finding-a', finding_type: 'observation', title: 'Supplied finding', description: 'A source-linked finding.', related_entities: ['entity-a'], evidence_references: [], source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null, uncertainty: null, po_implications: null }],
+      },
+    };
+    mockFetch(() => structured);
+    window.history.replaceState({}, '', '/reports/saved-report');
+    render(<ReportViewer reportId="saved-report" />);
+    expect(await screen.findByRole('heading', { name: 'Liên hệ trong báo cáo' })).toBeTruthy();
+    const map = document.querySelector('.research-map-board') as HTMLElement;
+    expect(map.classList.contains('no-recommendations')).toBe(true);
+    expect(map.querySelector('.research-map-columns')?.textContent).not.toContain('Gợi ý cho PO');
+    expect(map.querySelector('.research-map-entities')?.textContent).toContain('Product A');
+  });
+
   it('keeps quantitative controls compact and closed for qualitative reports while retaining the project data path', async () => {
     const qualitative = { ...report, project_id: 'project-qa' };
     mockFetch(() => qualitative);
     render(<ReportViewer reportId="saved-report" />);
     await screen.findByRole('heading', { name: report.question });
 
-    expect(screen.getByText('Nghiên cứu định tính · Chưa liên kết bộ dữ liệu định lượng')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Quản lý dữ liệu' }).getAttribute('href')).toBe('/research?projectId=project-qa&view=data#project-csv-data');
+    expect(screen.getByText('Báo cáo chưa cung cấp số liệu định lượng')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở phân tích CSV' }).getAttribute('href')).toBe('/research?projectId=project-qa&view=csv#project-csv-data');
+    expect(screen.getByText('CSV của dự án nằm ở trang riêng.')).toBeTruthy();
     const disclosure = document.querySelector('.quant-data-details') as HTMLDetailsElement;
     expect(disclosure.open).toBe(false);
     expect(document.querySelector('.quant-readiness-counts')).toBeNull();
     expect(document.querySelector('.analytics-data-selection')).toBeNull();
 
-    fireEvent.click(screen.getByText('Nhập dữ liệu gắn trực tiếp với báo cáo'));
+    fireEvent.click(screen.getByText('Bổ sung số liệu cho báo cáo'));
     expect(disclosure.open).toBe(true);
     expect(screen.getByText(/Báo cáo định tính vẫn dùng được độc lập/)).toBeTruthy();
   });
@@ -402,11 +655,11 @@ describe('ChatGPT research intake', () => {
     expect(screen.getAllByText(/Vị trí trong báo cáo · dòng 19/).length).toBeGreaterThan(0);
     expect(document.querySelector('a[href="https://example.invalid/qa/research-evidence"]')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Bằng chứng' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Nguồn' }));
     expect(await screen.findByRole('heading', { name: 'Tham chiếu nguồn' })).toBeTruthy();
     expect(document.querySelector('a[href="https://example.invalid/qa/research-evidence"]')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Bản gốc' }));
     expect(await screen.findByRole('heading', { name: 'Nội dung nghiên cứu' })).toBeTruthy();
     expect(screen.getByText('Nội dung nghiên cứu')).toBeTruthy();
     expect(document.querySelector('a[href="https://example.invalid/qa/research-evidence"]')).toBeNull();
@@ -435,7 +688,7 @@ describe('ChatGPT research intake', () => {
     expect(summary.querySelector('[data-highlight-kind="period"]')?.textContent).toBe('Q2/2025');
     expect(document.querySelector('.overview-takeaways .takeaway-number')?.textContent).toBe('1');
     expect(document.querySelector('.overview-takeaways .takeaway-copy')?.textContent).toContain('Top 50 DIY');
-    expect(document.querySelector('.finding-card-evidence')?.textContent).toContain('chưa xác minh');
+    expect(document.querySelector('.finding-card-evidence')?.textContent).toContain('Chưa xác minh độc lập');
     fireEvent.click(screen.getByRole('button', { name: 'Xem phát hiện: Reached #5 Top Free Casual' }));
     expect(await screen.findAllByRole('heading', { name: 'Phát hiện' })).toBeTruthy();
     expect(document.querySelector('.insight-detail-panel [data-highlight-kind="rank"]')?.textContent).toBe('#5');
@@ -467,7 +720,8 @@ describe('ChatGPT research intake', () => {
     await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' });
     fireEvent.click(screen.getByText('Thông tin và thao tác liên quan'));
     fireEvent.click(screen.getByRole('button', { name: 'Ghi đánh giá PO' }));
-    expect(screen.getByRole('tab', { name: 'Đánh giá của PO' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Ghi chú của PO trong báo cáo này')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Đánh giá của PO' })).toBeNull();
     fireEvent.change(screen.getByLabelText('Đánh giá của PO cho A report-supplied insight'), { target: { value: 'Test the hypothesis before prioritizing.' } });
     fireEvent.change(screen.getByLabelText('Việc tiếp theo cho A report-supplied insight'), { target: { value: 'Plan a small usability study.' } });
     expect(screen.getByText('Chưa lưu · thay đổi mới chỉ có trên trang này.')).toBeTruthy();
@@ -477,7 +731,8 @@ describe('ChatGPT research intake', () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/benchmark-state') && init?.method === 'PUT')).toBe(true);
     view.unmount();
     render(<ReportViewer reportId="saved-report" />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Đánh giá của PO' }));
+    fireEvent.click(await screen.findByRole('button', { name: '← Quay lại báo cáo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đánh giá của PO' }));
     expect((await screen.findByLabelText('Đánh giá của PO cho A report-supplied insight') as HTMLTextAreaElement).value).toBe('Test the hypothesis before prioritizing.');
     expect((screen.getByLabelText('Việc tiếp theo cho A report-supplied insight') as HTMLTextAreaElement).value).toBe('Plan a small usability study.');
   });
@@ -488,14 +743,15 @@ describe('ChatGPT research intake', () => {
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByRole('heading', { name: 'Kết luận nghiên cứu' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Xem phát hiện: One supplied finding' })).toBeTruthy();
+    expect(document.querySelector('.finding-groups.is-single > .insight-dashboard-list')?.children.length).toBe(1);
     expect(document.querySelector('.results-fact-strip')?.textContent).toContain('1 phát hiện');
-    expect(document.querySelectorAll('.research-map-row')).toHaveLength(1);
-    expect(screen.getByText('Báo cáo chưa liên kết đối tượng')).toBeTruthy();
-    expect(screen.getByText('Báo cáo chưa nêu gợi ý cho PO')).toBeTruthy();
-    expect(document.querySelector('.research-map-connector.is-connected')).toBeNull();
+    expect(document.querySelectorAll('.research-map-row')).toHaveLength(0);
+    expect(screen.queryByText('Báo cáo chưa liên kết đối tượng')).toBeNull();
+    expect(screen.queryByText('Báo cáo chưa nêu gợi ý cho PO')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Liên hệ trong báo cáo' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Câu hỏi còn mở' })).toBeNull();
     expect(screen.getByText('Tổng quan nghiên cứu')).toBeTruthy();
-    expect(screen.getByText('Chưa có nguồn tham khảo · chưa xác minh')).toBeTruthy();
+    expect(screen.getByText('Chưa có nguồn liên kết cho phát hiện này')).toBeTruthy();
   });
 
   it('keeps finding actions available on demand and lets the PO focus and expand explicit map relationships', async () => {
@@ -504,7 +760,7 @@ describe('ChatGPT research intake', () => {
       finding_type: 'observation',
       title: `Supplied finding ${index + 1}`,
       description: `Report description for finding ${index + 1}.`,
-      related_entities: index === 0 ? ['subject-a'] : [],
+      related_entities: ['subject-a'],
       evidence_references: index === 0 ? ['https://example.com/'] : [],
       source_locations: [], scope: {}, evidence_status: 'unverified', confidence: null,
       uncertainty: null, po_implications: index === 0 ? 'Review the supplied workflow.' : null,
@@ -534,15 +790,15 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('button', { name: 'Xem tất cả mối liên hệ · 5' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Xem tất cả mối liên hệ/ }));
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(5);
-    expect(map.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(2);
+    expect(map.querySelectorAll('.research-map-connector.is-connected')).toHaveLength(6);
 
     const focusButton = [...map.querySelectorAll<HTMLButtonElement>('.research-map-finding')].find((button) => button.textContent?.includes('Supplied finding 4'))!;
     fireEvent.click(focusButton);
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(1);
     expect(focusButton.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText(/Đang xem: Supplied finding 4/)).toBeTruthy();
-    expect(map.querySelector('.research-map-row')?.classList.contains('is-unlinked')).toBe(true);
-    expect(map.querySelector('.research-map-row .research-map-connector.is-connected')).toBeNull();
+    expect(map.querySelector('.research-map-row')?.classList.contains('is-focused')).toBe(true);
+    expect(map.querySelectorAll('.research-map-row .research-map-connector.is-connected')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Bỏ chọn' }));
     expect(map.querySelectorAll('[role="listitem"]')).toHaveLength(5);
     fireEvent.click(screen.getByRole('button', { name: 'Thu gọn mối liên hệ' }));
@@ -556,7 +812,7 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByText('Báo cáo văn bản · Bổ sung kết quả có cấu trúc')).toBeTruthy();
     fireEvent.click(screen.getByText('Báo cáo văn bản · Bổ sung kết quả có cấu trúc'));
     expect(screen.getByRole('button', { name: 'Tạo prompt cho ChatGPT' })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: 'Phát hiện' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Phát hiện' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Mở đánh giá PO' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Câu hỏi còn mở' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Số liệu trong báo cáo' })).toBeNull();
@@ -570,7 +826,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByText('Báo cáo cần được cấu trúc')).toBeTruthy();
     expect(screen.queryByText('Tổng quan nghiên cứu')).toBeNull();
     expect(screen.queryByText('Bước tiếp theo')).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Bản gốc' })).toBeTruthy();
   });
 
   it('places report sections beside the reading area and keeps sources and PO context accessible', async () => {
@@ -582,7 +838,7 @@ describe('ChatGPT research intake', () => {
     expect(screen.getByRole('heading', { name: 'Nguồn trong báo cáo' })).toBeTruthy();
     expect(screen.getByText('Báo cáo chưa cung cấp đường dẫn nguồn.')).toBeTruthy();
     expect(screen.getByText('Báo cáo cần được cấu trúc')).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Báo cáo đầy đủ' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Bản gốc' }));
     expect(await screen.findByRole('navigation', { name: 'Mục lục báo cáo' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Executive summary' })).toBeTruthy();
   });
@@ -633,7 +889,7 @@ describe('ChatGPT research intake', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Phát hiện' }));
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Finding one' })).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Các phát hiện trong báo cáo' })).toBeNull();
-    expect(screen.getByRole('button', { name: /Đánh giá phát hiện này/ })).toBeTruthy();
+    expect(screen.getByText('Ghi chú PO trong báo cáo')).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Đối tượng' }));
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Subject one' })).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Đối tượng trong báo cáo' })).toBeNull();
@@ -683,9 +939,10 @@ describe('ChatGPT research intake', () => {
     expect(await screen.findByRole('heading', { name: '[QA ONLY] Saved finding' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Gợi ý trong báo cáo' })).toBeTruthy();
     expect(screen.getByText('Đây là nội dung do báo cáo cung cấp, chưa phải quyết định của PO.')).toBeTruthy();
-    expect(screen.getByText('Đánh giá')).toBeTruthy();
+    fireEvent.click(screen.getByText(/Ghi chú PO trong báo cáo/));
+    expect(screen.getByText('Nhận định của tôi')).toBeTruthy();
     expect(screen.getByText('Keep this direction in the next review.')).toBeTruthy();
-    expect(screen.getByText('Ghi chú PO')).toBeTruthy();
+    expect(screen.getByText('Ghi chú')).toBeTruthy();
     expect(screen.getByText('Discuss with research.')).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Các nguồn tham khảo' })).toBeNull();
   });
@@ -722,9 +979,12 @@ describe('ChatGPT research intake', () => {
     render(<ReportViewer reportId="saved-report" />);
     expect(await screen.findByText('Ghi chú báo cáo đã lưu')).toBeTruthy();
     expect(screen.queryByText('Quyết định PO đã lưu')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Mở ghi chú báo cáo' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Ghi chú báo cáo' }));
+    expect(screen.getByRole('button', { name: 'Ghi chú PO trong báo cáo' })).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual(['Tóm tắt', 'Phát hiện', 'Đối tượng', 'So sánh', 'Nguồn', 'Bản gốc']);
+    expect(screen.queryByRole('tab', { name: 'Ghi chú báo cáo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ghi chú PO trong báo cáo' }));
     expect(await screen.findByRole('heading', { name: 'Ghi chú cho báo cáo này' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '← Quay lại báo cáo' })).toBeTruthy();
     expect(screen.getByText('Quyết định PO chính thức được lưu riêng trong dự án.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Lưu ghi chú báo cáo' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Ghi chú báo cáo cho finding-a'), { target: { value: 'Ghi chú được lưu trong report.' } });
@@ -1170,9 +1430,9 @@ describe('ChatGPT research intake', () => {
     const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: '# Report\nContent' } });
-    fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: '   ' } });
+    fireEvent.change(screen.getByLabelText('Câu hỏi hoặc tên báo cáo'), { target: { value: '   ' } });
     expect(screen.getByText('Cần có câu hỏi nghiên cứu.')).toBeTruthy();
     expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/reports?'))).toBe(true);
   });
@@ -1188,7 +1448,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Structured research intake test' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: content } });
     expect(screen.getByText(/Định dạng: JSON/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
@@ -1200,7 +1460,7 @@ describe('ChatGPT research intake', () => {
     const fetchMock = mockFetch(() => ({ items: [], next_cursor: null, limit: 10 }));
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     const raw = '# Research\n\n```json\n{bad json\n```';
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: raw } });
     expect((await screen.findByRole('alert')).textContent).toContain('JSON không hợp lệ tại dòng 1');
@@ -1220,7 +1480,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     const save = screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' });
     fireEvent.click(save);
@@ -1240,7 +1500,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Báo cáo không hợp lệ.');
@@ -1257,7 +1517,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     const raw = '# Detailed research\n\nReport body stays available after a backend error.';
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: raw } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
@@ -1279,7 +1539,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' }));
     await waitFor(() => expect(window.location.pathname).toBe('/reports/saved-report'));
@@ -1310,7 +1570,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     fireEvent.click(screen.getByRole('button', { name: 'Thị trường (GEO)' }));
     fireEvent.click(screen.getByLabelText('Việt Nam (VN)'));
@@ -1332,7 +1592,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: 'Question' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: 'Report body' } });
     fireEvent.click(screen.getByRole('button', { name: 'Thị trường (GEO)' }));
     fireEvent.click(screen.getByLabelText('Khác / tự nhập'));
@@ -1357,7 +1617,7 @@ describe('ChatGPT research intake', () => {
     render(<ResearchIntake />);
     await screen.findByText('Chưa có báo cáo nào');
     fireEvent.change(screen.getByLabelText('Bạn muốn nghiên cứu gì?'), { target: { value: report.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Nhập báo cáo ChatGPT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tôi đã có kết quả · nhập vào PO Hub' }));
     fireEvent.change(screen.getByLabelText('Dán kết quả nghiên cứu từ ChatGPT'), { target: { value: report.content } });
     const save = screen.getByRole('button', { name: 'Lưu báo cáo vào dự án' });
     fireEvent.click(save);

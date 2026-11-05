@@ -17,8 +17,9 @@ class ResearchProjectCreate(APIModel):
     name: str = Field(min_length=1, max_length=200)
     owner: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=120)
+    topic: str | None = Field(default=None, max_length=300)
 
-    @field_validator("name", "owner", "category")
+    @field_validator("name", "owner", "category", "topic")
     @classmethod
     def strip_text(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
@@ -35,6 +36,7 @@ class ResearchProjectUpdate(APIModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     owner: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=120)
+    topic: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")
     def validate_update(self) -> "ResearchProjectUpdate":
@@ -48,6 +50,8 @@ class ResearchProjectUpdate(APIModel):
             self.owner = self.owner.strip()
         if self.category is not None:
             self.category = self.category.strip()
+        if self.topic is not None:
+            self.topic = self.topic.strip() or None
         return self
 
 
@@ -56,6 +60,7 @@ class ResearchProjectRead(APIModel):
     name: str
     owner: str | None
     category: str | None
+    topic: str | None = None
     workspace_state_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
@@ -499,6 +504,77 @@ class OpportunityDecisionTarget(APIModel):
         return self
 
 
+class TrackedObservationReference(APIModel):
+    """Immutable source snapshot explicitly selected for one saved PO decision."""
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: str = Field(min_length=1, max_length=36)
+    report_content_sha256: str = Field(min_length=64, max_length=64)
+    observation_key: str = Field(min_length=1, max_length=2048)
+    metric_identity_key: str = Field(min_length=1, max_length=2048)
+    metric_id: str = Field(min_length=1, max_length=200)
+    metric_definition: str = Field(min_length=1, max_length=1000)
+    value: float
+    unit: str = Field(min_length=1, max_length=100)
+    period_start: date
+    period_end: date
+    source_reference: str | None = Field(default=None, max_length=2048)
+    evidence_reference: str | None = Field(default=None, max_length=2048)
+    selected_at: datetime
+
+    @model_validator(mode="after")
+    def validate_observation_reference(self) -> "TrackedObservationReference":
+        if self.period_end < self.period_start:
+            raise ValueError("Tracked observation period end must not precede its start.")
+        if not (self.source_reference or self.evidence_reference):
+            raise ValueError("A tracked observation must retain at least one source reference.")
+        return self
+
+
+class TrackedObservationSelection(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=1)
+    report_id: str = Field(min_length=1, max_length=36)
+    report_content_sha256: str = Field(min_length=64, max_length=64)
+    observation_key: str = Field(min_length=1, max_length=2048)
+
+
+class ManualTrackingUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=36)
+    observed_on: date
+    content: str = Field(min_length=1, max_length=20_000)
+    source_note: str | None = Field(default=None, max_length=10_000)
+    source_title: str | None = Field(default=None, max_length=500)
+    source_url: str | None = Field(default=None, max_length=2048)
+    supersedes_id: str | None = Field(default=None, max_length=36)
+    recorded_at: datetime
+
+    @field_validator("content", "source_note", "source_title", "source_url")
+    @classmethod
+    def strip_manual_update_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("content")
+    @classmethod
+    def require_manual_update_content(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Update content must not be blank.")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def require_http_manual_source_url(cls, value: str | None) -> str | None:
+        if not value:
+            return value
+        from urllib.parse import urlsplit
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Source URL must start with http:// or https://.")
+        return value
+
+
 class OpportunityDecisionUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(default=0, ge=0)
@@ -507,6 +583,8 @@ class OpportunityDecisionUpdate(APIModel):
     dataset_content_sha256: str | None = Field(default=None, min_length=64, max_length=64)
     source_entity_id: str | None = Field(default=None, min_length=1, max_length=240)
     decision_target: OpportunityDecisionTarget | None = None
+    tracked_observation_reference: TrackedObservationReference | None = None
+    workflow_status: Literal["not_started", "researching", "waiting_for_data", "evaluating", "completed", "paused"] | None = None
     decision_status: Literal["investigate", "benchmark", "experiment", "implementation_candidate", "hold", "reject"] | None = None
     rationale: str = Field(default="", max_length=8000)
     supporting_evidence: list[OpportunityEvidenceReference] = Field(default_factory=list, max_length=100)
@@ -516,6 +594,7 @@ class OpportunityDecisionUpdate(APIModel):
     priority: Literal["high", "medium", "low", "not_assessed"] = "not_assessed"
     review_date: date | None = None
     next_action: str = Field(default="", max_length=4000)
+    manual_updates: list[ManualTrackingUpdate] | None = Field(default=None, max_length=200)
 
     @model_validator(mode="after")
     def unique_dimensions_and_questions(self) -> "OpportunityDecisionUpdate":
@@ -528,6 +607,9 @@ class OpportunityDecisionUpdate(APIModel):
             raise ValueError("Assessment dimensions must be unique.")
         if any(not question.strip() or len(question) > 1000 for question in self.open_questions):
             raise ValueError("Open questions must be non-blank and at most 1000 characters.")
+        update_ids = [item.id for item in self.manual_updates or []]
+        if len(update_ids) != len(set(update_ids)):
+            raise ValueError("Manual tracking update IDs must be unique.")
         if self.decision_status == "reject" and not self.rationale.strip():
             raise ValueError("A rejection needs a PO-written reason in rationale.")
         return self
@@ -896,8 +978,12 @@ class ImportedReportCreate(APIModel):
     os: str = Field(min_length=1, max_length=100)
     research_period: str | None = Field(default=None, max_length=200)
     content: str = Field(min_length=1, max_length=2_000_000)
+    origin: Literal["chatgpt_user_import", "codex_cli_research"] = "chatgpt_user_import"
+    # Which assistant wrote a pasted answer; ignored for Codex runs, which always record codex.
+    source_assistant: Literal["chatgpt", "claude", "other"] | None = None
     structured_json: str | None = Field(default=None, max_length=2_000_000)
     project_id: str | None = Field(default=None, min_length=1, max_length=36)
+    previous_report_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @field_validator("research_period")
     @classmethod
@@ -926,15 +1012,52 @@ class ImportedReportCreate(APIModel):
         return value
 
 
+class ComparisonFindingReview(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    review_type: Literal["finding", "tracked_observation"] = "finding"
+    before_report_id: str = Field(min_length=1, max_length=36)
+    before_item_key: str = Field(min_length=1, max_length=120)
+    after_item_key: str = Field(min_length=1, max_length=120)
+    decision: Literal["same", "different", "reviewed"]
+    candidate_id: str | None = Field(default=None, min_length=1, max_length=100)
+    observation_key: str | None = Field(default=None, min_length=1, max_length=2048)
+    saved_at: datetime
+
+    @model_validator(mode="after")
+    def validate_review_kind(self) -> "ComparisonFindingReview":
+        if self.review_type == "finding":
+            if self.decision not in {"same", "different"} or self.candidate_id or self.observation_key:
+                raise ValueError("Finding identity reviews require a same/different decision and no tracking observation fields.")
+        elif self.decision != "reviewed" or not self.candidate_id or not self.observation_key:
+            raise ValueError("Tracked observation reviews require a candidate, observation identity, and reviewed status.")
+        return self
+
+
+class ComparisonFindingReviewsUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    reviews: list[ComparisonFindingReview] = Field(max_length=500)
+
+    @model_validator(mode="after")
+    def unique_pairs(self) -> "ComparisonFindingReviewsUpdate":
+        pairs = [(item.review_type, item.before_report_id, item.before_item_key, item.after_item_key,
+                  item.candidate_id, item.observation_key) for item in self.reviews]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("Finding comparison review pairs must be unique.")
+        return self
+
+
 class ImportedReportSummary(APIModel):
     id: str
     project_id: str | None = None
+    previous_report_id: str | None = None
     question: str
     geo: str
     os: str
     research_period: str | None
     content_sha256: str
     origin: str
+    source_assistant: str | None = None
+    source_selection: dict[str, Any] | None = None
     imported_at: datetime
     verification_status: str = "unverified"
     parse_status: str = "NEEDS_STRUCTURING"
@@ -967,8 +1090,8 @@ class ImportedReportSummary(APIModel):
         result = {
             field: getattr(value, field)
             for field in (
-                "id", "project_id", "question", "geo", "os", "research_period",
-                "content_sha256", "origin", "imported_at",
+                "id", "project_id", "previous_report_id", "question", "geo", "os", "research_period",
+                "content_sha256", "origin", "source_assistant", "source_selection", "imported_at",
             )
         }
         result.update(
@@ -1071,9 +1194,26 @@ class ImportedReportRead(ImportedReportSummary):
     extraction_error: str | None
     benchmark_selections: list[BenchmarkSelection]
     benchmark_workspace: BenchmarkWorkspaceRead
+    comparison_reviews: list[ComparisonFindingReview] = Field(default_factory=list)
     structured_update_available: bool = False
     orphaned_benchmark_selections: list[BenchmarkSelection] = Field(default_factory=list)
     orphaned_benchmark_entries: list[BenchmarkWorkspaceEntry] = Field(default_factory=list)
+
+
+class ReportCsvSelectionRow(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_row: int = Field(ge=1, le=1_000_000)
+    name: str = Field(min_length=1, max_length=300)
+
+
+class ReportCsvSelectionUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(min_length=1, max_length=36)
+    lens: Literal["downloads", "revenue", "growth"]
+    lens_label: str = Field(min_length=1, max_length=40)
+    rows: list[ReportCsvSelectionRow] = Field(min_length=1, max_length=10)
 
 
 class ImportedReportCreated(ImportedReportRead):
@@ -1153,7 +1293,7 @@ class DatasetMetadataChange(APIModel):
     group_key: str = Field(min_length=1, max_length=64)
     field: Literal["geo", "platform", "methodology", "unit", "period_start", "period_end", "snapshot_date", "period_semantics", "granularity", "source_reference"]
     value: str | None = Field(default=None, max_length=2048)
-    basis: Literal["provider_documentation", "po_unverified", "unknown"]
+    basis: Literal["provider_documentation", "po_confirmed", "po_unverified", "unknown"]
     source_url: str | None = Field(default=None, max_length=2048)
     source_excerpt: str = Field(default="", max_length=4000)
     attested: bool = False

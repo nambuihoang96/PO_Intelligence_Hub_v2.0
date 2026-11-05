@@ -90,3 +90,5 @@
 @media (prefers-reduced-motion: reduce) {
   .report-library-card { transition: none; }
 }
+.report-research-again { display: inline-flex; min-height: 40px; align-items: center; padding: 0 14px; color: #654590; font-size: 14px; font-weight: 650; text-decoration: none; }
+.report-research-again:focus-visible { outline: 3px solid #7b5aa6; outline-offset: 2px; border-radius: 7px; }

@@ -1,12 +1,17 @@
 export type ReportSummary = {
   id: string;
   project_id?: string | null;
+  previous_report_id?: string | null;
   question: string;
   geo: string;
   os: string;
   research_period: string | null;
   content_sha256: string;
-  origin: 'chatgpt_user_import';
+  origin: 'chatgpt_user_import' | 'codex_cli_research';
+  // Which assistant wrote a pasted answer. Null for reports saved before this was recorded.
+  source_assistant?: 'chatgpt' | 'claude' | 'codex' | 'other' | null;
+  // Link to the saved CSV and the top games shown with it. Null for reports without a link.
+  source_selection?: ReportCsvSelection | null;
   imported_at: string;
   verification_status: 'unverified';
   parse_status?: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING';
@@ -57,7 +62,7 @@ export type QuantitativeObservation = {
   validation_reasons: string[];
   source_validation_reasons?: string[];
   metadata_validation_reasons?: string[];
-  metadata_provenance?: Record<string, { basis: 'csv' | 'provider_documentation' | 'po_unverified' | 'unknown'; original_value?: string | null; value?: string | null; source_url?: string | null; source_excerpt?: string; confirmed_at?: string | null }>;
+  metadata_provenance?: Record<string, { basis: 'csv' | 'provider_documentation' | 'po_confirmed' | 'po_unverified' | 'unknown'; original_value?: string | null; value?: string | null; source_url?: string | null; source_excerpt?: string; confirmed_at?: string | null }>;
   report_compatibility_reasons?: string[];
   report_compatibility?: 'compatible' | 'incompatible' | 'unknown';
   scope_compatible?: boolean | null;
@@ -68,6 +73,8 @@ export type QuantitativeObservation = {
   dataset_comparison_ready?: boolean;
   comparison_ready?: boolean;
   source_row_number?: number | null;
+  source_publisher_name?: string | null;
+  source_release_date?: string | null;
 };
 export type QuantitativeDataset = {
   id: string; report_id: string | null; project_id?: string | null; filename: string; content_sha256: string;
@@ -83,13 +90,20 @@ export type QuantitativeDataset = {
 export type QuantitativeDatasetPage = { items: QuantitativeDataset[]; next_cursor: string | null; limit: number };
 export type MetadataField = { value: string | null; original_value: string | null; original_basis: string; basis: string; source_url: string | null; source_excerpt: string; confirmed_at: string | null };
 export type DatasetMetadata = { dataset_id: string; report_id: string | null; project_id?: string | null; filename: string; content_sha256: string; revision: number; groups: { key: string; metric: string; observations: number; fields: Record<string, MetadataField> }[]; history: { field: string; recorded_at: string; next: { value: string | null; basis: string; source_url: string | null } }[] };
-export type MetadataChange = { group_key: string; field: string; value: string | null; basis: 'provider_documentation' | 'po_unverified' | 'unknown'; source_url: string | null; source_excerpt: string; attested: boolean; replace_existing: boolean };
+export type MetadataChange = { group_key: string; field: string; value: string | null; basis: 'provider_documentation' | 'po_confirmed' | 'po_unverified' | 'unknown'; source_url: string | null; source_excerpt: string; attested: boolean; replace_existing: boolean };
 export type BenchmarkSelection = { item_type: 'entity' | 'finding' | 'dimension'; item_key: string };
 export type BenchmarkWorkspaceEntry = BenchmarkSelection & { po_assessment: string; notes: string; next_action: string; dimension_assessments: Record<string, string>; observation_finding_links?: Record<string, string[]> };
 export type BenchmarkWorkspace = { custom_dimensions: string[]; entries: BenchmarkWorkspaceEntry[] };
-export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY'; research_contract_version?: 'po_research_v1'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
+export type ComparisonFindingReview = { review_type?: 'finding'; before_report_id: string; before_item_key: string; after_item_key: string; decision: 'same' | 'different'; saved_at: string }
+  | { review_type: 'tracked_observation'; before_report_id: string; before_item_key: string; after_item_key: string; decision: 'reviewed'; candidate_id: string; observation_key: string; saved_at: string };
+export type ImportedReport = ReportSummary & { content: string; parse_status: 'PARSED' | 'PARTIAL' | 'NEEDS_STRUCTURING'; research_status?: 'STRUCTURED_READY' | 'STRUCTURED_PARTIAL' | 'TEXT_ONLY'; research_contract_version?: 'po_research_v1'; research_data: ResearchData; extraction_error: string | null; benchmark_selections: BenchmarkSelection[]; benchmark_workspace: BenchmarkWorkspace; comparison_reviews?: ComparisonFindingReview[]; structured_update_available?: boolean; orphaned_benchmark_selections?: BenchmarkSelection[]; orphaned_benchmark_entries?: BenchmarkWorkspaceEntry[]; duplicate?: boolean };
 export type ReportPage = { items: ReportSummary[]; next_cursor: string | null; limit: number };
-export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { project_id?: string | null; content: string; structured_json?: string };
+export type ReportCsvSelection = { dataset_id: string; dataset_filename: string; dataset_content_sha256?: string; lens: 'downloads' | 'revenue' | 'growth'; lens_label: string; rows: { source_row: number; name: string }[] };
+
+export type ReportInput = Pick<ReportSummary, 'question' | 'geo' | 'os' | 'research_period'> & { project_id?: string | null; previous_report_id?: string | null; content: string; structured_json?: string; origin?: ReportSummary['origin']; source_assistant?: 'chatgpt' | 'claude' | 'other' | null };
+export type CodexResearchModel = { slug: string; display_name: string; is_default: boolean; recommended_for_testing: boolean };
+export type CodexResearchModels = { available: boolean; models: CodexResearchModel[]; recommended_model_slug: string | null; message: string | null };
+export type CodexResearchResult = { content: string; model_slug: string };
 export type QuantitativeMetricColumnMapping = { column: string; metric_id: string; metric_definition: string; unit?: string | null; methodology?: string | null };
 export type QuantitativeDatasetInput = { filename: string; csv_content: string; field_mapping: Record<string, string>; entity_mappings?: Record<string, string>; metric_mappings?: QuantitativeMetricColumnMapping[]; explicit_values?: Record<string, string> };
 export type QuantitativeDatasetPreview = {
@@ -139,7 +153,7 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): 
       headers: { 'Content-Type': 'application/json', ...init?.headers },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw new Error('Yêu cầu quá thời gian chờ 30 giây. Nội dung vẫn được giữ; hãy kiểm tra backend rồi bấm thử lại. Hệ thống không tự gửi lại.');
+    if (error instanceof DOMException && error.name === 'AbortError') throw new Error(`Yêu cầu quá thời gian chờ ${Math.round(timeoutMs / 1000)} giây. Nội dung vẫn được giữ; hãy kiểm tra backend rồi bấm thử lại. Hệ thống không tự gửi lại.`);
     throw new Error('Không kết nối được tới backend. Nội dung vẫn được giữ; hãy kiểm tra ứng dụng local rồi thử lại. Hệ thống không tự gửi lại.');
   } finally {
     window.clearTimeout(timeout);
@@ -149,6 +163,10 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): 
   const apiError = body?.error;
   const detail = apiError?.message ?? body?.detail?.[0]?.msg ?? body?.detail ?? body?.message;
   if (!response.ok) {
+    if (response.status === 504 && url.endsWith('/api/v1/codex/research')) {
+      const reference = typeof detail === 'string' ? detail.match(/Mã kiểm tra: ([a-f0-9]{12})/)?.[1] : null;
+      throw new Error('Codex chưa trả lời trong giới hạn chờ 4 phút. Câu hỏi vẫn được giữ và hệ thống không tự gửi lại. ' + (reference ? 'Mã kiểm tra: ' + reference + '. Log backend ghi giai đoạn xử lý; chưa kết luận nguyên nhân chỉ từ timeout.' : 'Nguyên nhân cụ thể của lần chờ này chưa được ghi nhận.'));
+    }
     if (response.status === 404 && /\/api\/v1\/reports\/[^/]+\/benchmark-state(?:\?|$)/.test(url)) {
       const error = new Error('Benchmark was not saved. The local backend may be outdated. Your selection and PO notes are still on this screen; close the running PO Hub windows, reopen run.bat, then try again.') as Error & { diagnostics?: string };
       error.diagnostics = `HTTP 404 · ${url}`;
@@ -172,8 +190,14 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 30_000): 
 
 export const reportApi = {
   import: (input: ReportInput) => request<ImportedReport>('/api/v1/reports', { method: 'POST', body: JSON.stringify(input) }),
+  codexModels: () => request<CodexResearchModels>('/api/v1/codex/models', undefined, 20_000),
+  runCodexResearch: (input: { model_slug: string; prompt: string; allow_web_search?: boolean }) => request<CodexResearchResult>('/api/v1/codex/research', { method: 'POST', body: JSON.stringify(input) }, 270_000),
   list: (cursor?: string) => request<ReportPage>(`/api/v1/reports?limit=10${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  listProject: (projectId: string, cursor?: string) => request<ReportPage>(`/api/v1/reports?limit=100&project_id=${encodeURIComponent(projectId)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+  // The server reads the filename and hash from the saved dataset; only the selection itself is sent.
+  updateCsvSelection: (id: string, input: ReportCsvSelection) => request<ReportSummary>(`/api/v1/reports/${encodeURIComponent(id)}/csv-selection`, { method: 'PUT', body: JSON.stringify({ dataset_id: input.dataset_id, lens: input.lens, lens_label: input.lens_label, rows: input.rows }) }),
   get: (id: string) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}`),
+  updateComparisonReviews: (id: string, reviews: ComparisonFindingReview[]) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/comparison-reviews`, { method: 'PUT', body: JSON.stringify({ reviews }) }),
   updateBenchmarkSelections: (id: string, selections: BenchmarkSelection[]) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/benchmark-selections`, { method: 'PUT', body: JSON.stringify({ selections }) }),
   reprocess: (id: string) => request<ImportedReport & { reprocessed: boolean; message: string }>(`/api/v1/reports/${encodeURIComponent(id)}/reprocess`, { method: 'POST' }),
   updateStructuredData: (id: string, research_data: ResearchData) => request<ImportedReport>(`/api/v1/reports/${encodeURIComponent(id)}/structured-data`, { method: 'PUT', body: JSON.stringify({ research_data }) }),

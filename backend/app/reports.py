@@ -2,6 +2,7 @@ import hashlib
 import json
 import csv
 import io
+from datetime import date
 from types import SimpleNamespace
 from typing import Annotated
 
@@ -11,15 +12,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import get_session
-from backend.app.models import ImportedResearchReport, QuantitativeDataset, ResearchProject, new_id
-from backend.app.quantitative import assess_observation_readiness, assess_report_observations, csv_digest, detect_csv_delimiter, parse_csv_observations
+from backend.app.models import ImportedResearchReport, POOpportunityDecision, QuantitativeDataset, ResearchProject, new_id
+from backend.app.quantitative import _csv_cell, assess_observation_readiness, assess_report_observations, csv_digest, detect_csv_delimiter, filename_period_warnings, future_date_warnings, growth_exceeds_absolute_warnings, parse_csv_observations
 from backend.app.dataset_metadata import effective_observations, metadata_view, review_state, updated_review
 from backend.app.research_data import ResearchInputValidationError, extract_unstructured, normalize_report
 from backend.app.schemas import (
+    ReportCsvSelectionUpdate,
     BenchmarkSelectionsUpdate,
     BenchmarkStateUpdate,
     BenchmarkWorkspaceRead,
     BenchmarkWorkspaceUpdate,
+    ComparisonFindingReviewsUpdate,
+    ComparisonFindingReview,
     ImportedReportCreate,
     ImportedReportCreated,
     ImportedReportRead,
@@ -82,6 +86,7 @@ def _read(report: ImportedResearchReport, *, duplicate: bool = False, structured
         extraction_error=report.extraction_error,
         benchmark_selections=report.benchmark_selections_json,
         benchmark_workspace=report.benchmark_workspace_json or {},
+        comparison_reviews=report.comparison_review_json or [],
         orphaned_benchmark_selections=_orphaned_selections(report),
         orphaned_benchmark_entries=[
             item for item in (report.benchmark_workspace_json or {}).get("entries", [])
@@ -98,6 +103,9 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
     project = session.get(ResearchProject, payload.project_id) if payload.project_id else None
     if payload.project_id and project is None:
         raise HTTPException(status_code=404, detail={"code": "PROJECT_NOT_FOUND", "message": "Research workspace was not found."})
+    previous_report = session.get(ImportedResearchReport, payload.previous_report_id) if payload.previous_report_id else None
+    if payload.previous_report_id and (previous_report is None or project is None or previous_report.project_id != project.id):
+        raise HTTPException(status_code=422, detail={"code": "INVALID_PREVIOUS_REPORT", "message": "The comparison report must belong to the same research workspace."})
     digest = hashlib.sha256(payload.content.encode("utf-8")).hexdigest()
     try:
         research_data, parse_status, extraction_error = normalize_report(payload.content, payload.structured_json)
@@ -138,6 +146,7 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
 
     report = ImportedResearchReport(
         project_id=project.id if project else None,
+        previous_report_id=previous_report.id if previous_report else None,
         question=payload.question,
         geo=payload.geo,
         os=payload.os,
@@ -148,7 +157,8 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
         extraction_error=extraction_error,
         benchmark_selections_json=[],
         content_sha256=digest,
-        origin="chatgpt_user_import",
+        origin=payload.origin,
+        source_assistant="codex" if payload.origin == "codex_cli_research" else payload.source_assistant,
     )
     session.add(report)
     try:
@@ -165,8 +175,12 @@ def import_report(payload: ImportedReportCreate, response: Response, session: Se
 
 
 @router.get("", response_model=Page[ImportedReportSummary])
-def list_reports(session: SessionDependency, cursor: str | None = None, limit: LIMIT = 20) -> Page[ImportedReportSummary]:
-    query = select(ImportedResearchReport).order_by(
+def list_reports(session: SessionDependency, cursor: str | None = None, limit: LIMIT = 20,
+                project_id: str | None = None) -> Page[ImportedReportSummary]:
+    query = select(ImportedResearchReport)
+    if project_id:
+        query = query.where(ImportedResearchReport.project_id == project_id)
+    query = query.order_by(
         ImportedResearchReport.imported_at.desc(), ImportedResearchReport.id.desc()
     )
     if cursor:
@@ -197,6 +211,194 @@ def get_report(report_id: str, session: SessionDependency) -> ImportedReportRead
     return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
 
 
+@router.put("/{report_id}/csv-selection", response_model=ImportedReportSummary, responses={404: {"description": "Report or dataset not found"}, 422: {"description": "Dataset belongs to another project"}})
+def update_report_csv_selection(report_id: str, payload: ReportCsvSelectionUpdate, session: SessionDependency) -> ImportedReportSummary:
+    """Record which saved CSV dataset and top-N games a report refers to. The report text is never changed."""
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    dataset = session.get(QuantitativeDataset, payload.dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail={"code": "DATASET_NOT_FOUND", "message": "CSV dataset was not found."})
+    if not report.project_id or dataset.project_id != report.project_id:
+        raise HTTPException(status_code=422, detail={"code": "DATASET_OTHER_PROJECT", "message": "The CSV must belong to the same project as the report."})
+    report.source_selection = {
+        "dataset_id": dataset.id,
+        "dataset_filename": dataset.filename,
+        "dataset_content_sha256": dataset.content_sha256,
+        "lens": payload.lens,
+        "lens_label": payload.lens_label,
+        "rows": [row.model_dump() for row in payload.rows],
+    }
+    session.commit()
+    session.refresh(report)
+    return ImportedReportSummary.model_validate(report)
+
+
+@router.put("/{report_id}/comparison-reviews", response_model=ImportedReportRead)
+def update_comparison_reviews(report_id: str, payload: ComparisonFindingReviewsUpdate, session: SessionDependency) -> ImportedReportRead:
+    report = session.get(ImportedResearchReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "REPORT_NOT_FOUND", "message": "Imported report was not found."})
+    stored_reviews_raw = list(report.comparison_review_json or [])
+    stored_reviews = [ComparisonFindingReview.model_validate(item).model_dump(mode="json") for item in stored_reviews_raw]
+    submitted_reviews = [item.model_dump(mode="json") for item in payload.reviews]
+    # Comparison decisions and seen acknowledgements are an append-only log. Requiring
+    # the exact current prefix also makes stale-tab writes visible instead of losing history.
+    if len(submitted_reviews) < len(stored_reviews) or submitted_reviews[:len(stored_reviews)] != stored_reviews:
+        raise HTTPException(status_code=409, detail={
+            "code": "COMPARISON_REVIEW_CONFLICT",
+            "message": "Comparison review history changed in another screen. Reload before adding a review; existing PO review history was kept.",
+        })
+    if len(submitted_reviews) == len(stored_reviews):
+        return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+    for review in payload.reviews[len(stored_reviews):]:
+        previous = session.get(ImportedResearchReport, review.before_report_id)
+        before_findings = {item.get("key"): item for item in (previous.research_data_json or {}).get("findings", [])} if previous else {}
+        after_findings = {item.get("key"): item for item in (report.research_data_json or {}).get("findings", [])}
+        if (previous is None or report.project_id is None or previous.project_id != report.project_id
+                or review.before_item_key not in before_findings
+                or review.after_item_key not in after_findings or review.before_report_id == report_id):
+            raise HTTPException(status_code=422, detail={"code": "INVALID_FINDING_COMPARISON", "message": "Each review must refer to findings in two reports in the same project."})
+        if review.review_type == "tracked_observation":
+            decision_row = session.scalar(select(POOpportunityDecision).where(
+                POOpportunityDecision.project_id == report.project_id,
+                POOpportunityDecision.candidate_id == review.candidate_id,
+            ))
+            target = (decision_row.decision_json or {}).get("decision_target") if decision_row else None
+            saved_reference = (decision_row.decision_json or {}).get("tracked_observation_reference") if decision_row else None
+            target_matches = bool(target and target.get("kind") == "report_finding" and (
+                (target.get("report_id") == previous.id and target.get("item_key") == review.before_item_key)
+                or (target.get("report_id") == report.id and target.get("item_key") == review.after_item_key)
+            ))
+            identity_reviewed = any(
+                item.get("before_report_id") == previous.id
+                and item.get("before_item_key") == review.before_item_key
+                and item.get("after_item_key") == review.after_item_key
+                and item.get("decision") == "same"
+                and item.get("review_type", "finding") == "finding"
+                for item in (report.comparison_review_json or [])
+            )
+
+            def observation_identity(row: dict) -> str:
+                fields = ["source_entity_id", "metric_id", "metric_definition", "unit", "source_provider",
+                          "geo", "platform", "granularity", "methodology", "period_semantics"]
+                return json.dumps([row.get(field) for field in fields], ensure_ascii=False, separators=(",", ":"))
+
+            def observation_selection_key(row: dict) -> str:
+                return json.dumps([observation_identity(row), row.get("period_start"), row.get("period_end"),
+                                   format(float(row["value"]), ".15g") if row.get("value") is not None else None,
+                                   row.get("source_reference"), row.get("evidence_reference")],
+                                  ensure_ascii=False, separators=(",", ":"))
+
+            old_data = previous.research_data_json or {}
+            new_data = report.research_data_json or {}
+            old_observations = assess_report_observations(old_data.get("quantitative_observations", []),
+                report_id=previous.id, report_geo=previous.geo, report_platform=previous.os,
+                report_period=previous.research_period, entities=old_data.get("entities", []),
+                evidence_references=old_data.get("evidence_references", []))
+            new_observations = assess_report_observations(new_data.get("quantitative_observations", []),
+                report_id=report.id, report_geo=report.geo, report_platform=report.os,
+                report_period=report.research_period, entities=new_data.get("entities", []),
+                evidence_references=new_data.get("evidence_references", []))
+            old_rows = [row for row in old_observations
+                        if isinstance(row, dict) and row.get("observation_type") == "reported"
+                        and observation_selection_key(row) == review.observation_key]
+            new_rows = [row for row in new_observations
+                        if isinstance(row, dict) and row.get("observation_type") == "reported"
+                        and observation_identity(row) == (saved_reference or {}).get("metric_identity_key")]
+            before_metric = old_rows[0] if len(old_rows) == 1 else None
+            after_metric = new_rows[0] if len(new_rows) == 1 else None
+            before_source = {before_metric.get("source_reference"), before_metric.get("evidence_reference")} - {None, ""} if before_metric else set()
+            after_source = {after_metric.get("source_reference"), after_metric.get("evidence_reference")} - {None, ""} if after_metric else set()
+            before_finding_sources = set(before_findings[review.before_item_key].get("evidence_references") or [])
+            after_finding_sources = set(after_findings[review.after_item_key].get("evidence_references") or [])
+
+            def dates_and_values_compatible(before: dict | None, after: dict | None) -> bool:
+                if not before or not after:
+                    return False
+                try:
+                    old_start, old_end = date.fromisoformat(before["period_start"]), date.fromisoformat(before["period_end"])
+                    new_start, new_end = date.fromisoformat(after["period_start"]), date.fromisoformat(after["period_end"])
+                except (KeyError, TypeError, ValueError):
+                    return False
+                return bool(
+                    previous.imported_at < report.imported_at
+                    and previous.question.strip().casefold() == report.question.strip().casefold()
+                    and previous.geo == report.geo and previous.os == report.os
+                    and before.get("value") is not None and after.get("value") is not None
+                    and before.get("value_precision") == after.get("value_precision") == "exact"
+                    and before.get("comparison_ready") is True and after.get("comparison_ready") is True
+                    and before.get("verification_status") == after.get("verification_status")
+                    and before.get("period_semantics") == after.get("period_semantics") == "reporting_interval"
+                    and before.get("entity_resolution_state") == after.get("entity_resolution_state") == "matched"
+                    and new_start > old_end and (old_end - old_start) == (new_end - new_start)
+                )
+
+            evidence_linked = bool(before_source & before_finding_sources and after_source & after_finding_sources)
+            selected_reference_matches = bool(saved_reference
+                and saved_reference.get("report_id") == previous.id
+                and saved_reference.get("report_content_sha256") == previous.content_sha256
+                and saved_reference.get("observation_key") == review.observation_key
+                and saved_reference.get("period_start") == (before_metric or {}).get("period_start")
+                and saved_reference.get("period_end") == (before_metric or {}).get("period_end")
+                and saved_reference.get("source_reference") == (before_metric or {}).get("source_reference")
+                and saved_reference.get("evidence_reference") == (before_metric or {}).get("evidence_reference"))
+            if not (target_matches and selected_reference_matches and identity_reviewed and before_metric and after_metric
+                    and dates_and_values_compatible(before_metric, after_metric) and evidence_linked):
+                raise HTTPException(status_code=422, detail={
+                    "code": "INVALID_TRACKED_OBSERVATION_REVIEW",
+                    "message": "A tracked observation can be marked reviewed only for the exact observation explicitly saved on the PO decision, a PO-confirmed finding match, compatible report measurements, and sources linked to both findings.",
+                })
+    result = session.execute(update(ImportedResearchReport).where(
+        ImportedResearchReport.id == report.id,
+        ImportedResearchReport.comparison_review_json == stored_reviews_raw,
+    ).values(comparison_review_json=submitted_reviews))
+    if result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status_code=409, detail={
+            "code": "COMPARISON_REVIEW_CONFLICT",
+            "message": "Comparison review history changed in another screen. Reload before adding a review; existing PO review history was kept.",
+        })
+    session.commit()
+    session.refresh(report)
+    return ImportedReportRead.model_validate(_read(report).model_dump(exclude={"duplicate"}))
+
+
+def _with_source_fields_from_csv(observations: list[dict], csv_text: str) -> list[dict]:
+    """Fill publisher and release date from the saved CSV for files imported before those columns were stored.
+
+    Read-only: the stored observations are not rewritten. Values are taken only from the CSV's own
+    columns; a missing column or cell stays empty, so nothing is invented.
+    """
+    needs_fill = [row for row in observations if not row.get("source_publisher_name") or not row.get("source_release_date")]
+    if not needs_fill or not csv_text:
+        return observations
+    cells_by_row: dict[int, dict[str, str | None]] = {}
+    try:
+        reader = csv.DictReader(io.StringIO(csv_text, newline=""), delimiter=detect_csv_delimiter(csv_text))
+        for row_number, row in enumerate(reader, 2):
+            cells_by_row[row_number] = {
+                "publisher": _csv_cell(row, "Publisher Name"),
+                "release": _csv_cell(row, "Release Date (WW)") or _csv_cell(row, "Release Date"),
+            }
+    except (csv.Error, ValueError):
+        return observations
+    filled: list[dict] = []
+    for row in observations:
+        cells = cells_by_row.get(row.get("source_row_number") or -1)
+        if cells is None or (row.get("source_publisher_name") and row.get("source_release_date")):
+            filled.append(row)
+            continue
+        updated = dict(row)
+        if not updated.get("source_publisher_name") and cells["publisher"]:
+            updated["source_publisher_name"] = cells["publisher"]
+        if not updated.get("source_release_date") and cells["release"]:
+            updated["source_release_date"] = cells["release"]
+        filled.append(updated)
+    return filled
+
+
 def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchReport | None = None, duplicate: bool = False) -> QuantitativeDatasetRead:
     saved_mapping = dataset.field_mapping_json or {}
     if "field_mapping" in saved_mapping:
@@ -209,7 +411,7 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         metric_mappings = []
         explicit_values = {}
         delimiter = ","
-    observations = effective_observations(dataset, report)
+    observations = _with_source_fields_from_csv(effective_observations(dataset, report), dataset.original_csv)
     complete_count = sum(bool(item.get("complete_observation")) for item in observations)
     display_count = sum(bool(item.get("display_ready")) for item in observations)
     analysis_count = sum(bool(item.get("analysis_ready")) for item in observations)
@@ -227,7 +429,13 @@ def _dataset_read(dataset: QuantitativeDataset, *, report: ImportedResearchRepor
         source_rows = max(0, sum(1 for row in parsed_rows if any(value.strip() for value in row)) - 1)
     except (ValueError, csv.Error):
         source_rows = 0
-    validation_reasons = list(dict.fromkeys(reason for item in observations for reason in item.get("validation_reasons", [])))
+    # Dataset-level warnings are recomputed from the effective rows so a PO confirmation updates them at once.
+    validation_reasons = list(dict.fromkeys([
+        *(reason for item in observations for reason in item.get("validation_reasons", [])),
+        *filename_period_warnings(dataset.filename, observations),
+        *future_date_warnings(observations),
+        *growth_exceeds_absolute_warnings(observations),
+    ]))
     return QuantitativeDatasetRead.model_validate({
         "id": dataset.id,
         "report_id": dataset.report_id,
@@ -293,7 +501,7 @@ def _preview_dataset(report: ImportedResearchReport | None, payload: Quantitativ
     comparison = sum(bool(item.get("dataset_comparison_ready")) for item in observations)
     return QuantitativeDatasetPreview(
         observations=observations,
-        validation_reasons=reasons,
+        validation_reasons=[*reasons, *filename_period_warnings(payload.filename, observations), *future_date_warnings(observations), *growth_exceeds_absolute_warnings(observations)],
         ambiguities=[item for item in ambiguities if item.get("candidates")],
         unmatched_entities=[item for item in ambiguities if not item.get("candidates")],
         compatibility_status=compatibility,
@@ -505,6 +713,14 @@ def revalidate_quantitative_dataset(
     # immutable basis of that review. Re-run deterministic validation above,
     # but do not replace its rows and orphan the overlay's stable group keys.
     if review_state(dataset).get("entries"):
+        # Dataset-level warnings (dates, growth, file name) still refresh; rows stay frozen.
+        dataset.validation_reasons_json = preview.validation_reasons
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        session.refresh(dataset)
         return _dataset_read(dataset, report=report)
     observations = [item.model_dump(mode="json") for item in preview.observations]
     for item in observations:

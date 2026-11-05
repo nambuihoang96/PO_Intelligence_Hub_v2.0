@@ -58,12 +58,143 @@ class ImportedReportsAPITest(unittest.TestCase):
         self.assertEqual(reopened.status_code, 200)
         self.assertEqual(reopened.json()["content"], raw)
 
+    def test_codex_report_keeps_its_origin_and_unverified_status(self) -> None:
+        response = self.client.post("/api/v1/reports", json={**self.payload("Codex output with reviewable content"), "origin": "codex_cli_research"})
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["origin"], "codex_cli_research")
+        self.assertEqual(response.json()["verification_status"], "unverified")
+
     def test_duplicate_content_returns_existing_report_without_creating_another(self) -> None:
         first = self.client.post("/api/v1/reports", json=self.payload()).json()
         duplicate = self.client.post("/api/v1/reports", json=self.payload()).json()
         self.assertEqual(duplicate["id"], first["id"])
         self.assertTrue(duplicate["duplicate"])
         self.assertEqual(len(self.client.get("/api/v1/reports").json()["items"]), 1)
+
+    def test_report_list_can_be_scoped_to_one_project(self) -> None:
+        project = self.client.post("/api/v1/projects", json={"name": "Comparison project", "owner": None, "category": None}).json()
+        scoped_payload = self.payload("Project-scoped report")
+        scoped_payload["project_id"] = project["id"]
+        scoped = self.client.post("/api/v1/reports", json=scoped_payload)
+        self.assertEqual(scoped.status_code, 201, scoped.text)
+        self.client.post("/api/v1/reports", json=self.payload("Unassigned report"))
+        page = self.client.get(f"/api/v1/reports?project_id={project['id']}")
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual([item["id"] for item in page.json()["items"]], [scoped.json()["id"]])
+
+    def test_follow_up_report_keeps_exact_prior_report_and_po_finding_review(self) -> None:
+        project = self.client.post("/api/v1/projects", json={"name": "Follow-up comparison", "owner": None, "category": None}).json()
+        old_payload = self.payload("Old report with finding\n\nSource: https://example.com/\n")
+        old_payload.update(project_id=project["id"], structured_json=json.dumps(self._structured_payload("old-finding")))
+        old_report = self.client.post("/api/v1/reports", json=old_payload)
+        self.assertEqual(old_report.status_code, 201, old_report.text)
+
+        new_payload = self.payload("New report with finding\n\nSource: https://example.com/\n")
+        new_payload.update(project_id=project["id"], previous_report_id=old_report.json()["id"], structured_json=json.dumps(self._structured_payload("new-finding")))
+        new_report = self.client.post("/api/v1/reports", json=new_payload)
+        self.assertEqual(new_report.status_code, 201, new_report.text)
+        self.assertEqual(new_report.json()["previous_report_id"], old_report.json()["id"])
+
+        saved = self.client.put(f"/api/v1/reports/{new_report.json()['id']}/comparison-reviews", json={"reviews": [{
+            "before_report_id": old_report.json()["id"], "before_item_key": "finding-old-finding", "after_item_key": "finding-new-finding",
+            "decision": "same", "saved_at": "2026-11-02T00:00:00Z",
+        }]})
+        self.assertEqual(saved.status_code, 200, saved.text)
+        stale_save = self.client.put(f"/api/v1/reports/{new_report.json()['id']}/comparison-reviews", json={"reviews": [{
+            "before_report_id": old_report.json()["id"], "before_item_key": "finding-old-finding", "after_item_key": "finding-new-finding",
+            "decision": "different", "saved_at": "2026-11-02T00:01:00Z",
+        }]})
+        self.assertEqual(stale_save.status_code, 409, stale_save.text)
+        self.assertEqual(stale_save.json()["error"]["code"], "COMPARISON_REVIEW_CONFLICT")
+        reopened = self.client.get(f"/api/v1/reports/{new_report.json()['id']}").json()
+        self.assertEqual(reopened["comparison_reviews"][0]["decision"], "same")
+        self.assertEqual(reopened["comparison_reviews"][0]["before_report_id"], old_report.json()["id"])
+
+    def test_tracked_metric_review_requires_saved_decision_linked_findings_and_compatible_evidence(self) -> None:
+        project = self.client.post("/api/v1/projects", json={"name": "Decision-linked comparison", "owner": None, "category": None}).json()
+        prior_url, current_url = "https://example.com/prior-metric", "https://example.com/current-metric"
+
+        def structured_value(value: int, start: str, end: str, url: str) -> str:
+            data = self._structured_payload(key="game-a", url=url)
+            data["findings"][0]["key"] = "tutorial"
+            data["findings"][0]["title"] = "Tutorial completion"
+            data["entities"][0]["name"] = "Game A"
+            data["quantitative_observations"] = [{
+                "metric_id": "completion_rate", "metric_definition": "Monthly tutorial completion rate",
+                "value": value, "value_precision": "exact", "unit": "percent", "entity_id": "game-a",
+                "entity_name": "Game A", "source_entity_id": "provider:game-a", "source_provider": "Provider A",
+                "entity_resolution_state": "matched", "geo": "US", "platform": "iOS", "period_start": start,
+                "period_end": end, "period_semantics": "reporting_interval", "granularity": "monthly",
+                "methodology": "Provider method v1", "source_reference": url, "evidence_reference": url,
+                "verification_status": "unverified", "observation_type": "reported",
+            }]
+            return json.dumps(data)
+
+        prior_payload = self.payload(f"Prior tutorial report\n\nSource: {prior_url}\n")
+        prior_payload.update(project_id=project["id"], geo="US", os="iOS", research_period="2026",
+            structured_json=structured_value(62, "2026-01-01", "2026-01-31", prior_url))
+        prior = self.client.post("/api/v1/reports", json=prior_payload)
+        self.assertEqual(prior.status_code, 201, prior.text)
+        current_payload = self.payload(f"Current tutorial report\n\nSource: {current_url}\n")
+        current_payload.update(project_id=project["id"], geo="US", os="iOS", research_period="2026",
+            previous_report_id=prior.json()["id"], structured_json=structured_value(68, "2026-02-01", "2026-03-03", current_url))
+        current = self.client.post("/api/v1/reports", json=current_payload)
+        self.assertEqual(current.status_code, 201, current.text)
+
+        workspace = self.client.get(f"/api/v1/projects/{project['id']}/opportunities").json()
+        candidate = next(item for item in workspace["candidates"] if item.get("target_kind") == "report_finding"
+            and item.get("decision_target", {}).get("report_id") == prior.json()["id"]
+            and item.get("decision_target", {}).get("item_key") == "tutorial")
+        decision = self.client.put(f"/api/v1/projects/{project['id']}/opportunities/decisions", json={
+            "candidate_id": candidate["candidate_id"], "dataset_id": None, "dataset_content_sha256": None,
+            "source_entity_id": None, "decision_target": candidate["decision_target"], "decision_status": "investigate",
+            "rationale": "Review the reported measure.", "supporting_evidence": [], "contradictory_evidence": [],
+            "open_questions": [], "assessments": [], "priority": "medium", "review_date": None, "next_action": "Check the source.",
+        })
+        self.assertEqual(decision.status_code, 200, decision.text)
+        identity = ["provider:game-a", "completion_rate", "Monthly tutorial completion rate", "percent", "Provider A",
+            "US", "iOS", "monthly", "Provider method v1", "reporting_interval"]
+        selection_key = json.dumps([json.dumps(identity, separators=(",", ":")), "2026-01-01", "2026-01-31", "62", prior_url, prior_url], separators=(",", ":"))
+        decision_revision = next(item for item in decision.json()["candidates"] if item["candidate_id"] == candidate["candidate_id"])["decision"]["revision"]
+        selected = self.client.put(f"/api/v1/projects/{project['id']}/opportunities/decisions/{candidate['candidate_id']}/tracked-observation", json={
+            "expected_revision": decision_revision,
+            "report_id": prior.json()["id"], "report_content_sha256": prior.json()["content_sha256"],
+            "observation_key": selection_key,
+        })
+        self.assertEqual(selected.status_code, 200, selected.text)
+        saved_candidate = next(item for item in selected.json()["candidates"] if item["candidate_id"] == candidate["candidate_id"])
+        self.assertEqual(saved_candidate["decision"]["tracked_observation_reference"]["observation_key"], selection_key)
+        pair_review = {"before_report_id": prior.json()["id"], "before_item_key": "tutorial", "after_item_key": "tutorial",
+            "decision": "same", "saved_at": "2026-11-02T10:00:00Z"}
+        saved = self.client.put(f"/api/v1/reports/{current.json()['id']}/comparison-reviews", json={"reviews": [pair_review]})
+        self.assertEqual(saved.status_code, 200, saved.text)
+        tracked_review = {"review_type": "tracked_observation", "before_report_id": prior.json()["id"],
+            "before_item_key": "tutorial", "after_item_key": "tutorial", "decision": "reviewed",
+            "candidate_id": candidate["candidate_id"], "observation_key": selection_key,
+            "saved_at": "2026-11-02T10:05:00Z"}
+        accepted = self.client.put(f"/api/v1/reports/{current.json()['id']}/comparison-reviews", json={
+            "reviews": [pair_review, tracked_review]})
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()["comparison_reviews"][1]["review_type"], "tracked_observation")
+        self.assertEqual(accepted.json()["comparison_reviews"][1]["candidate_id"], candidate["candidate_id"])
+
+        # History is append-only: the bad review must extend the stored prefix, otherwise the API correctly answers 409.
+        rejected = self.client.put(f"/api/v1/reports/{current.json()['id']}/comparison-reviews", json={"reviews": [pair_review, tracked_review, {
+            **tracked_review, "candidate_id": "not-a-saved-decision"}]})
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(rejected.json()["error"]["code"], "INVALID_TRACKED_OBSERVATION_REVIEW")
+
+    def test_follow_up_report_rejects_prior_report_from_another_project(self) -> None:
+        first_project = self.client.post("/api/v1/projects", json={"name": "First", "owner": None, "category": None}).json()
+        second_project = self.client.post("/api/v1/projects", json={"name": "Second", "owner": None, "category": None}).json()
+        old_payload = self.payload("Prior in first project")
+        old_payload["project_id"] = first_project["id"]
+        old_report = self.client.post("/api/v1/reports", json=old_payload).json()
+        new_payload = self.payload("Follow-up in another project")
+        new_payload.update(project_id=second_project["id"], previous_report_id=old_report["id"])
+        rejected = self.client.post("/api/v1/reports", json=new_payload)
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(rejected.json()["error"]["code"], "INVALID_PREVIOUS_REPORT")
 
     def test_report_library_summary_exposes_structure_without_full_report_requests(self) -> None:
         text_only = self.client.post("/api/v1/reports", json=self.payload("Plain text report")).json()

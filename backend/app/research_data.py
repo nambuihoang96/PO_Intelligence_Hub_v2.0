@@ -107,6 +107,8 @@ class QuantitativeObservation(ResearchModel):
     entity_name: str | None = Field(default=None, max_length=500)
     source_entity_id: str | None = Field(default=None, max_length=240)
     source_entity_name: str | None = Field(default=None, max_length=500)
+    source_publisher_name: str | None = Field(default=None, max_length=500)
+    source_release_date: str | None = Field(default=None, max_length=40)
     source_provider: str | None = Field(default=None, max_length=120)
     entity_resolution_state: Literal["matched", "source_only", "ambiguous", "conflict"] | None = None
     geo: str | None = Field(default=None, max_length=100)
@@ -488,7 +490,28 @@ def _structured_candidate(content: str, explicit_json: str | None) -> tuple[str 
             "The fenced JSON block is not closed.",
             [{"location": ["body", "content"], "message": "JSON code fence must end with ```.", "type": "json_fence_unclosed"}],
         )
+    # Selecting text in a chat window drops the ``` fences, leaving the payload
+    # inside prose. Recover it only when the contract version identifies it.
+    unfenced = _unfenced_contract_payload(content)
+    if unfenced is not None:
+        return unfenced[0], "inline_json", unfenced[1]
     return None, "text", content
+
+
+def _unfenced_contract_payload(content: str) -> tuple[str, str] | None:
+    version = re.search(r'"schema_version"\s*:\s*"po_research_v1"', content)
+    if version is None:
+        return None
+    start = content.rfind("{", 0, version.start())
+    if start < 0:
+        return None
+    try:
+        _, length = json.JSONDecoder().raw_decode(content[start:])
+    except json.JSONDecodeError:
+        # Let the caller report the syntax error instead of silently saving text.
+        return content[start:], content[:start]
+    prose = content[:start] + content[start + length:]
+    return content[start:start + length], prose
 
 
 def normalize_report(content: str, structured_json: str | None) -> tuple[UniversalResearchData, str, str | None]:
