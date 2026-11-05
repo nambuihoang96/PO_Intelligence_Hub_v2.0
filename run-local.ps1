@@ -89,9 +89,39 @@ $backendIsPoHub = $false
                 }
                 if (-not $portReleased) { throw "Stopped the outdated PO Hub backend started by this launcher, but port 8000 did not become free. Check the process using port 8000, then run run.bat again. SQLite data was not changed." }
             } else {
-                $missingOperations = if ($compatibility) { $compatibility.MissingOperations -join ', ' } else { 'OpenAPI compatibility could not be verified.' }
-                $pidList = if ($ownerIds.Count) { $ownerIds -join ', ' } else { 'unknown' }
-                throw "Port 8000 is used by an outdated PO Intelligence Hub API ($owner). Missing: $missingOperations. PID(s): $pidList. This process has no valid ownership record from this workspace launcher, so it was left running. In PowerShell, confirm the PID belongs to this old PO Hub window, then run: Stop-Process -Id <PID>. After it stops, double-click run.bat again. SQLite data was not changed."
+                if ($ownerIds.Count -eq 0) { throw "An older PO Hub service is using port 8000 ($owner), but its process could not be confirmed. Nothing was stopped and saved data was left untouched." }
+
+                $ownerStartTimes = @{}
+                foreach ($ownerId in $ownerIds) {
+                    $processInfo = Get-Process -Id $ownerId -ErrorAction SilentlyContinue
+                    if (-not $processInfo) { throw "PO Hub API process $ownerId changed while startup was being checked. Nothing was stopped; double-click run.bat again." }
+                    $ownerStartTimes[[string]$ownerId] = $processInfo.StartTime.ToUniversalTime().Ticks
+                }
+
+                Write-Host "An older PO Hub service is already running ($owner). This project has newer Research, CSV, Tracking and Product Analysis features."
+                $answer = Read-Host 'Use the current project version? Type Y to continue; press Enter to cancel'
+                if (-not (Test-PoHubRestartConfirmation -Answer $answer)) {
+                    throw 'Startup cancelled. The existing PO Hub API and saved reports/CSV data were left untouched.'
+                }
+
+                $currentOwnerIds = @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
+                $changedOwners = @(Compare-Object -ReferenceObject @($ownerIds | Sort-Object) -DifferenceObject @($currentOwnerIds | Sort-Object))
+                if ($changedOwners.Count -gt 0) { throw 'The process using port 8000 changed while waiting for your answer. Nothing was stopped; double-click run.bat again.' }
+                foreach ($ownerId in $ownerIds) {
+                    $processInfo = Get-Process -Id $ownerId -ErrorAction SilentlyContinue
+                    if (-not $processInfo -or $processInfo.StartTime.ToUniversalTime().Ticks -ne $ownerStartTimes[[string]$ownerId]) {
+                        throw 'The process using port 8000 changed while waiting for your answer. Nothing was stopped; double-click run.bat again.'
+                    }
+                }
+
+                Write-Host 'Restarting the confirmed older PO Hub API. Saved reports and CSV files will be kept.'
+                foreach ($ownerId in $ownerIds) { Stop-Process -Id $ownerId -Force -ErrorAction Stop }
+                $portReleased = $false
+                for ($attempt = 0; $attempt -lt 15; $attempt++) {
+                    if (-not (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)) { $portReleased = $true; break }
+                    Start-Sleep -Milliseconds 500
+                }
+                if (-not $portReleased) { throw 'The old PO Hub API was stopped, but port 8000 did not become free. Saved reports and CSV files were not deleted. Close the other PO Hub window, then double-click run.bat again.' }
             }
         } else {
             throw "Port 8000 is used by $owner and does not expose the expected PO Hub API. The process was not stopped. Close it manually, then retry."
@@ -105,32 +135,52 @@ if (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyCont
         $frontendHtml = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/' -TimeoutSec 3 -UseBasicParsing
         $intakeModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/reports/ResearchIntake.tsx' -TimeoutSec 3 -UseBasicParsing
         $reportApiModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/reports/api.ts' -TimeoutSec 3 -UseBasicParsing
-        $frontendCompatible = $frontendHtml.StatusCode -eq 200 -and $frontendHtml.Content -match 'PO Intelligence Hub V2' -and $intakeModule.StatusCode -eq 200 -and $reportApiModule.StatusCode -eq 200 -and $reportApiModule.Content -match 'benchmark-state'
+        $comparisonModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/reports/ReportUpdateComparison.tsx' -TimeoutSec 3 -UseBasicParsing
+        $trackingModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/tracking/TrackingWorkspace.tsx' -TimeoutSec 3 -UseBasicParsing
+        $csvModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/research/CsvAutoAnalysis.tsx' -TimeoutSec 3 -UseBasicParsing
+        $codexModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/research/CodexResearchSettings.tsx' -TimeoutSec 3 -UseBasicParsing
+        $quantitativeModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/reports/QuantitativeEvidence.tsx' -TimeoutSec 3 -UseBasicParsing
+        $productAnalysisModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/research/SubjectProductAnalysis.tsx' -TimeoutSec 3 -UseBasicParsing
+        $projectHomeModule = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/src/research/ProjectHome.tsx' -TimeoutSec 3 -UseBasicParsing
+        $frontendModules = @{
+            ResearchIntake = [string]$intakeModule.Content
+            ReportUpdateComparison = [string]$comparisonModule.Content
+            TrackingWorkspace = [string]$trackingModule.Content
+            CsvAutoAnalysis = [string]$csvModule.Content
+            CodexResearchSettings = [string]$codexModule.Content
+            QuantitativeEvidence = [string]$quantitativeModule.Content
+            SubjectProductAnalysis = [string]$productAnalysisModule.Content
+            ProjectHome = [string]$projectHomeModule.Content
+        }
+        $frontendFeatureCheck = Test-PoHubFrontendSourceCompatibility $frontendModules
+        $frontendCompatible = $frontendHtml.StatusCode -eq 200 -and $frontendHtml.Content -match 'PO Intelligence Hub V2' -and $intakeModule.StatusCode -eq 200 -and $reportApiModule.StatusCode -eq 200 -and $reportApiModule.Content -match 'benchmark-state' -and $reportApiModule.Content -match 'codex/research' -and $productAnalysisModule.StatusCode -eq 200 -and $projectHomeModule.StatusCode -eq 200 -and $frontendFeatureCheck.Compatible
     } catch { }
     if ($frontendCompatible) {
         $frontendAlreadyRunning = $true
         Write-Host 'Reusing the existing PO Intelligence Hub frontend on port 5173.'
     } else {
         $owner = Get-PortOwnerDescription 5173
-        throw "Port 5173 is used by $owner and does not serve the current PO Hub Results client (including the Benchmark API contract). The process was not stopped. Close the old frontend window/terminal, then retry run.bat."
+        throw "The current PO Hub page cannot be confirmed on port 5173 ($owner); it may not include the V4 Project Overview. Nothing was stopped. Close the older PO Hub window, then double-click run.bat again."
     }
 }
 
 if ($backendAlreadyRunning -and $frontendAlreadyRunning) {
     Write-Host 'PO Intelligence Hub V2 is already running.'
     Write-Host 'Frontend: http://127.0.0.1:5173'
+    Write-Host 'Choose a project card to open its V4 Project Overview.'
     Write-Host 'Backend:  http://127.0.0.1:8000'
     Write-Host 'API docs: http://127.0.0.1:8000/docs'
-    Write-Host 'This launcher did not start the existing services, so it will not stop them.'
-    Write-Host 'Press any key to close this launcher window. The existing services will keep running.'
-    Start-Process 'http://127.0.0.1:5173'
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    Write-Host 'The existing services are already running; this launcher will leave them as they are.'
+    Start-Process 'http://127.0.0.1:5173/research'
     return
 }
 
 $backend = $null
 $frontend = $null
 if (-not $backendAlreadyRunning) {
+    # Back up the real database before any migration touches it. A failed backup stops startup.
+    . (Join-Path $workspace 'scripts\launcher-backup.ps1')
+    Backup-PoHubDatabase -Workspace $workspace -PythonExecutable $venvPython | Out-Null
     Push-Location $workspace
     try {
         & $venvPython -m alembic upgrade head
@@ -194,6 +244,7 @@ if (-not $backendAlreadyRunning) {
 try {
     Write-Host 'PO Intelligence Hub V2 is running.'
     Write-Host 'Frontend: http://127.0.0.1:5173'
+    Write-Host 'Choose a project card to open its V4 Project Overview.'
     Write-Host 'Backend:  http://127.0.0.1:8000'
     Write-Host 'API docs: http://127.0.0.1:8000/docs'
     if ($frontendAlreadyRunning -and -not $backendAlreadyRunning) {
@@ -228,7 +279,7 @@ try {
     }
 
     Write-Host 'Opening the workspace in your browser...'
-    Start-Process 'http://127.0.0.1:5173'
+    Start-Process 'http://127.0.0.1:5173/research'
     Write-Host 'Keep this window open while you use the app. Press Ctrl+C to stop services started by this launcher.'
     if ($frontend) {
         while ($true) {
