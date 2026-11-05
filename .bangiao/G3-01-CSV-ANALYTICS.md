@@ -161,3 +161,181 @@ Kiểm tra ở 390px phát hiện bảng preview CSV rộng tràn khỏi khung v
 - **Decision:** `TECHNICAL PASS` cho kiểm thử chạy; `BROWSER UAT PASS` cho các bước nêu trên; `PRODUCT ACCEPTANCE PENDING OWNER REVIEW`.
 
 **Commit sửa CSS:** `3658116b5c3298655400118c0dc2fb2c6b0588e7`. Ảnh và bàn giao của lượt nghiệm thu này được commit riêng sau đó trên cùng nhánh; HEAD cuối và kết quả push được báo trong phần bàn giao của Codex.
+
+## G3-01 — Tự phân tích CSV và highlight thay đổi — 2026-11-03
+
+### Phản hồi PO và phạm vi
+
+PO muốn biết sau khi nhập CSV, PO Hub có thể tự đọc điểm đáng chú ý, tô màu chỉ số và nhận gợi ý bước tiếp theo hay không; đồng thời khi nhập CSV mới vào cùng dự án, PO Hub cần tự nêu thay đổi so với kỳ trước. Đây là luồng CSV riêng, không phải luồng nhập báo cáo ChatGPT Research.
+
+### Hành vi đã bổ sung
+
+- Một CSV: tự nêu giá trị cao nhất/thấp nhất trong từng nhóm có cùng chỉ số, GEO, nền tảng, phương pháp, đơn vị và kỳ; không gọi đó là thứ hạng thị trường.
+- CSV mới trong cùng dự án: tự chọn tệp cũ gần nhất mà có thể xác nhận cùng định nghĩa chỉ số, đơn vị, phương pháp, GEO/nền tảng và kỳ đo. So sánh các sản phẩm ghép được bằng ID nguồn ổn định; hiển thị tăng, giảm, không đổi, mới, không còn hoặc cần rà soát.
+- Bảng sản phẩm: giá trị nguồn được tô xanh/đỏ/xanh dương kèm mũi tên và chữ “Tăng”, “Giảm”, “Mới trong tệp kỳ này”; màu không phải tín hiệu duy nhất và không mang ý nghĩa tốt/xấu.
+- Insight nêu mạnh nhất một tăng và một giảm, hai tệp/kỳ nguồn, cảnh báo chưa xác minh độc lập và gợi ý kiểm tra nguồn/kỳ trước khi quyết định. PO có thể đưa sản phẩm nổi bật vào shortlist để nghiên cứu tiếp bằng ChatGPT.
+- Thiếu hoặc xung đột thông tin kỳ đo/phạm vi/chỉ số thì không tự tính; dữ liệu gốc được giữ nguyên. Quy trình không bịa số liệu, nguyên nhân hay khuyến nghị sản phẩm.
+- Nếu shortlist đang lưu thuộc CSV khác, nút insight không ghi đè hoặc báo đã chọn nhầm; PO được yêu cầu mở shortlist mới một cách rõ ràng. Khi lưu lựa chọn thất bại, không còn thông báo thành công sớm.
+
+### Kiểm tra
+
+- Isolated QA project: `[QA ONLY] CSV Auto Analysis Valid Periods`, project ID `fcfedfeb-0cb8-455c-aa85-d45d0e6694b6`; các CSV Sep/Oct/Nov 2026 đều là fixture tổng hợp, không phải dữ liệu thị trường.
+- Sau khi thêm CSV Nov vào project, trình duyệt thực tế tải lại dự án và tự so với CSV Oct gần nhất đủ tương thích: 4 sản phẩm so được, 3 tăng, 1 giảm, 1 mới, 0 không còn và 0 cần rà soát. Puzzle A tăng 150 lượt tải; Puzzle C giảm 20. Giá trị delta trong insight trùng với ô bảng được tô màu. Dữ liệu nguồn/tệp/kỳ vẫn hiển thị.
+- `CsvAutoAnalysis.test.tsx` + `DataFirstWorkspace.test.tsx`: **15/15 PASS** sau patch cuối.
+- Full frontend Vitest: **29 files / 254 tests PASS**.
+- `npm run typecheck`: **PASS**. `npm run build`: **PASS**, còn cảnh báo bundle JS 697.82 kB lớn hơn 500 kB. `git diff --check`: **PASS**; chỉ báo line-ending warnings.
+- Browser screenshots được xem trực tiếp trong phiên UAT để kiểm tra panel và màu; screenshot của lượt này **chưa được lưu thành artifact**. Không kiểm thử mobile theo phạm vi PO đã đặt trước.
+
+### Product Acceptance
+
+- **PO goal:** Nạp số liệu CSV và nhanh chóng biết các giá trị cần xem, rồi nhận ra sản phẩm nào thay đổi khi có tệp kỳ mới.
+- **User journey:** mở dự án → nhập CSV → xem tín hiệu trong tệp → thêm CSV mới cùng dự án → đọc chênh lệch an toàn theo kỳ và bảng tô màu → chọn sản phẩm để nghiên cứu sâu nếu cần.
+- **Automated work:** giữ hai tệp riêng; khớp quan sát tương thích; tính chênh lệch; highlight và nêu phạm vi/kỳ nguồn.
+- **Expected result:** PO thấy delta và bước tiếp theo, không cần tự ghép CSV. Màu đi cùng chữ/mũi tên; hệ thống không kết luận nguyên nhân hay tốt/xấu.
+- **Remaining friction:** kiểm thử cặp kỳ mới hiện dùng 5 dòng tổng hợp; chưa có CSV nhiều kỳ do PO cung cấp, dataset 100+ dòng, hoặc screenshot lưu kèm review. Dữ liệu thật thiếu period/scope sẽ cần bổ sung hoặc xác nhận trước khi so. Đây là phân tích tín hiệu/delta có quy tắc, chưa phải AI giải thích nguyên nhân hay tự quyết định action sản phẩm.
+- **Verification:** test, build, typecheck, diff check và browser UAT isolated nêu trên. Production SQLite không được mở/ghi; không merge/deploy.
+- **Decision:** `TECHNICAL PASS / SYNTHETIC BROWSER UAT PASS / OWNER REVIEW PENDING`. Không tuyên bố Product Pass.
+
+## G3-01 — chỉnh màn dữ liệu theo wireframe #8 — 2026-11-03
+
+PO phản hồi: “cả phần data hình như cũng khác”. Đối chiếu trang CSV với Peachy Studio screen #8, “Phân tích dữ liệu – Bảng và biểu đồ trực quan”, cho thấy kết quả dữ liệu chưa nổi bật: bộ nhập và auto-analysis chiếm nhiều chỗ trước bảng, chỉ một metric hiện mặc định, phạm vi dài lặp ở từng sản phẩm, tên cột nguồn xuất hiện quá sớm.
+
+### Đã chỉnh
+
+- Thu gọn chọn tệp/bộ dữ liệu thành thanh công cụ ngang.
+- Đưa bảng nhiều chỉ số và biểu đồ Top 5 lên trước; mặc định hiện tối đa bốn metric.
+- Đưa phân tích tự động xuống dưới kết quả chính; nhóm chi tiết được thu gọn.
+- Hiện phạm vi chung một lần; để phạm vi/nguồn riêng từng sản phẩm trong phần mở rộng.
+- Việt hóa đơn vị “downloads” thành “lượt tải”; giữ nguyên giá trị và điều kiện so sánh an toàn.
+
+### Verification và giới hạn
+
+- Full frontend suite chạy tuần tự: **29 files / 262 tests PASS**. Bộ CSV liên quan: **6 files / 100 tests PASS**. Typecheck và production build: **PASS**; build còn cảnh báo chunk JS lớn hơn 500 kB. `git diff --check` không phát hiện lỗi whitespace (có cảnh báo line-ending).
+- Đã xem ứng dụng desktop đang chạy ở viewport 1264×720 trên dự án `[QA ONLY] CSV Auto Analysis Valid Periods`; bố cục bảng/biểu đồ và trạng thái màu được nhìn thấy. Tệp QA có dữ liệu tổng hợp, không đại diện dữ liệu thị trường.
+- Ảnh chụp mới chưa lưu thành artifact; chưa kiểm tra tại 1440px; browser fixture hiện có 1 metric và 5 sản phẩm. Phần khung điều hướng toàn ứng dụng vẫn lệch wireframe. Không làm mobile theo phạm vi PO đã đặt.
+- Không dùng SQLite sản xuất, không migration, không merge/release.
+
+### Product Acceptance
+
+- **PO goal:** Xem dữ liệu CSV theo bố cục wireframe để đọc được chỉ số và điểm cần chú ý nhanh.
+- **User journey:** Mở Phân tích dữ liệu → chọn tệp → đọc bảng nhiều metric và Top 5 → mở phân tích/chi tiết phạm vi khi cần.
+- **Automated work:** Giữ giá trị nguồn; so sánh những phép đo đủ tương thích; dùng màu kèm nhãn trạng thái.
+- **Expected result:** Bảng và biểu đồ là nội dung chính, không bị các thẻ phụ đẩy xuống.
+- **Remaining friction:** Cần kiểm tra screenshot desktop 1440px và CSV lớn/nhiều metric thật; user acceptance chưa có.
+- **Verification:** Các lệnh và browser review nêu trên.
+- **Decision:** `TECHNICAL PASS / SYNTHETIC DESKTOP REVIEW / OWNER REVIEW PENDING`.
+
+## G3-01 — gọn Project Home và làm rõ luồng CSV / ChatGPT — 2026-11-03
+
+PO feedback: khu “Thông tin đã lưu” và tệp CSV nhìn xấu, compare chưa nói output ở đâu, import chiếm nhiều chỗ, và chưa rõ báo cáo ChatGPT xuất hiện trong Overview nào.
+
+### Thay đổi
+
+- Project Home chỉ nhấn mạnh tệp CSV mới nhất trong thẻ rộng toàn hàng; các tệp trước được gấp lại. Bỏ nhãn kỹ thuật readiness khỏi danh sách chính.
+- Khi chỉ có một nhóm lưu, nhóm đó dùng toàn bộ chiều rộng.
+- Trên trang so sánh, người dùng chọn hai tệp rồi bấm **Tạo kết quả so sánh**. Ban đầu chỉ hiện hai lựa chọn tệp; các trường chỉ số/phạm vi/kỳ mở sau khi có đủ cặp. Phép tính chạy trong PO Hub, bản xem trước hiện dưới trang và màn hình tự cuộn tới kết quả. Đây không phải báo cáo riêng được lưu; rời trang hoặc tải lại thì cần tính lại từ hai CSV còn lưu. Không cần ChatGPT.
+- Khu nhập CSV nằm dưới form và gấp gọn thành nút **Thêm tệp CSV mới**; chỉ mở khi người dùng cần nạp kỳ mới.
+- Luồng yêu cầu ChatGPT có một nút chính. Sau khi tạo, prompt được sao chép; hai bước kế tiếp là mở ChatGPT rồi quay lại nhập câu trả lời. Prompt dài được gấp lại.
+- Nói rõ báo cáo được liệt kê trên Tổng quan dự án. Nhận định có cấu trúc nằm ở tab Tổng quan của báo cáo nếu nội dung được nhận diện; nội dung gốc vẫn ở tab Đọc báo cáo. PO phải tự dán và lưu câu trả lời, không có đồng bộ trực tiếp.
+
+### Verification và Product Acceptance
+
+- Bốn bộ test (`DataFirstWorkspace`, `ProjectHome`, `QuantitativeDatasetImport`, `QuantitativePeriodComparison`): **45/45 PASS** sau các thay đổi cuối.
+- Full frontend suite **29 files / 264 tests PASS** sau khi gộp nút tạo yêu cầu; bản sao/copy CSS cuối sau đó được xác minh bằng focused suite và build.
+- `npm run build` gồm TypeScript: **PASS**. Còn cảnh báo bundle JS 709.94 kB lớn hơn ngưỡng gợi ý 500 kB.
+- `git diff --check`: **PASS**; chỉ có cảnh báo line endings hiện hữu.
+- Đã chụp và xem app thật desktop 1440×900 trong isolated QA: `.bangiao/screenshots/g3-01/feedback-round-3/project-home-1440x900-after.png` và `period-comparison-1440x900-final.png`. Trang Project Home cho thấy tệp mới nhất full width, tệp cũ được gấp; trang compare chỉ hiện hai selector trước khi chọn cặp và khu nhập CSV thu gọn. Ảnh compare là trạng thái chưa chọn cặp; chưa có screenshot browser cho output sau khi tạo, dù test component xác minh gọi phép tính và render kết quả.
+- **PO goal:** nhìn thấy nơi lưu CSV, hiểu cách tính đối chiếu hai kỳ và biết chỗ xem kết quả nghiên cứu ChatGPT.
+- **User journey:** chọn hai tệp CSV → tạo kết quả ngay trong PO Hub; hoặc tạo prompt → chạy nghiên cứu ở ChatGPT → dán/lưu báo cáo → mở báo cáo để xem Overview hoặc bản gốc.
+- **Automated work:** tính delta CSV đủ điều kiện; giữ file nguồn; báo cáo import được liên kết vào dự án. Không tự đồng bộ ChatGPT, không phát minh insight từ nội dung không parse được.
+- **Expected result:** một CTA chính, import CSV thu gọn, kết quả compare ở cùng trang, report có nơi xem rõ ràng.
+- **Remaining friction:** PO phải chọn đủ hai tệp; compare hiện chỉ là bản xem trước không lưu riêng; nội dung ChatGPT không cấu trúc có thể không hiện insight tự động ở tab Tổng quan; chưa capture browser output thực sau khi chọn cặp; chưa thử CSV nhiều kỳ thật/lớn.
+- **Decision:** `TECHNICAL PASS / DESKTOP VISUAL CHECK / OWNER REVIEW PENDING`. Không tuyên bố Product Pass.
+
+## G3-01 — làm rõ nút soạn prompt và tab ChatGPT — 2026-11-03
+
+PO feedback: bấm luồng CSV thấy mở tab khác và không hiểu vì sao có hai thao tác tạo yêu cầu.
+
+- Đổi nút duy nhất thành **Soạn & sao chép yêu cầu cho ChatGPT**. Khi đã soạn prompt, nút đổi thành trạng thái hoàn tất, tránh một nút tạo mới nằm cạnh các bước tiếp theo.
+- Link ghi rõ **Mở ChatGPT ở tab mới**. Chú thích nói PO Hub vẫn mở ở tab hiện tại; sau khi có kết quả, quay lại để nhập vào PO Hub.
+- Khi clipboard không dùng được, hướng dẫn sao chép prompt trước khi mở ChatGPT.
+- `DataFirstWorkspace.test.tsx`: **17/17 PASS**; test xác nhận một nút trước khi bấm, nút được thay bằng trạng thái sau khi tạo, và các link mở/nhập dùng đúng đích.
+- `npm run build` bao gồm TypeScript: **PASS**; Vite đưa cảnh báo bundle JS **710.29 kB** lớn hơn 500 kB.
+- App local chụp ở 1440×900: `.bangiao/screenshots/g3-01/feedback-round-3/csv-prompt-flow-1440x900-after.png`; screenshot cho thấy một CTA ở trạng thái trước khi tạo. Trạng thái sau khi tạo được kiểm chứng bằng test, chưa có browser screenshot riêng.
+- **PO goal:** soạn yêu cầu từ shortlist mà không nhầm thao tác tạo prompt với mở ChatGPT; giữ đường quay lại để nhập câu trả lời.
+- **Journey:** chọn sản phẩm → soạn và sao chép → mở ChatGPT ở tab mới → quay lại tab PO Hub → nhập câu trả lời.
+- **Automated work:** tạo/copy prompt và giữ PO Hub ở tab nguồn.
+- **Expected result:** một nút tạo; sau khi tạo chỉ còn thông báo trạng thái và các bước tiếp theo có nhãn rõ.
+- **Remaining friction:** phải tự paste prompt và kết quả; không có đồng bộ ChatGPT.
+- **Decision:** `TECHNICAL PASS / DESKTOP VISUAL CHECK / OWNER REVIEW PENDING`; chưa phải Product Pass.
+
+## G3-01 — feedback round 5: one ChatGPT run, one answer import — 2026-11-03
+
+The PO asked whether the CSV research flow required copying a first ChatGPT response into “Bạn muốn nghiên cứu gì?”, starting ChatGPT again, and pasting a second response. It did not: the screen accidentally showed the prompt composer beside the answer importer and the CSV handoff did not carry a report title, making it look that way.
+
+### Implemented
+
+- The CSV result link carries the project ID and the same research question used at the start of the generated prompt.
+- Opening that link shows only the answer-import step. The “Bắt đầu với câu hỏi sản phẩm” composer and its copy action are absent.
+- The report title is already filled in. Editing it changes only the saved title; it does not generate or send a new ChatGPT request.
+- Scope and period remain available under a collapsed “Phạm vi lưu cùng báo cáo” disclosure.
+- The PO pastes the answer once and saves it. The answer remains unverified, and the saved report stays attached to the current project.
+- The existing “Nghiên cứu lại” action now uses a distinct `research-again` state: prepare/copy the prompt first, then switch to the import step after the single ChatGPT answer is ready.
+
+### Verification
+
+- `ResearchIntake.test.tsx` + `DataFirstWorkspace.test.tsx` + `ProjectHome.test.tsx`: **3 files / 76 tests PASS**. Coverage confirms the direct CSV route carries the project/title, hides the second prompt, and sends the pasted content in one POST; the repeat-research route starts at prompt preparation and switches to import afterward from Project Home, report library and report detail.
+- `npm run build`: TypeScript and Vite **PASS**. Existing Vite advisory: minified JS chunk **712.74 kB** (>500 kB guidance).
+- Read-only browser UAT on local port 5173 with the isolated synthetic QA project showed the one-step answer importer, prefilled title, no prompt composer, and a return link to CSV analysis. The browser did not submit external ChatGPT output.
+- No mobile review, genuine ChatGPT result, production database access, merge, or release.
+
+### Product Acceptance
+
+- **PO goal:** Run the CSV-derived prompt once and save its answer once in the correct project.
+- **User journey:** Copy request → run it once in ChatGPT → return to PO Hub → import link → paste answer once → save.
+- **Automated work:** Preserve project/title context and remove the second prompt action from the answer screen.
+- **Expected result:** One paste field saves one report into the intended project.
+- **Remaining friction:** Prompt and answer are still copied manually; ChatGPT is not synchronized with PO Hub. Genuine research accuracy/format remains unverified.
+- **Verification:** 76 focused tests, production build, isolated browser route review above.
+- **Decision:** `READY_FOR_OWNER / OWNER REVIEW PENDING`; no real-research `PRODUCT PASS` claimed.
+
+## G3-01 — feedback round 6: one-step Codex CLI research — 2026-11-03
+
+### What changed
+
+- Research accepts one prompt and one Enter press to start one local `codex exec` request. A persistent toggle turns this behavior off; Shift+Enter remains a line break. The response appears in the same screen and must be reviewed before saving.
+- The settings load the model catalog through Codex `app-server`, choose a lightweight model based on model names when available, and let the PO choose another listed model. The name-based hint does not prove actual account entitlement or lowest cost.
+- CSV observation analysis and compatible-period highlighting still run inside PO Hub without Codex. Codex is an optional follow-up for selected products; the request includes their selected CSV context, and the response is kept separate from unverified provider values.
+- A saved response records `codex_cli_research` origin. `run.bat` now treats an API that lacks the two Codex routes as outdated and follows its existing ownership safeguards before restarting.
+- Codex runs with `--sandbox read-only`, `--ephemeral`, and `--disable shell_tool` in a temporary directory. The installed CLI does not expose the attempted web-search option and local web search was unavailable; the prompt directs Codex to disclose this and never invent sources. No actual inference was performed to conserve quota.
+
+### Verification and Product Acceptance
+
+- `tests.test_codex_research`: **3/3 PASS**; backend `py_compile`: **PASS**.
+- Focused `ResearchIntake.test.tsx` + `DataFirstWorkspace.test.tsx`: **2 files / 72 tests PASS**; `npm run typecheck`: **PASS**; `npm run build`: **PASS**, Vite chunk advisory at **722.54 kB**.
+- `scripts/test-launcher-compatibility.ps1`: **9 cases PASS**. `git diff --check`: **PASS** with existing line-ending warnings.
+- The report-origin API test did not finish after isolated database migrations. A read-only request to the currently open app's `/api/v1/codex/models` returned `{"detail":"Not Found"}`, confirming that its backend is still outdated. Model catalog retrieval, persistence API, browser UAT and real Codex output are **NOT VERIFIED**. No production database, external search, or Codex inference was used.
+- **PO goal:** ask once in PO Hub, receive a result in the same app, and optionally save it; retain automatic CSV analysis without requiring a model call.
+- **User journey:** Research question → Enter → review response → save if useful. For CSV: import → read local analysis/highlights → optionally select products → Codex context research → review → save.
+- **Automated work:** one CLI call, model catalog discovery, selected model, same-screen preview, clear source provenance; CSV signals remain deterministic and separate.
+- **Expected result:** no prompt/answer copy-paste for Codex; no Codex usage for local CSV analysis.
+- **Remaining friction:** local server/runtime and model access are unverified; web-search availability and lowest billing model are not guaranteed; response still needs PO review/save and evidence is not independently verified.
+- **Verification:** automated suite/build and launcher checks above; no browser UAT or actual CLI research request.
+- **Decision:** `NEEDS FIX / OWNER REVIEW PENDING` until the local smoke test confirms model loading, Enter, preview and saving.
+- **Next:** use `run.bat` and one lightweight-model smoke test only; if it fails, rework this same task. Do not repeatedly test and burn quota.
+
+### Feedback round 7 — old backend startup handoff — 2026-11-03
+
+- **Owner feedback:** `run.bat` stopped on an outdated API at port 8000 and asked the owner to identify and stop a PID in PowerShell; owner asked whether this was misleading.
+- **Change:** The launcher now offers a direct Y/N restart confirmation for the outdated PO Hub API. It rechecks listener PIDs and process start times after consent; N/Enter, unknown process, or PID changes leave the process alone. A confirmed restart keeps saved reports and CSV files. Normal startup then runs existing additive migrations.
+- **Verification:** `scripts/test-launcher-compatibility.ps1` **18 assertions PASS**. Actual old-backend restart, app launch, Codex model discovery, request/save, and database migration were not run in this environment. No Codex quota was used.
+- **Decision:** `NEEDS FIX / OWNER RUNTIME REVIEW PENDING`; automated launcher logic is covered, but runtime acceptance is still open.
+
+### Feedback round 8 — report foreign-key migration failure — 2026-11-03
+
+- **Owner feedback:** Screenshot showed `run.bat` failing while dropping `imported_research_reports` because existing CSV datasets reference that table.
+- **Finding:** The report lineage/origin migrations used SQLite batch table replacement with foreign-key enforcement on. The failed attempt left the original table and rows intact plus an empty Alembic temp table.
+- **Correction:** The migration connection now temporarily disables FK enforcement, uses transactional DDL, checks all existing foreign keys before migration and again before commit, then restores FK enforcement. Revision `20261102_0016` drops a stale temp table only when it is empty; it refuses to discard a nonempty temp table.
+- **Actual DB recovery:** Before migration, the configured DB was verified read-only at `20261027_0015` with 8 reports, 3 CSV datasets, `integrity_check=ok`, 0 FK errors and an empty stale temp table. A SQLite backup is retained at `data/backups/po_intelligence_hub_pre_fk_migration_fix_20261103_161609.sqlite3`. The actual DB is now at `20261103_0017`; common-column row hashes match the backup across 18 existing tables, report/CSV counts are unchanged, `integrity_check=ok`, FK errors 0 and stale temp count 0.
+- **Verification:** `tests/test_report_migration_regression.py` + `tests/test_codex_research.py`: **4/4 PASS**. `scripts/test-launcher-compatibility.ps1`: **18 assertions PASS**. Backend module import passes. Agent-shell live launch did not pass: its localhost HTTP health request was denied by the environment (`socket access permissions`), leaving the app runtime/model list/browser UAT unverified. No real Codex inference or quota use.
+- **Decision:** `TECHNICAL PASS for migration and data preservation / LIVE APP RUNTIME NEEDS OWNER-SIDE VERIFICATION`; no Product Pass.

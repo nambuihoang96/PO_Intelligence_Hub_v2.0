@@ -13,7 +13,7 @@ Starting HEAD: `954005821ab16507666d358f9b971d59e8c4d292`
 | Desktop report workflow | **PASS** | Overview → Findings → Entities → Evidence → Benchmark → Report Notes → Project Decision → Tracking; refresh/reopen and duplicate import checked. |
 | 11 quantitative observations | **PASS — interpreted without fabrication** | All 11 are shown as report-supplied and unverified; 5 comparison-ready in two compatible groups, 6 download observations not ready because method is missing. |
 | Charts | **PARTIAL / DATA-LIMITED** | Two same-metric/scope/period comparison groups render. No time series, growth, or cross-provider chart is justified by this report. |
-| Mobile 390×844 | **FAIL — visual gate open** | Real screenshot shows clipped report title, section navigation, and content at the right edge. |
+| Mobile 390×844 | **RESPONSIVE VISUAL RETEST PASS; full mobile journey pending** | 2026-11-03 actual-app retest at 390×844 and 320×700 shows report title wrapping, all seven report sections visible in a two-column grid, and no page-level horizontal overflow. Screenshot files were not saved. |
 | Frontend regressions, TypeScript, build | **PASS** | 26 files / 235 tests; `npm run build` includes `tsc --noEmit`; Vite production build succeeded. |
 | Backend full suite | **PASS — prior verified run** | 177/177 was verified in the preceding closure and intentionally not rerun; this task changed no backend or migration code. Current live API import/duplicate flow passed. |
 | Product acceptance | **PENDING / NEEDS FIX** | No owner acceptance inferred; mobile clipping remains. |
@@ -26,7 +26,7 @@ Starting HEAD: `954005821ab16507666d358f9b971d59e8c4d292`
 - `POResearchPayload.model_validate` passed without editing or repairing the research payload.
 - Contract counts: 6 findings, 10 entities, 6 evidence references, 4 benchmark dimensions, 8 research gaps, 11 quantitative observations.
 - The report body stored in SQLite is exactly equal to the marked source block including CRLF line endings. The persisted content hash was recalculated and matched.
-- Wrapper metadata used for import: question “Game puzzle nào đang đứng đầu thị trường năm 2026”, GEO Worldwide, period 2026, platform Cross-platform. No claim in the report body was added or rewritten.
+- Wrapper metadata used for import: question “Game puzzle nào đang đứng đầu thị trường năm 2026”, GEO Worldwide, period 2026, platforms Android and iOS, as stated in `qa-input/Pasted text(1).txt`. No claim in the report body was added or rewritten. This corrects the prior handoff's Cross-platform label.
 
 ## QA import and browser route
 
@@ -107,9 +107,17 @@ Unrelated local `scripts/setup.ps1` changes, QA databases, source inputs, logs, 
 - **User journey:** report opened → findings/entities/evidence reviewed → two subjects selected in Benchmark → report note saved → project decision saved → Tracking opened → refresh and duplicate reopen checked.
 - **Automated work:** current schema validation, isolated import, content hash, duplicate resolution and persistence checks used the supplied data without synthesizing research.
 - **Expected result:** report content and 11 supplied observations remain available; two compatible IAP groups are shown without mixing periods/providers; PO work survives reopen.
-- **Remaining friction:** mobile content clipping; source verification and six download methodologies are absent from supplied data.
-- **Verification:** 235 frontend tests, TypeScript/build, schema validation, live import/duplicate and desktop browser workflow passed. Mobile screenshot was inspected and failed visual acceptance. Backend 177/177 is prior verified evidence, not rerun in this task.
+- **Remaining friction:** full mobile end-to-end actions and saved exact-width screenshot artifacts remain open; source verification and comparable methodology for six download observations are absent from supplied data.
+- **Verification:** prior 235 frontend tests, TypeScript/build, schema validation, live import/duplicate and desktop browser workflow passed. On 2026-11-03, actual running app report `c044b4e8-967f-466b-9ae6-a5e0fef31d81` was visually checked at 1440×900, 390×844 and 320×700; page widths matched viewport client widths (1425/1425, 375/375, 305/305), and all seven report sections were visible at both mobile widths after the tab layout correction. The full-report view and table of contents were visually checked at 390×844. The report has no HTML tables, so no real table rendering is claimed. Current `npm run build` passed; 677.62 kB JavaScript chunk advisory remains. Browser screenshots were displayed during the review but not saved. Backend 177/177 is prior verified evidence, not rerun in this task.
 - **Decision:** **NEEDS FIX / OWNER REVIEW PENDING**. No Product Acceptance.
+
+## 2026-11-03 responsive report navigation recheck
+
+- **Issue and correction:** At mobile widths, the seven report section tabs were clipped in a horizontal scroller with its scrollbar hidden. `frontend/src/peachyStudio.css` now renders them in a two-column grid at 560px and below. On desktop, the quantitative source badge was shrinking until its label wrapped vertically; it now retains its natural width and stays on one line. These CSS-only changes leave report data, scope, and source status untouched.
+- **Current report:** Opened the existing owner-provided Puzzle 2026 report in the isolated local QA workspace; no second import was created. The full-report view showed the supplied summary, findings, research gaps and next steps. No HTML table was present.
+- **Browser verification:** 1440×900 desktop and 390×844 / 320×700 mobile. Document width equals client width at each size (1425/1425, 375/375, 305/305). At both mobile sizes, all seven report tabs fit within the visible two-column grid, and the report title wraps without horizontal clipping. On desktop, the quantitative source badge measures 136×29px and stays on one line. The long-form view and its in-report table of contents were visually reviewed at 390×844. Visual screenshots were captured in-session and displayed, but not saved as files.
+- **Build:** `npm run build` passed, including TypeScript; Vite reports the existing large JS chunk advisory (677.62 kB).
+- **Product Acceptance:** **PO goal:** read the genuine long-form research report and reach its sections on a phone. **User journey:** open the existing report, scan all report-section links, and open the full report and table of contents. **Automated work:** responsive layout exposes all seven sections and keeps the source label readable without changing supplied claims or measurements. **Expected result:** report navigation, source label and long-form content remain readable without page-level horizontal overflow. **Remaining friction:** saved screenshot artifacts, full mobile findings/evidence/decision/Tracking actions, independent source verification and comparable methodology for six download observations remain open. **Verification:** actual-app visual review at 1440×900, 390×844 and 320×700; current build PASS; no real report table was present to verify. **Decision:** `NEEDS FIX / OWNER REVIEW PENDING`.
 
 ## Commit
 

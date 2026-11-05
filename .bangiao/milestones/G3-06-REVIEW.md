@@ -38,3 +38,10 @@ The open subject profile now leads with one contextual “Câu hỏi nghiên c�
 - `.bangiao/G3-06-SUBJECT-PROFILES.md`
 - `docs/RECOVERY_BOARD.md`
 - `.bangiao/milestones/G3-06-REVIEW.md`
+
+## 2026-11-03 responsive UAT recheck
+
+- **Outcome:** Exact desktop and mobile visual verification completed against the existing isolated QA Puzzle Research project. The open profile showed its existing QA-only follow-up question and unchanged source/collection context.
+- **Corrections:** Removed the Research page's 320px minimum body width at ≤560px and placed the profile type label below the product name. No profile or report data was written.
+- **Evidence:** At 1440×900, 390×844 and 320×700, document/client widths were 1425/1425, 375/375 and 305/305. The 320px horizontal page bar is gone. The question and save control remain within the viewport; the save button is disabled without edits. Browser screenshots were viewed but not saved as files. Current build/TypeScript PASS, existing 677.62 kB chunk advisory; `git diff --check` PASS with line-ending warnings.
+- **Decision:** `TECHNICAL PASS / OWNER REVIEW PENDING`; no Product Pass. Existing evidence is QA-only and genuine-source acceptance remains separate.
