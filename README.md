@@ -25,7 +25,9 @@ The setup script creates a project-local Python virtual environment and installs
 
 ## Run in development
 
-After dependencies are installed, start both services with the single Windows launcher:
+After dependencies are installed, **double-click `run.bat` in the project root** to open PO Hub in your browser. It calls `run-local.bat`, which starts both services and opens `http://127.0.0.1:5173`. Keep the launcher window open while using the app; press Ctrl+C there when you want to stop services started by it.
+
+From PowerShell, the equivalent launcher is:
 
 ```powershell
 .\run-local.bat
