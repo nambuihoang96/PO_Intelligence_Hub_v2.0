@@ -13,6 +13,9 @@ from backend.app.quantitative import assess_observation_readiness
 
 FIELDS = ("geo", "platform", "methodology", "unit", "period_start", "period_end", "snapshot_date", "period_semantics", "granularity", "source_reference")
 PERIOD_FIELDS = {"period_start", "period_end", "snapshot_date", "period_semantics", "granularity"}
+# po_confirmed: the PO confirmed this value after review (period/GEO proposed from the file name,
+# unit/currency/methodology typed by the PO). It is always shown as PO-confirmed, never as CSV or documentation.
+CONFIRMED_BASES = {"csv", "provider_documentation", "po_confirmed"}
 
 
 def metadata_group(row: dict) -> str:
@@ -89,15 +92,15 @@ def effective_observations(dataset, report=None) -> list[dict]:
         blockers = []
         # A free-text method typed during import is not documentation. Legacy
         # files remain readable, but require the same review as new imports.
-        if provenance["methodology"]["basis"] not in {"csv", "provider_documentation"}:
+        if provenance["methodology"]["basis"] not in CONFIRMED_BASES:
             blockers.append("Measurement methodology is not confirmed by CSV or provider documentation. Review dataset information.")
         required_metadata = {"geo", "platform", "unit", "period_semantics"}
         required_metadata |= {"snapshot_date"} if row.get("period_semantics") == "snapshot" else {"period_start", "period_end"}
         for field in required_metadata:
-            if provenance[field]["basis"] not in {"csv", "provider_documentation"}:
+            if provenance[field]["basis"] not in CONFIRMED_BASES:
                 blockers.append(f"Metadata {field} lacks a CSV or documented provider basis. Review dataset information.")
         for field, entry in entries.items():
-            if field != "granularity" and entry["basis"] not in {"csv", "provider_documentation"}:
+            if field != "granularity" and entry["basis"] not in CONFIRMED_BASES:
                 blockers.append(f"Metadata {field} remains {entry['basis']}; a documented basis is needed for comparison.")
         semantics = row.get("period_semantics", "unknown")
         if semantics == "snapshot" and row.get("period_start") and row.get("period_end"):

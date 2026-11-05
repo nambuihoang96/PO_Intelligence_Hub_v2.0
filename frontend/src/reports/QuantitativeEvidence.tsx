@@ -143,29 +143,29 @@ function ViewBody({ view, onViewEvidence, displayMode }: { view: QuantitativeVie
   </div>;
 }
 
-export function QuantitativeEvidence({ observations, onViewEvidence, onPrepareChartData }: Props) {
+export function QuantitativeEvidence({ observations, onViewEvidence, onPrepareChartData, sourceLabel = 'Nghiên cứu ChatGPT' }: Props & { sourceLabel?: string }) {
   const [displayModes, setDisplayModes] = useState<Record<string, 'chart' | 'table'>>({});
   const reportRows = observations.map((row, index) => ({ row, index })).filter(({ row }) => row.observation_type === 'reported');
-  if (!reportRows.length) return <section className="research-panel quantitative-evidence quantitative-no-data" aria-labelledby="quantitative-evidence-title"><div className="quantitative-evidence-heading"><div><span className="field-label">BÁO CÁO CHATGPT · ĐÃ GIỮ NGUYÊN NỘI DUNG GỐC</span><h3 id="quantitative-evidence-title">Số liệu trong báo cáo</h3></div></div><p>Báo cáo này không có quan sát số liệu có cấu trúc. PO Hub không chuyển văn bản hoặc ảnh biểu đồ thành số liệu.</p>{onPrepareChartData && <button type="button" className="secondary-action" onClick={onPrepareChartData}>Chuẩn bị dữ liệu biểu đồ từ báo cáo này</button>}</section>;
+  if (!reportRows.length) return <section className="research-panel quantitative-evidence quantitative-no-data" aria-labelledby="quantitative-evidence-title"><div className="quantitative-evidence-heading"><div><span className="field-label">BÁO CÁO CHATGPT · ĐÃ GIỮ NGUYÊN NỘI DUNG GỐC</span><h3 id="quantitative-evidence-title">Số liệu trong báo cáo</h3></div></div><p>Báo cáo này chưa có số liệu dạng bảng. PO Hub không tự đoán số từ văn bản hoặc ảnh biểu đồ.</p>{onPrepareChartData && <button type="button" className="secondary-action" onClick={onPrepareChartData}>Mở hướng dẫn cấu trúc số liệu</button>}</section>;
   const rows = reportRows.map(({ row }) => row);
   const views = selectQuantitativeViews(rows).map((view) => ({ ...view, observations: view.observations.map((point) => ({ ...point, index: reportRows[point.index].index })) }));
   const limitations = quantitativeLimitations(rows);
-  const metricNames = [...new Set(rows.map((row) => row.metric_definition || row.metric_id).filter(Boolean))];
+  const metricCount = new Set(rows.map((row) => row.metric_definition || row.metric_id).filter(Boolean)).size;
   return <section className="research-panel quantitative-evidence" aria-labelledby="quantitative-evidence-title">
-    <div className="quantitative-evidence-heading"><div><span className="field-label">SỐ LIỆU DO NGUỒN CUNG CẤP · CHƯA XÁC MINH</span><h3 id="quantitative-evidence-title">Số liệu và biểu đồ</h3><p>{metricNames.join(' · ') || 'Chưa có định nghĩa chỉ số'}</p></div><span className="quant-source-label">Nghiên cứu ChatGPT</span></div>
+    <div className="quantitative-evidence-heading"><div><span className="field-label">SỐ LIỆU DO NGUỒN CUNG CẤP · CHƯA XÁC MINH</span><h3 id="quantitative-evidence-title">Số liệu và biểu đồ</h3><p>{reportRows.length} quan sát · {metricCount ? `${metricCount} chỉ số được báo cáo` : 'chưa xác định chỉ số'}</p></div><span className="quant-source-label">{sourceLabel}</span></div>
     {views.length > 0 ? <div className="quantitative-views">{views.map((view, index) => { const key = `${view.kind}:${view.label}:${index}`; const displayMode = displayModes[key] || 'chart'; return <article className="quantitative-view" key={key}>
       <div className="quantitative-view-heading"><div><h4>{view.kind === 'comparison' || view.kind === 'grouped_bar' ? 'So sánh hồ sơ' : view.kind === 'period_matrix' ? 'Đối chiếu hồ sơ theo kỳ' : view.kind === 'two_point' ? 'Hai thời điểm được báo cáo' : view.kind === 'time_series' ? 'Chuỗi số liệu quan sát' : view.kind === 'ranking' ? 'Thứ hạng được báo cáo' : 'Quan sát được báo cáo'}</h4><p>{view.label}</p></div><div className="quantitative-view-actions"><span>{view.observations.length} quan sát</span>{(view.kind === 'grouped_bar' || view.kind === 'two_point') && <button type="button" className="text-button" aria-pressed={displayMode === 'table'} onClick={() => setDisplayModes((current) => ({ ...current, [key]: displayMode === 'chart' ? 'table' : 'chart' }))}>{displayMode === 'chart' ? 'Xem bảng' : 'Xem biểu đồ'}</button>}</div></div>
       <p className="quant-scope-line">{scopeOf(view.observations[0].row)} · Do nguồn cung cấp · chưa xác minh</p>
       <ViewBody view={view} onViewEvidence={onViewEvidence} displayMode={displayMode} />
-  </article>; })}</div> : <div className="quantitative-insufficient"><strong>Chưa thể hiển thị biểu đồ tương thích.</strong><p>Các quan sát gốc vẫn có bên dưới cùng lý do kiểm tra. Không có giá trị nào được suy đoán.</p>{onPrepareChartData && <button className="secondary-action" type="button" onClick={onPrepareChartData}>Chuẩn bị dữ liệu biểu đồ từ báo cáo này</button>}</div>}
+  </article>; })}</div> : <div className="quantitative-insufficient"><strong>Chưa đủ dữ liệu tương thích để tạo biểu đồ.</strong><p>PO Hub giữ nguyên từng số liệu của báo cáo và chưa kết luận tăng, giảm hay so sánh giữa các chỉ số.</p>{onPrepareChartData && <button className="secondary-action" type="button" onClick={onPrepareChartData}>Mở hướng dẫn cấu trúc số liệu</button>}</div>}
     {limitations.length > 0 && <details className="quantitative-limitations"><summary>Giới hạn dữ liệu · {limitations.length}</summary><ul>{limitations.map((reason, index) => <li key={`${reason}:${index}`}>{reason}</li>)}</ul></details>}
-    <div className="quantitative-observation-details"><strong>Các quan sát trong báo cáo</strong>{reportRows.map(({ row, index }) => <details key={`${row.metric_id}:${index}`} id={`quant-observation-${index}`}>
+    <details className="quantitative-observation-disclosure"><summary>Xem số liệu gốc · {reportRows.length} quan sát</summary><div className="quantitative-observation-details">{reportRows.map(({ row, index }) => <details key={`${row.metric_id}:${index}`} id={`quant-observation-${index}`}>
       <summary>{row.metric_definition || row.metric_id || 'Chưa xác định chỉ số'} · {row.entity_name || row.entity_id || 'Chưa xác định đối tượng'} · {displayValue(row)}</summary>
       <p>{scopeOf(row) || 'Chưa cung cấp phạm vi'} · Do báo cáo cung cấp · Chưa xác minh</p>
       {row.reported_value_text && <p>Giá trị gốc được báo cáo: “{row.reported_value_text}” · {precisionLabel(row)}</p>}
       {row.validation_reasons.length > 0 && <ul>{row.validation_reasons.map((reason, reasonIndex) => <li key={reasonIndex}>{reason}</li>)}</ul>}
       {row.evidence_reference && <a href={row.evidence_reference} target="_blank" rel="noreferrer">Mở nguồn tham chiếu</a>}
       {row.source_reference && row.source_reference !== row.evidence_reference && <a href={row.source_reference} target="_blank" rel="noreferrer">Mở nguồn dữ liệu</a>}
-    </details>)}</div>
+    </details>)}</div></details>
   </section>;
 }

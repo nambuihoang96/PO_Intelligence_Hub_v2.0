@@ -100,7 +100,7 @@ export function QuantitativeComparisonCharts({ result }: Props) {
     </div>
     {display === 'chart' ? chartPoints.length ? <>
       <p className="csv-chart-selection-summary">Đang hiển thị {chartPoints.length}/{matchingEligible.length} sản phẩm đủ điều kiện{normalized ? ` khớp từ khóa này (tổng cộng ${eligible.length} sản phẩm đủ dữ liệu vẽ biểu đồ)` : ''}, sắp xếp theo {sortLabel}. {selectionContext} Bảng đầy đủ vẫn giữ tất cả {result.rows.length} dòng sản phẩm.</p>
-      <div className="csv-chart-context"><strong>{result.metric.metric_definition}</strong><span>{result.geo} · {result.platform} · {periodLabel(result.baseline_period)} → {periodLabel(result.current_period)}</span><span>Số liệu từ nguồn vẫn chưa được xác minh, trừ khi nguồn xác nhận rõ.</span></div>
+      <div className="csv-chart-context"><strong>{result.metric.metric_definition}</strong><span>{result.geo} · {result.platform} · {periodLabel(result.baseline_period)} → {periodLabel(result.current_period)}</span><span>{sourceNote(result)}</span></div>
       <PairedChart points={chartPoints} type={chartType} unit={result.metric.unit ?? ''} onSelect={setSelectedRow} />
       {missingChart > 0 && <p className="csv-chart-note">Không vẽ {missingChart} dòng trong chế độ này vì thiếu cặp giá trị đủ điều kiện. Các dòng vẫn có trong bảng đầy đủ; giá trị thiếu không được coi là 0.</p>}
       {selectedRow && <EvidenceDetails row={selectedRow} />}
@@ -108,4 +108,10 @@ export function QuantitativeComparisonCharts({ result }: Props) {
       : <><div className="csv-table-summary">Đang hiển thị {visibleRows.length.toLocaleString()}/{rows.length.toLocaleString()} dòng sản phẩm. Giá trị và phép tính không khả dụng do dịch vụ so sánh trả về.</div><ComparisonTable rows={visibleRows} unit={result.metric.unit ?? ''} />{pageCount > 1 && <nav className="comparison-pagination" aria-label="Các trang của bảng so sánh"><button className="secondary-action" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>Trước</button><span>Trang {Math.min(page + 1, pageCount)}/{pageCount}</span><button className="secondary-action" disabled={page + 1 >= pageCount} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>Tiếp</button></nav>}</>}
     {result.metric_warnings.length > 0 && <details className="comparison-metric-warnings"><summary>Chi tiết kiểm tra chỉ số và nguồn</summary>{result.metric_warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
   </div>;
+}
+
+// Calculated changes that use a PO confirmation are named as such; they are never presented as CSV or documentation.
+function sourceNote(result: QuantitativeComparisonPreview) {
+  const confirmed = result.rows.some((row) => [row.baseline, row.current].some((source) => source && Object.values(source.metadata_provenance ?? {}).some((item) => item.basis === 'po_confirmed')));
+  return confirmed ? 'Nguồn: PO xác nhận (kỳ, GEO từ tên tệp; đơn vị và phương pháp do PO nhập) · chưa xác minh độc lập.' : 'Số liệu từ nguồn vẫn chưa được xác minh, trừ khi nguồn xác nhận rõ.';
 }

@@ -83,8 +83,12 @@ export function QuantitativeDatasetExplorer({ dataset, onRevalidated, reportScop
       const next = dataset.report_id
         ? await reportApi.revalidateQuantitativeDataset(dataset.report_id, dataset.id)
         : await reportApi.revalidateProjectQuantitativeDataset(dataset.project_id!, dataset.id);
+      // Report success only when something the PO can see actually changed.
+      const signature = (item: QuantitativeDataset) => JSON.stringify([item.validation_reasons, item.observations.length, item.comparison_ready_observations ?? null, item.complete_observations ?? null]);
       onRevalidated(next);
-      setFeedback('Đã kiểm tra lại từ CSV gốc. Mã tệp dữ liệu và liên kết báo cáo được giữ nguyên.');
+      setFeedback(signature(next) === signature(dataset)
+        ? 'Đã kiểm tra lại. Không có thay đổi nào: cảnh báo và số dòng vẫn như trước.'
+        : 'Đã kiểm tra lại và cập nhật cảnh báo hoặc kết quả theo CSV gốc.');
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : 'Không thể kiểm tra lại dataset. Dữ liệu hiện tại vẫn được giữ nguyên.');
     } finally { setBusy(false); }

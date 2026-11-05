@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectQuantitativeState } from './quantitativeState';
+import { quantitativeStateLabels, selectQuantitativeState } from './quantitativeState';
 import type { QuantitativeDataset, QuantitativeObservation } from './api';
 
 const observation = (type: QuantitativeObservation['observation_type']): QuantitativeObservation => ({
@@ -17,6 +17,11 @@ const dataset: QuantitativeDataset = {
 
 describe('selectQuantitativeState', () => {
   it('identifies no linked data as a normal qualitative state', () => expect(selectQuantitativeState().state).toBe('no_data'));
+  it('explains missing report metrics in plain language', () => expect(quantitativeStateLabels.no_data).toBe('Báo cáo chưa cung cấp số liệu định lượng'));
+  it('uses PO-facing text for incomplete and out-of-scope measurements', () => {
+    expect(quantitativeStateLabels.partial_or_incompatible).toBe('Một số số liệu cần kiểm tra trước khi so sánh');
+    expect(quantitativeStateLabels.report_scope_mismatch).toBe('Số liệu CSV khác phạm vi báo cáo');
+  });
   it('distinguishes report-supplied observations from imported data', () => expect(selectQuantitativeState([observation('reported')]).state).toBe('research_supplied'));
   it('identifies report-linked CSV datasets', () => expect(selectQuantitativeState([], [dataset]).state).toBe('csv_linked'));
   it('identifies compatible mixed coverage', () => expect(selectQuantitativeState([observation('reported')], [dataset]).state).toBe('mixed_compatible'));

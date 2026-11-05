@@ -30,6 +30,15 @@ describe('QuantitativeDatasetImport', () => {
     expect(screen.getByLabelText('Chọn tệp CSV')).toBeTruthy();
   });
 
+  it('can keep the CSV importer collapsed until the PO asks to add a file', () => {
+    const { container } = render(<QuantitativeDatasetImport projectId="project-qa" onImported={vi.fn()} initiallyOpen={false} summaryLabel="Thêm tệp CSV mới" />);
+    const flow = container.querySelector('details.quant-import-flow') as HTMLDetailsElement;
+    expect(flow.open).toBe(false);
+    fireEvent.click(screen.getByText('Thêm tệp CSV mới'));
+    expect(flow.open).toBe(true);
+    expect(screen.getByLabelText('Chọn tệp CSV')).toBeTruthy();
+  });
+
 
   it('adds CSV metric columns with checkboxes and sorts by clicking numeric headers', async () => {
     const { container } = render(<QuantitativeDatasetImport report={report} onImported={vi.fn()} />);
@@ -45,13 +54,13 @@ describe('QuantitativeDatasetImport', () => {
     const table = container.querySelector('.quant-live-table') as HTMLTableElement;
     expect(table).toBeTruthy();
     expect(table.querySelectorAll('thead th')).toHaveLength(2); // Product + default metric.
-    const metricCheckbox = screen.getByRole('checkbox', { name: 'Hiển thị cột Thay đổi lượt tải so với cùng kỳ (%)' });
+    const metricCheckbox = screen.getByRole('checkbox', { name: 'Hiển thị cột Tăng/giảm lượt tải so với cùng kỳ (%)' });
     fireEvent.click(metricCheckbox);
     expect(table.querySelectorAll('thead th')).toHaveLength(3);
     expect(table.textContent).toContain('12.5');
-    fireEvent.click(screen.getByRole('button', { name: /Lượt tải \(giá trị nguồn\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Lượt tải/ }));
     expect(table.querySelector('tbody tr th strong')?.textContent).toBe('App A');
-    fireEvent.click(screen.getByRole('button', { name: /Lượt tải \(giá trị nguồn\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Lượt tải/ }));
     expect(table.querySelector('tbody tr th strong')?.textContent).toBe('App B');
     expect(reportApi.importQuantitativeDataset).not.toHaveBeenCalled();
   });

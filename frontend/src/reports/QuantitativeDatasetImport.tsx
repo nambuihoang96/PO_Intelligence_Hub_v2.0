@@ -146,7 +146,8 @@ function readLocalFile(file: File): Promise<string> {
   });
 }
 
-export function QuantitativeDatasetImport({ report, projectId, onImported }: { report?: ImportedReport; projectId?: string; onImported: (dataset: QuantitativeDataset) => void }) {
+export function QuantitativeDatasetImport({ report, projectId, onImported, initiallyOpen, summaryLabel }: { report?: ImportedReport; projectId?: string; onImported: (dataset: QuantitativeDataset) => void; initiallyOpen?: boolean; summaryLabel?: string }) {
+  const [flowOpen, setFlowOpen] = useState(() => initiallyOpen ?? Boolean(projectId));
   const [existing, setExisting] = useState<QuantitativeDataset | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const fileRevision = useRef(0);
@@ -351,11 +352,11 @@ export function QuantitativeDatasetImport({ report, projectId, onImported }: { r
     finally { setBusy(null); }
   }
 
-  return <details className="quant-import-flow" open={projectId ? true : undefined}>
-    <summary>Nhập CSV · chọn tệp → kiểm tra → {report ? 'lưu vào báo cáo' : 'lưu vào không gian làm việc'}</summary>
+  return <details className={`quant-import-flow${summaryLabel ? ' quant-import-flow--compact' : ''}`} open={flowOpen} onToggle={(event) => setFlowOpen(event.currentTarget.open)}>
+    <summary>{summaryLabel ?? `Nhập CSV · chọn tệp → kiểm tra → ${report ? 'lưu vào báo cáo' : 'lưu vào không gian làm việc'}`}</summary>
     <div className="quant-import-steps">
-      <p className="quant-import-purpose">Mục đích: {report ? 'lưu các chỉ số trong CSV vào báo cáo này để xem và so sánh.' : 'lưu CSV vào không gian làm việc để khám phá và so sánh trước khi có báo cáo ChatGPT.'} Bước 3 chỉ xem thử; chỉ bước 4 mới lưu. Tệp CSV gốc được giữ nguyên.</p>
-      <section><h4>1. Chọn tệp CSV</h4><label className="quant-file-picker">Chọn tệp CSV<input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>{filename && <span className="quant-file-name">{filename}</span>}
+      <p className="quant-import-purpose">Chọn tệp, xem thử dữ liệu, rồi lưu. Tệp CSV gốc được giữ nguyên.</p>
+      <section><h4>Chọn tệp CSV</h4><label className="quant-file-picker">Chọn tệp CSV<input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} /></label>{filename && <span className="quant-file-name">{filename}</span>}
         {headers.length > 0 && !existing && <section className="quant-live-data" aria-label="Dữ liệu CSV đọc trực tiếp">
           <div className="quant-live-heading"><div><strong>{new Set(dataRows.map((row) => rawProducts.identityColumn ? row[headers.indexOf(rawProducts.identityColumn)] : '').filter(Boolean)).size.toLocaleString('vi-VN')} sản phẩm · {metricMappings.length} chỉ số được nhận diện</strong><span>Giá trị dưới đây đọc trực tiếp từ file; thiếu phạm vi thì chưa dùng để kết luận tăng trưởng.</span></div><span className="quant-source-state">Dữ liệu gốc · chưa xác minh độc lập</span></div>
           <div className="quant-live-controls">

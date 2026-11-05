@@ -1,0 +1,136 @@
+.csv-top10 {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  min-width: 0;
+}
+
+.csv-top10-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.csv-top10-heading h4 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.csv-top10-source,
+.csv-top10-scope {
+  font-size: 0.95rem;
+  opacity: 0.85;
+  margin: 0;
+}
+
+.csv-top10-warnings {
+  border: 1px solid #b26a00;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 170, 0, 0.12);
+}
+
+.csv-top10-warnings ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.csv-top10-summary {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.csv-top10-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.csv-top10-item {
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.csv-top10-item--review {
+  border-color: #b26a00;
+}
+
+.csv-top10-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.csv-top10-rank {
+  font-weight: 700;
+  min-width: 1.5em;
+}
+
+.csv-top10-name {
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.csv-top10-item small {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.csv-top10-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 8px 0 0;
+}
+
+.csv-top10-facts div {
+  min-width: 0;
+}
+
+.csv-top10-facts dt {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.csv-top10-facts dd {
+  margin: 0;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 900px) {
+  .csv-top10-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.csv-top10-limits summary {
+  cursor: pointer;
+}
+
+.csv-top10-limits ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.92rem;
+}
+
+.csv-top10-meta {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.csv-top10-publishers,
+.csv-top10-all {
+  margin: 0;
+  font-size: 0.95rem;
+}

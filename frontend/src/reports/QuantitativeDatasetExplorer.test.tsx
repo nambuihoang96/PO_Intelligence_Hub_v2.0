@@ -60,9 +60,16 @@ describe('QuantitativeDatasetExplorer', () => {
     const onRevalidated = vi.fn();
     render(<QuantitativeDatasetExplorer dataset={dataset} reportScope={{ geo: 'US', platform: 'Android' }} onRevalidated={onRevalidated} />);
     fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra lại dữ liệu' }));
-    expect(await screen.findByText(/Đã kiểm tra lại từ CSV gốc\. Mã tệp dữ liệu và liên kết báo cáo được giữ nguyên\./)).toBeTruthy();
+    expect(await screen.findByText(/Không có thay đổi nào: cảnh báo và số dòng vẫn như trước\./)).toBeTruthy();
     expect(reportApi.revalidateQuantitativeDataset).toHaveBeenCalledWith('report-1', 'dataset-1');
     expect(onRevalidated).toHaveBeenCalledWith(dataset);
+  });
+
+  it('does not claim success as a change when revalidation returns new warnings', async () => {
+    vi.mocked(reportApi.revalidateQuantitativeDataset).mockResolvedValue({ ...dataset, validation_reasons: [...dataset.validation_reasons, 'Có ngày trong CSV sau hôm nay.'] });
+    render(<QuantitativeDatasetExplorer dataset={dataset} reportScope={{ geo: 'US', platform: 'Android' }} onRevalidated={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra lại dữ liệu' }));
+    expect(await screen.findByText(/Đã kiểm tra lại và cập nhật cảnh báo hoặc kết quả/)).toBeTruthy();
   });
 
   it('lets the PO choose every source observation in a multi-value cell without auto-selecting the first', () => {

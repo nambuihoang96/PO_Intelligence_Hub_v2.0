@@ -96,6 +96,16 @@ def _entity_match_key(value: Any) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(value)).strip()).casefold()
 
 
+def _csv_cell(row: dict[str, Any], header_name: str) -> str | None:
+    """Read one CSV cell by header name, ignoring case and a BOM; long text is cut to the stored limit."""
+    wanted = header_name.casefold()
+    for header, value in row.items():
+        if header and str(header).strip().lstrip("﻿").casefold() == wanted:
+            text = str(value or "").strip()
+            return text[:500] or None
+    return None
+
+
 def _date(value: str | None) -> date | None:
     if not value:
         return None
@@ -495,6 +505,9 @@ def parse_csv_observations(
             row_reasons = [*entity_reasons, *source_dimension_reasons]
             value: float | None = None
             numeric_text = str(measure.get("value") or "").strip()
+            # A trailing "%" is accepted only when the mapped unit is already "%" (e.g. AdMob "39.73%").
+            if numeric_text.endswith("%") and normalize_unit(str(measure.get("unit") or raw.get("unit") or "")) == "%":
+                numeric_text = numeric_text[:-1].strip()
             if numeric_text:
                 try:
                     if not EXACT_NUMBER.fullmatch(numeric_text):
@@ -505,6 +518,10 @@ def parse_csv_observations(
                         row_reasons.append(f"CSV row {row_number} value must be a finite exact number.")
                 except ValueError:
                     row_reasons.append(f"CSV row {row_number} has a non-numeric value '{numeric_text}'.")
+            elif "yoy" in str(measure.get("metric_id") or "").casefold():
+                # Blank year-over-year cells usually mean no prior-year data (often a newly launched app).
+                # Keep the value empty; do not treat it as 0% or as a validation failure.
+                row_reasons.append(f"Dòng {row_number} không có giá trị so sánh cùng kỳ năm trước (không có dữ liệu năm trước, có thể là app mới ra mắt).")
             else:
                 row_reasons.append(f"CSV row {row_number} has an empty mapped value.")
             observation = QuantitativeObservation(
@@ -538,6 +555,8 @@ def parse_csv_observations(
                 scope_compatible=scope_compatible,
                 import_status="imported",
                 source_row_number=row_number,
+                source_publisher_name=_csv_cell(row, "Publisher Name"),
+                source_release_date=_csv_cell(row, "Release Date (WW)") or _csv_cell(row, "Release Date"),
             )
             metric_header = str(measure.get("metric_definition") or "")
             unit = observation.unit
@@ -698,6 +717,96 @@ def calculate_change(current: dict[str, Any], previous: dict[str, Any], period_k
         "provenance_ids": [current.get("provenance_id"), previous.get("provenance_id")],
         "source_references": list(dict.fromkeys(filter(None, [current.get("source_reference"), previous.get("source_reference")]))),
     }
+
+
+FILENAME_PERIOD = re.compile(
+    r"([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\s*[-–—]+\s*([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})"
+)
+
+
+def _iso(value: Any) -> str:
+    parsed = _date(str(value)) if value else None
+    return parsed.isoformat() if parsed else ""
+
+
+def _month_day_year(month: str, day: str, year: str) -> date | None:
+    for fmt in ("%b %d %Y", "%B %d %Y"):
+        try:
+            return datetime.strptime(f"{month} {int(day)} {year}", fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def filename_period_warnings(filename: str, observations: list[dict[str, Any]]) -> list[str]:
+    """Warn when a period written in the file name does not match the dates in the CSV.
+
+    The file name is only a hint. The dates inside the CSV are used for analysis; this
+    message asks the PO to check the mismatch instead of silently trusting either side.
+    """
+    match = FILENAME_PERIOD.search(filename or "")
+    if not match:
+        return []
+    start = _month_day_year(match.group(1), match.group(2), match.group(3))
+    end = _month_day_year(match.group(4), match.group(5), match.group(6))
+    if start is None or end is None or start > end:
+        return []
+    observed = sorted({
+        parsed for item in observations
+        for parsed in [_date(item.get("snapshot_date") or item.get("period_start") or "")]
+        if parsed is not None
+    })
+    if not observed:
+        return []
+    if observed[0] <= start and observed[-1] >= end:
+        return []
+    # A period confirmed from this same file name is the stated period, not a mismatch.
+    if any(_iso(item.get("period_start")) == start.isoformat() and _iso(item.get("period_end")) == end.isoformat() for item in observations):
+        return []
+    return [
+        f"Tên tệp ghi kỳ từ {start.isoformat()} đến {end.isoformat()}, nhưng ngày trong CSV chỉ từ "
+        f"{observed[0].isoformat()} đến {observed[-1].isoformat()}. Hãy kiểm tra kỳ trước khi so sánh tệp này."
+    ]
+
+
+def growth_exceeds_absolute_warnings(observations: list[dict[str, Any]]) -> list[str]:
+    """Warn when a year-over-year growth value is larger than its absolute value.
+
+    For a count or revenue that cannot be negative, growth (current − previous) can never be larger
+    than the current value. Such a row usually means the export's columns or number format are wrong.
+    """
+    absolute: dict[tuple[str, str], float] = {}
+    for item in observations:
+        metric = str(item.get("metric_id") or "")
+        if not metric.endswith("_absolute") or "yoy" in metric:
+            continue
+        value = item.get("value")
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            absolute[(str(item.get("source_entity_id") or ""), str(item.get("snapshot_date") or item.get("period_end") or ""))] = float(value)
+    count = 0
+    for item in observations:
+        metric = str(item.get("metric_id") or "")
+        if "yoy_growth" not in metric or metric.endswith("_percent"):
+            continue
+        base = absolute.get((str(item.get("source_entity_id") or ""), str(item.get("snapshot_date") or item.get("period_end") or "")))
+        value = item.get("value")
+        if base is not None and isinstance(value, (int, float)) and abs(float(value)) > abs(base):
+            count += 1
+    if not count:
+        return []
+    return [f"{count} dòng tăng trưởng lớn hơn giá trị tuyệt đối của chính sản phẩm đó. Kiểm tra cột số và định dạng số trong CSV trước khi dùng."]
+
+
+def future_date_warnings(observations: list[dict[str, Any]], today: date | None = None) -> list[str]:
+    """Warn when a period or snapshot ends after today: such data cannot be a completed observation yet."""
+    today = today or date.today()
+    latest = max(
+        (parsed for item in observations for parsed in [_date(item.get("snapshot_date") or item.get("period_end") or "")] if parsed is not None),
+        default=None,
+    )
+    if latest is None or latest <= today:
+        return []
+    return [f"Có ngày trong CSV sau hôm nay ({latest.isoformat()}), nên chưa thể coi là số liệu đã hoàn tất. Kỳ này chưa so sánh được cho đến khi kỳ kết thúc."]
 
 
 def csv_digest(csv_text: str) -> str:

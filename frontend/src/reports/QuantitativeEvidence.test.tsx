@@ -249,11 +249,26 @@ describe('QuantitativeEvidence', () => {
 
   it('shows an insufficient-data explanation and exact validation reason without drawing a chart', () => {
     render(<QuantitativeEvidence observations={[observation({ value: null, period_start: null, complete_observation: false, comparison_ready: false, scope_compatible: null, validation_reasons: ['Missing exact numeric value.', 'Missing period start.'] })]} onViewEvidence={() => undefined} />);
-    expect(screen.getByText('Chưa thể hiển thị biểu đồ tương thích.')).toBeTruthy();
+    expect(screen.getByText('Chưa đủ dữ liệu tương thích để tạo biểu đồ.')).toBeTruthy();
     fireEvent.click(screen.getByText(/Giới hạn dữ liệu/));
     expect(screen.getAllByText('Missing exact numeric value.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Missing period start.').length).toBeGreaterThan(0);
     expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('keeps a long source-observation list behind one compact disclosure when no chart can be made', () => {
+    render(<QuantitativeEvidence observations={[
+      observation({ metric_id: 'revenue', metric_definition: 'Global revenue', value: null, complete_observation: false, comparison_ready: false, validation_reasons: ['Missing exact numeric value.'] }),
+      observation({ metric_id: 'downloads', metric_definition: 'Downloads', entity_id: 'game-b', entity_name: 'Game B', value: null, complete_observation: false, comparison_ready: false, validation_reasons: ['Missing exact numeric value.'] }),
+    ]} onViewEvidence={() => undefined} />);
+
+    expect(screen.getByText('2 quan sát · 2 chỉ số được báo cáo')).toBeTruthy();
+    expect(screen.queryByText('Global revenue · Game A · Chưa có dữ liệu')).toBeNull();
+    const disclosure = screen.getByText('Xem số liệu gốc · 2 quan sát').closest('details');
+    expect(disclosure?.open).toBe(false);
+    fireEvent.click(screen.getByText('Xem số liệu gốc · 2 quan sát'));
+    expect(disclosure?.open).toBe(true);
+    expect(screen.getByText(/Global revenue · Game A/)).toBeTruthy();
   });
 
   it('does not chart invalid date bounds even when other observation fields are present', () => {
@@ -261,14 +276,14 @@ describe('QuantitativeEvidence', () => {
       observation({ period_start: 'not-a-date', period_end: '2025-01-31', validation_reasons: ['Invalid period start; use YYYY-MM-DD.'] }),
     ]} onViewEvidence={() => undefined} />);
     expect(screen.queryByRole('heading', { name: 'Quan sát được báo cáo' })).toBeNull();
-    expect(screen.getByText('Chưa thể hiển thị biểu đồ tương thích.')).toBeTruthy();
+    expect(screen.getByText('Chưa đủ dữ liệu tương thích để tạo biểu đồ.')).toBeTruthy();
     expect(screen.getAllByText('Invalid period start; use YYYY-MM-DD.').length).toBeGreaterThan(0);
   });
 
   it('offers the existing ChatGPT structuring workflow for a qualitative-only report', () => {
     const prepare = vi.fn();
     render(<QuantitativeEvidence observations={[]} onViewEvidence={() => undefined} onPrepareChartData={prepare} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Chuẩn bị dữ liệu biểu đồ từ báo cáo này' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mở hướng dẫn cấu trúc số liệu' }));
     expect(prepare).toHaveBeenCalledOnce();
   });
 

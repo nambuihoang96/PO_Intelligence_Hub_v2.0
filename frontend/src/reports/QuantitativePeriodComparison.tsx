@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { reportApi, type ComparisonDataset, type ComparisonMetric, type ComparisonPeriod, type ImportedReport, type ReportSummary, type QuantitativeComparisonInput, type QuantitativeComparisonPreview, type QuantitativeDataset } from './api';
 import { QuantitativeDatasetImport } from './QuantitativeDatasetImport';
 import { DatasetMetadataReview } from './DatasetMetadataReview';
+import { CsvPoConfirmation } from '../research/CsvPoConfirmation';
 import { ResultsIcon } from '../ui/ResultsIcon';
 import { QuantitativeComparisonCharts } from './QuantitativeComparisonCharts';
 
@@ -31,6 +32,7 @@ export function QuantitativePeriodComparison() {
   const [baselineMeaning, setBaselineMeaning] = useState('');
   const [currentMeaning, setCurrentMeaning] = useState('');
   const [result, setResult] = useState<QuantitativeComparisonPreview | null>(null);
+  const resultRef = useRef<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [notice, setNotice] = useState('');
@@ -104,6 +106,11 @@ export function QuantitativePeriodComparison() {
     setResult(null);
   }, [baselineId, currentId, selectedMetricKey, geo, platform, baselinePeriods.map((period) => period.key).join('|'), currentPeriods.map((period) => period.key).join('|')]);
 
+  useEffect(() => {
+    if (!result) return;
+    window.requestAnimationFrame(() => resultRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+  }, [result]);
+
   const chosenBaselinePeriod = baselinePeriods.find((period) => period.key === baselinePeriodKey);
   const chosenCurrentPeriod = currentPeriods.find((period) => period.key === currentPeriodKey);
   const canCompare = Boolean(baseline && current && baselineId !== currentId && metric?.metric_id && metric.metric_definition && metric.unit && metric.methodology && geo && platform && baselinePeriodKey && currentPeriodKey
@@ -132,39 +139,43 @@ export function QuantitativePeriodComparison() {
   return <div className="period-comparison-page">
     <section className="comparison-intro-panel">
       <span className="comparison-icon"><ResultsIcon name="comparison" /></span>
-      <div><span className="state-label">SO SÁNH CÁC KỲ</span><h2>So sánh các tệp CSV</h2><p>Chọn hai lần xuất dữ liệu, đối chiếu bằng mã nguồn ổn định và xem mọi sản phẩm xuất hiện ở một hoặc cả hai kỳ.</p>{projectId && <a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>← Về dự án</a>}</div>
-    </section>
-
-    <section className="comparison-import-panel" aria-labelledby="comparison-import-title">
-      <div className="comparison-section-heading"><div><span className="state-label">THÊM TỆP NGUỒN</span><h2 id="comparison-import-title">Nhập tệp CSV</h2></div><span>{projectId ? 'CSV gốc sẽ được lưu riêng trong dự án cùng thông tin nguồn.' : 'CSV gốc sẽ gắn với báo cáo được chọn, được giữ nguyên và không bị gộp.'}</span></div>
-      {projectId ? <QuantitativeDatasetImport key={projectId} projectId={projectId} onImported={onImported} /> : <>
-        <label>Báo cáo để giữ provenance<select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}><option value="">Chọn báo cáo…</option>{reports.map((report) => <option value={report.id} key={report.id}>{report.question}</option>)}</select></label>
-        {importReport && <QuantitativeDatasetImport key={importReport.id} report={importReport} onImported={onImported} />}
-        {!importReport && <p className="comparison-muted">Chọn báo cáo rồi thêm từng tệp CSV. Không cần ghép tệp bằng tay.</p>}
-      </>}
+      <div><span className="state-label">SO SÁNH SỐ LIỆU</span><h2>So sánh hai kỳ CSV</h2><p>Chọn tệp kỳ trước và kỳ hiện tại, rồi bấm “Tạo kết quả so sánh”. Kết quả hiện ngay bên dưới. Đây là bản xem trước từ hai tệp đã lưu, không tạo báo cáo ChatGPT hay lưu thành mục riêng.</p>{projectId && <a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=csv`}>← Về phân tích CSV</a>}</div>
     </section>
 
     <section className="comparison-config-panel" aria-labelledby="comparison-config-title">
-      <div className="comparison-section-heading"><div><span className="state-label">THIẾT LẬP SO SÁNH</span><h2 id="comparison-config-title">Chọn tệp và phép đo</h2></div><button type="button" className="secondary-action" onClick={() => void loadCatalog()}>Làm mới danh sách tệp</button></div>
+      <div className="comparison-section-heading"><div><span className="state-label">BƯỚC 1 · CHỌN HAI TỆP</span><h2 id="comparison-config-title">Chọn kỳ muốn đối chiếu</h2><p className="comparison-config-help">Nếu chỉ có một chỉ số hoặc phạm vi chung, PO Hub tự điền. Điều kiện nào còn thiếu sẽ hiện để anh chọn trước khi so sánh.</p></div><button type="button" className="secondary-action" onClick={() => void loadCatalog()}>Làm mới danh sách tệp</button></div>
       <div className="comparison-dataset-information">{[baseline, current].filter((item): item is ComparisonDataset => Boolean(item)).map((dataset) => <article key={dataset.id}><strong>{dataset.filename}</strong><p>{dataset.geo_values.join(', ') || 'Chưa rõ thị trường'} / {dataset.platform_values.join(', ') || 'Chưa rõ nền tảng'} · {dataset.source_apps} sản phẩm · {dataset.metrics.filter((item) => item.usable_observations > 0).length} phép đo đủ thông tin</p><p>{dataset.periods.map(labelPeriod).join('; ')}</p><button type="button" className="secondary-action" onClick={() => setReviewDataset(dataset)}>Xem lại thông tin tệp</button><details><summary>Thông tin cần xem lại</summary>{dataset.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details></article>)}</div>
       <div className="comparison-select-grid">
         <label>Tệp kỳ trước<select value={baselineId} onChange={(event) => { setBaselineId(event.target.value); setResult(null); }}><option value="">Chọn tệp kỳ trước…</option>{datasets.map((dataset) => <option value={dataset.id} key={dataset.id}>{dataset.filename} · {dataset.report_question}</option>)}</select></label>
         <label>Tệp kỳ hiện tại<select value={currentId} onChange={(event) => { setCurrentId(event.target.value); setResult(null); }}><option value="">Chọn tệp kỳ hiện tại…</option>{datasets.map((dataset) => <option value={dataset.id} key={dataset.id} disabled={dataset.id === baselineId}>{dataset.filename} · {dataset.report_question}</option>)}</select></label>
-        <label>Chỉ số<select value={selectedMetricKey} onChange={(event) => { setSelectedMetricKey(event.target.value); setResult(null); }} disabled={!sharedMetrics.length}><option value="">{sharedMetrics.length ? 'Chọn đúng định nghĩa chỉ số…' : 'Chưa có chỉ số trùng khớp chính xác'}</option>{sharedMetrics.map((item) => <option value={metricKey(item)} key={metricKey(item)}>{item.metric_definition} · {item.unit} · {item.methodology}</option>)}</select></label>
-        <label>Thị trường<select value={geo} onChange={(event) => { setGeo(event.target.value); setResult(null); }} disabled={!compatibleGeos.length}><option value="">Chọn thị trường chung…</option>{compatibleGeos.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label>Nền tảng<select value={platform} onChange={(event) => { setPlatform(event.target.value); setResult(null); }} disabled={!compatiblePlatforms.length}><option value="">Chọn nền tảng chung…</option>{compatiblePlatforms.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label>Kỳ trong tệp trước<select value={baselinePeriodKey} onChange={(event) => { setBaselinePeriodKey(event.target.value); setBaselineMeaning(''); setResult(null); }} disabled={!baselinePeriods.length}><option value="">Chọn kỳ trước…</option>{baselinePeriods.map((period) => <option key={period.key} value={period.key}>{labelPeriod(period)}</option>)}</select></label>
-        <label>Kỳ trong tệp hiện tại<select value={currentPeriodKey} onChange={(event) => { setCurrentPeriodKey(event.target.value); setCurrentMeaning(''); setResult(null); }} disabled={!currentPeriods.length}><option value="">Chọn kỳ hiện tại…</option>{currentPeriods.map((period) => <option key={period.key} value={period.key}>{labelPeriod(period)}</option>)}</select></label>
+        {projectId && [baseline, current].filter((item): item is ComparisonDataset => Boolean(item)).map((item) => <CsvPoConfirmation key={item.id} projectId={projectId} dataset={item} onConfirmed={() => setResult(null)} />)}
+        {baseline && current && <>
+          <label>Chỉ số<select value={selectedMetricKey} onChange={(event) => { setSelectedMetricKey(event.target.value); setResult(null); }} disabled={!sharedMetrics.length}><option value="">{sharedMetrics.length ? 'Chọn đúng định nghĩa chỉ số…' : 'Chưa có chỉ số trùng khớp chính xác'}</option>{sharedMetrics.map((item) => <option value={metricKey(item)} key={metricKey(item)}>{item.metric_definition} · {item.unit} · {item.methodology}</option>)}</select></label>
+          <label>Thị trường<select value={geo} onChange={(event) => { setGeo(event.target.value); setResult(null); }} disabled={!compatibleGeos.length}><option value="">Chọn thị trường chung…</option>{compatibleGeos.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label>Nền tảng<select value={platform} onChange={(event) => { setPlatform(event.target.value); setResult(null); }} disabled={!compatiblePlatforms.length}><option value="">Chọn nền tảng chung…</option>{compatiblePlatforms.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label>Kỳ trong tệp trước<select value={baselinePeriodKey} onChange={(event) => { setBaselinePeriodKey(event.target.value); setBaselineMeaning(''); setResult(null); }} disabled={!baselinePeriods.length}><option value="">Chọn kỳ trước…</option>{baselinePeriods.map((period) => <option key={period.key} value={period.key}>{labelPeriod(period)}</option>)}</select></label>
+          <label>Kỳ trong tệp hiện tại<select value={currentPeriodKey} onChange={(event) => { setCurrentPeriodKey(event.target.value); setCurrentMeaning(''); setResult(null); }} disabled={!currentPeriods.length}><option value="">Chọn kỳ hiện tại…</option>{currentPeriods.map((period) => <option key={period.key} value={period.key}>{labelPeriod(period)}</option>)}</select></label>
+        </>}
       </div>
+      {(!baseline || !current) && <p className="comparison-next-step" role="status">Chọn hai tệp trước. PO Hub sẽ tự chọn phép đo chung nếu chỉ có một lựa chọn phù hợp.</p>}
       {(chosenBaselinePeriod?.semantics === 'unknown' || chosenCurrentPeriod?.semantics === 'unknown') && <div className="comparison-confirmations"><p>Có tệp chưa nêu rõ ý nghĩa của ngày. Hãy xác nhận trước khi so sánh.</p>{chosenBaselinePeriod?.semantics === 'unknown' && <label>Ý nghĩa ngày trong tệp trước<select value={baselineMeaning} onChange={(event) => { setBaselineMeaning(event.target.value); setResult(null); }}><option value="">Chọn…</option><option value="snapshot">Ngày chụp số liệu</option><option value="reporting_interval">Khoảng báo cáo</option><option value="rolling_interval">Khoảng thời gian trượt</option></select></label>}{chosenCurrentPeriod?.semantics === 'unknown' && <label>Ý nghĩa ngày trong tệp hiện tại<select value={currentMeaning} onChange={(event) => { setCurrentMeaning(event.target.value); setResult(null); }}><option value="">Chọn…</option><option value="snapshot">Ngày chụp số liệu</option><option value="reporting_interval">Khoảng báo cáo</option><option value="rolling_interval">Khoảng thời gian trượt</option></select></label>}</div>}
       {baseline && current && sameMetricMeaning && !sharedMetrics.some((item) => item.methodology?.trim()) && <p className="comparison-warning">Hai tệp có cùng chỉ số và đơn vị nhưng chưa ghi nhận phương pháp đo tương thích. Mở “Xem lại thông tin tệp” để bổ sung căn cứ phương pháp cho tệp đã lưu; không cần nhập lại.</p>}
       {baseline && current && sharedMetrics.length === 0 && <p className="comparison-warning">Hai tệp không có định nghĩa chỉ số, đơn vị và phương pháp đo trùng khớp chính xác. Nhãn gần giống nhau chưa đủ căn cứ để so sánh.</p>}
-      <button type="button" className="primary-action" disabled={!canCompare || busy} onClick={() => void compare()}>{busy ? 'Đang đối chiếu các dòng nguồn…' : 'So sánh hai kỳ đã chọn'}</button>
+      <button type="button" className="primary-action" disabled={!canCompare || busy} onClick={() => void compare()}>{busy ? 'Đang đối chiếu các dòng nguồn…' : 'Tạo kết quả so sánh'}</button>
+    </section>
+
+    <section className="comparison-import-panel" aria-labelledby="comparison-import-title">
+      <div className="comparison-section-heading"><div><span className="state-label">KỲ MỚI · TÙY CHỌN</span><h2 id="comparison-import-title">Tệp CSV trong dự án</h2></div><span>{datasets.length} tệp đã lưu</span></div>
+      {projectId ? <QuantitativeDatasetImport key={projectId} projectId={projectId} onImported={onImported} initiallyOpen={false} summaryLabel="Thêm tệp CSV mới" /> : <>
+        <label>Báo cáo để giữ nguồn<select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}><option value="">Chọn báo cáo…</option>{reports.map((report) => <option value={report.id} key={report.id}>{report.question}</option>)}</select></label>
+        {importReport && <QuantitativeDatasetImport key={importReport.id} report={importReport} onImported={onImported} initiallyOpen={false} summaryLabel="Thêm tệp CSV vào báo cáo" />}
+        {!importReport && <p className="comparison-muted">Chọn báo cáo rồi mới thêm CSV vào báo cáo đó.</p>}
+      </>}
     </section>
 
     {reviewDataset && <DatasetMetadataReview key={reviewDataset.id} reportId={reviewDataset.report_id ?? undefined} projectId={reviewDataset.project_id ?? undefined} datasetId={reviewDataset.id} onClose={() => setReviewDataset(null)} onSaved={() => { setResult(null); setSelectedMetricKey(''); setBaselinePeriodKey(''); setCurrentPeriodKey(''); void loadCatalog(); }} />}
     {failure && <div role="alert" className="research-alert">{failure}</div>}{notice && <div role="status" className="research-success">{notice}</div>}
-    {result && <section className="comparison-results" aria-labelledby="comparison-results-title">
+    {result && <section className="comparison-results" aria-labelledby="comparison-results-title" ref={resultRef}>
       <header className="comparison-results-heading"><div><span className="state-label">KẾT QUẢ CÓ THỂ TRUY VẾT</span><h2 id="comparison-results-title">So sánh {periodKindLabel(result.baseline_period.semantics).toLocaleLowerCase()} · {result.metric.metric_definition}</h2><p>{result.geo} · {result.platform} · {labelPeriod(result.baseline_period)} → {labelPeriod(result.current_period)}</p></div><span className={`comparison-readiness ${result.period_readiness.compatible ? 'ready' : 'blocked'}`}>{result.period_readiness.compatible ? 'Hai kỳ tương thích' : 'Chưa thể kết luận thay đổi'}</span></header>
       {!result.period_readiness.compatible && <p className="comparison-warning">{result.period_readiness.reasons.join(' ')}</p>}
       <QuantitativeComparisonCharts result={result} />

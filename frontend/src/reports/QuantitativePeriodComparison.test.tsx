@@ -54,6 +54,9 @@ describe('QuantitativePeriodComparison', () => {
 
   it('selects original exports and displays matched and source-only app evidence without treating report mismatch as a block', async () => {
     render(<QuantitativePeriodComparison />);
+    expect(screen.getByText(/bản xem trước từ hai tệp đã lưu, không tạo báo cáo ChatGPT hay lưu thành mục riêng/i)).toBeTruthy();
+    expect(screen.queryByLabelText('Chỉ số')).toBeNull();
+    expect(screen.getByText(/Chọn hai tệp trước/)).toBeTruthy();
     await waitFor(() => expect(screen.getAllByRole('option', { name: /October export/ })).toHaveLength(2));
     fireEvent.change(screen.getByLabelText('Tệp kỳ trước'), { target: { value: 'old' } });
     fireEvent.change(screen.getByLabelText('Tệp kỳ hiện tại'), { target: { value: 'new' } });
@@ -62,7 +65,7 @@ describe('QuantitativePeriodComparison', () => {
     const option = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
     fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: option.value } });
     await waitFor(() => expect((screen.getByLabelText('Kỳ trong tệp trước') as HTMLSelectElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo kết quả so sánh' }));
     await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     expect(reportApi.previewQuantitativeComparison).toHaveBeenCalledTimes(1);
     expect(vi.mocked(reportApi.previewQuantitativeComparison).mock.calls[0][0]).toMatchObject({
@@ -97,7 +100,7 @@ describe('QuantitativePeriodComparison', () => {
     await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
     fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: metricOption.value } });
-    fireEvent.click(await screen.findByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo kết quả so sánh' }));
     await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     fireEvent.change(screen.getByRole('combobox', { name: 'Kiểu biểu đồ' }), { target: { value: 'percentage_change' } });
     expect(screen.getByRole('button', { name: /Xem bằng chứng của Example App/ })).toBeTruthy();
@@ -120,7 +123,7 @@ describe('QuantitativePeriodComparison', () => {
     await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
     fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: metricOption.value } });
-    fireEvent.click(await screen.findByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo kết quả so sánh' }));
     await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     expect(screen.getByText('App 100')).toBeTruthy();
     expect(screen.queryByText('App 090')).toBeNull();
@@ -161,7 +164,7 @@ describe('QuantitativePeriodComparison', () => {
     await waitFor(() => expect((screen.getByLabelText('Chỉ số') as HTMLSelectElement).disabled).toBe(false));
     const metricOption = screen.getByRole('option', { name: /Downloads · downloads/ }) as HTMLOptionElement;
     fireEvent.change(screen.getByLabelText('Chỉ số'), { target: { value: metricOption.value } });
-    fireEvent.click(await screen.findByRole('button', { name: 'So sánh hai kỳ đã chọn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo kết quả so sánh' }));
     await screen.findByRole('heading', { name: /So sánh ảnh chụp số liệu · Downloads/i });
     expect(screen.getByText('Zebra Highest Current')).toBeTruthy();
     expect((screen.getByLabelText('Sắp xếp biểu đồ và bảng') as HTMLSelectElement).value).toBe('current_desc');
@@ -193,8 +196,8 @@ describe('QuantitativePeriodComparison', () => {
     expect(await screen.findByTestId('dataset-import')).toBeTruthy();
     expect(screen.queryByLabelText('Báo cáo để giữ provenance')).toBeNull();
     expect(reportApi.list).not.toHaveBeenCalled();
-    expect(screen.getByRole('link', { name: '← Về dự án' }).getAttribute('href'))
-      .toBe('/research?projectId=workspace-1&view=data');
+    expect(screen.getByRole('link', { name: '← Về phân tích CSV' }).getAttribute('href'))
+      .toBe('/research?projectId=workspace-1&view=csv');
   });
 
   it('does not link CSV-only evidence to a nonexistent report', () => {

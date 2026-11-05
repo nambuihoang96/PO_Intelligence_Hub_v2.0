@@ -82,6 +82,27 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertTrue(all(item["complete_observation"] for item in rows))
         self.assertEqual(rows[0]["period_start"], "2026-10-14")
 
+    def test_sensor_tower_keeps_publisher_and_release_date_per_row(self):
+        content = (
+            "Unified Name;Unified ID;Platform;Publisher Name;Release Date (WW);Downloads (Absolute)\n"
+            "App A;id-a;Unified;Learnings;25/04/2026;1200\n"
+            "App B;id-b;Unified;;05/09/2025;900\n"
+        )
+        rows, _, _, _ = parse_csv_observations(
+            content, report_id="report", report_geo="Worldwide", report_platform="Unified",
+            report_period="2026", entities=[{"key": "id-a", "name": "App A"}, {"key": "id-b", "name": "App B"}],
+            field_mapping={"entity_id": "Unified ID", "platform": "Platform"}, entity_mappings={},
+            metric_mappings=[
+                {"column": "Downloads (Absolute)", "metric_id": "downloads_absolute", "metric_definition": "Downloads (Absolute)", "unit": "downloads", "methodology": "Sensor Tower export"},
+            ],
+            explicit_values={"geo": "Worldwide", "snapshot_date": "2026-09-14"},
+        )
+        by_row = {item["source_row_number"]: item for item in rows}
+        self.assertEqual(by_row[2]["source_publisher_name"], "Learnings")
+        self.assertEqual(by_row[2]["source_release_date"], "25/04/2026")
+        self.assertIsNone(by_row[3]["source_publisher_name"])
+        self.assertEqual(by_row[3]["source_release_date"], "05/09/2025")
+
     def test_sensor_tower_source_only_entity_is_complete_and_keeps_source_identity(self):
         rows, _, unresolved, _ = parse_csv_observations(
             "Unified ID;Downloads (Absolute)\nid-unknown;12\n", report_id="report", report_geo="Worldwide", report_platform="Unified", report_period=None,
@@ -197,6 +218,20 @@ class QuantitativeObservationTest(unittest.TestCase):
         self.assertIsNone(rows[0]["value"])
         self.assertTrue(any("non-numeric" in reason for reason in reasons))
         self.assertTrue(any("requires unit '%'" in reason for reason in reasons))
+
+    def test_percent_suffix_is_parsed_when_metric_unit_is_percent(self):
+        # Synthetic AdMob-style export: values like "39.73%" with an empty cell.
+        rows, reasons, _, _ = parse_csv_observations(
+            "App;Date;Match rate\nDemo App;2026-09-01;39.73%\nDemo App;2026-09-02;\n",
+            report_id="r", report_geo=None, report_platform=None, report_period=None,
+            entities=[{"key": "a", "name": "Demo App"}], field_mapping={"entity_id": "App", "snapshot_date": "Date"}, entity_mappings={},
+            metric_mappings=[{"column": "Match rate", "metric_id": "match_rate", "metric_definition": "Match rate", "unit": "%"}],
+            explicit_values={"granularity": "daily"},
+        )
+        self.assertEqual(rows[0]["value"], 39.73)
+        self.assertEqual(rows[0]["unit"], "%")
+        self.assertIsNone(rows[1]["value"])
+        self.assertFalse(any("non-numeric" in reason for reason in reasons))
 
     def test_exact_report_observation_is_unverified_and_complete(self):
         value = QuantitativeObservation(
@@ -1047,6 +1082,35 @@ class QuantitativeMigrationCompatibilityTest(unittest.TestCase):
                         self.assertEqual(session.query(QuantitativeDataset).count(), 0)
                 finally:
                     engine.dispose()
+
+
+class SyntheticSensorTowerPeriodAndBlankYoYTest(unittest.TestCase):
+    """Synthetic fixtures only (no real export rows)."""
+
+    def test_filename_period_mismatch_is_reported_and_matching_period_is_silent(self):
+        from backend.app.quantitative import filename_period_warnings
+        name = "Unified Top Apps Downloads YoY Growth (Sep 14, 2026 - Oct 13, 2026, Worldwide),rutgon.csv"
+        single_day = [{"snapshot_date": "2026-09-14"}, {"snapshot_date": "2026-09-14"}]
+        warnings = filename_period_warnings(name, single_day)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("kỳ từ 2026-09-14 đến 2026-10-13", warnings[0])
+        self.assertIn("chỉ từ 2026-09-14 đến 2026-09-14", warnings[0])
+        full = [{"snapshot_date": "2026-09-14"}, {"snapshot_date": "2026-10-13"}]
+        self.assertEqual(filename_period_warnings(name, full), [])
+        self.assertEqual(filename_period_warnings("plain-export.csv", single_day), [])
+        self.assertEqual(filename_period_warnings(name, []), [])
+
+    def test_blank_yoy_cell_is_labelled_as_missing_comparison_not_generic_empty(self):
+        rows, reasons, _, _ = parse_csv_observations(
+            "Unified Name;Date;Downloads (YoY Growth %)\nNew App;14/09/2026;\n",
+            report_id="r", report_geo=None, report_platform=None, report_period=None,
+            entities=[], field_mapping={"entity_name": "Unified Name", "snapshot_date": "Date"}, entity_mappings={},
+            metric_mappings=[{"column": "Downloads (YoY Growth %)", "metric_id": "downloads_yoy_growth_percent", "metric_definition": "Downloads (YoY Growth %)", "unit": "%"}],
+            explicit_values={"granularity": "daily"},
+        )
+        self.assertIsNone(rows[0]["value"])
+        self.assertTrue(any("không có giá trị so sánh cùng kỳ năm trước" in reason for reason in reasons))
+        self.assertFalse(any("empty mapped value" in reason for reason in reasons))
 
 
 if __name__ == "__main__":

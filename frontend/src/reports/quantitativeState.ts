@@ -45,11 +45,11 @@ export function selectQuantitativeState(
 }
 
 export const quantitativeStateLabels: Record<QuantitativeDataState, string> = {
-  no_data: 'Nghiên cứu định tính · Chưa liên kết bộ dữ liệu định lượng',
-  research_supplied: 'Có số liệu định lượng do báo cáo cung cấp',
-  csv_linked: 'Đã liên kết dữ liệu CSV với báo cáo này',
-  mixed_compatible: 'Số liệu từ báo cáo và CSV có thể kết hợp',
-  report_scope_mismatch: 'CSV dùng được trong phạm vi gốc nhưng khác phạm vi báo cáo',
-  partial_with_report_scope_mismatch: 'CSV có số liệu chưa đầy đủ và khác phạm vi báo cáo',
-  partial_or_incompatible: 'Dữ liệu định lượng chưa đầy đủ hoặc không tương thích',
+  no_data: 'Báo cáo chưa cung cấp số liệu định lượng',
+  research_supplied: 'Có số liệu trong báo cáo · chưa xác minh độc lập',
+  csv_linked: 'Có CSV được liên kết với báo cáo',
+  mixed_compatible: 'Số liệu báo cáo và CSV có thể so sánh',
+  report_scope_mismatch: 'Số liệu CSV khác phạm vi báo cáo',
+  partial_with_report_scope_mismatch: 'CSV thiếu thông tin và khác phạm vi báo cáo',
+  partial_or_incompatible: 'Một số số liệu cần kiểm tra trước khi so sánh',
 };

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { reportApi, type DatasetMetadata, type MetadataChange, type QuantitativeDataset } from './api';
 
 const labels: Record<string, string> = { geo: 'GEO', platform: 'Nền tảng', methodology: 'Phương pháp đo', unit: 'Đơn vị / tiền tệ', period_start: 'Ngày bắt đầu', period_end: 'Ngày kết thúc', snapshot_date: 'Ngày snapshot', period_semantics: 'Ý nghĩa kỳ đo', granularity: 'Chu kỳ đo (nếu biết)', source_reference: 'Nguồn dữ liệu' };
-const basisLabel: Record<string, string> = { csv: 'Có trong CSV', provider_documentation: 'PO xác nhận theo tài liệu nguồn', po_unverified: 'PO cung cấp · chưa xác minh', unknown: 'Chưa biết' };
+const basisLabel: Record<string, string> = { csv: 'Có trong CSV', provider_documentation: 'PO xác nhận theo tài liệu nguồn', po_confirmed: 'PO xác nhận',  po_unverified: 'PO cung cấp · chưa xác minh', unknown: 'Chưa biết' };
 
 export function DatasetMetadataReview({ reportId, projectId, datasetId, onSaved, onClose }: { reportId?: string; projectId?: string; datasetId: string; onSaved: (dataset: QuantitativeDataset) => void; onClose: () => void }) {
   const [data, setData] = useState<DatasetMetadata | null>(null);
