@@ -83,7 +83,8 @@ describe('DataFirstWorkspace', () => {
 
   it('explores workspace-owned CSV, saves product selection, creates a manual ChatGPT prompt, and links the report', async () => {
     render(<DataFirstWorkspace projectId="workspace-1" />);
-    await screen.findByRole('heading', { name: 'sensor-export.csv' });
+    // Default findBy timeout is 1000 ms; under the full parallel suite this render needs longer.
+    await screen.findByRole('heading', { name: 'sensor-export.csv' }, { timeout: 5000 });
     await openProductTable();
     expect(screen.getByText(/1 phép đo · 0 đủ điều kiện phân tích tự động · 1 cần rà soát/)).toBeTruthy();
     expect(screen.getByText(/Tệp dữ liệu CSV/)).toBeTruthy();
@@ -111,7 +112,7 @@ describe('DataFirstWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Thêm báo cáo đã lưu'), { target: { value: 'report-1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Thêm vào dự án' }));
     await waitFor(() => expect(reportApi.linkReportToProject).toHaveBeenCalledWith('workspace-1', 'report-1'));
-  });
+  }, 20000); // long multi-step flow; default 5000 ms testTimeout is exceeded under the full parallel suite
 
   it('opens CSV import in the active workspace without requiring a report', async () => {
     render(<DataFirstWorkspace projectId="workspace-1" />);
