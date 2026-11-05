@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
+import { ProjectThemeToggle } from './research/ProjectThemeToggle';
 
 export type NavigationPage = { path: string; label: string; icon: ResultsIconName };
 
@@ -64,5 +65,6 @@ export function AppNavigation({ pages, currentPath, currentLabel }: AppNavigatio
 
       <div className="sidebar-footer"><span className="footer-dot" />LƯU TRÊN MÁY</div>
     </div>
+    <ProjectThemeToggle />
   </aside>;
 }

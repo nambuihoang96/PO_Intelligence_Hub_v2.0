@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from hashlib import sha256
+import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,7 +15,8 @@ from backend.app.api import get_session
 from backend.app.dataset_metadata import effective_observations
 from backend.app.models import ImportedResearchReport, POOpportunityDecision, ProjectTrendUpdate, QuantitativeDataset, ResearchBenchmarkCollection, ResearchProject, ResearchSubject
 from backend.app.quantitative_comparisons import _observation_usable
-from backend.app.schemas import OpportunityDecisionUpdate
+from backend.app.quantitative import assess_report_observations
+from backend.app.schemas import OpportunityDecisionUpdate, TrackedObservationReference, TrackedObservationSelection
 
 router = APIRouter(prefix="/api/v1/projects", tags=["opportunity decisions"])
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -279,7 +281,9 @@ def get_opportunity_workspace(project_id: str, session: Session) -> dict[str, An
     project = _project(session, project_id)
     state = project.workspace_state_json or {}
     context = state.get("selected_app_context")
-    saved = {row.candidate_id: {**(row.decision_json or {}), "revision": row.revision}
+    saved = {row.candidate_id: {**(row.decision_json or {}),
+                                "workflow_status": (row.decision_json or {}).get("workflow_status", "not_started"),
+                                "revision": row.revision}
              for row in session.scalars(select(POOpportunityDecision).where(POOpportunityDecision.project_id == project_id))}
     candidates: dict[str, dict[str, Any]] = {}
     context_error: str | None = None
@@ -438,8 +442,34 @@ def save_opportunity_decision(project_id: str, payload: OpportunityDecisionUpdat
     if invalid:
         raise HTTPException(409, detail={"code": "EVIDENCE_REFERENCE_STALE", "message": "One or more evidence references no longer resolve in this workspace.", "references": invalid})
     existing = prior or {}
+    existing_tracked_reference = existing.get("tracked_observation_reference")
+    if "tracked_observation_reference" in payload.model_fields_set:
+        submitted_tracked_reference = (payload.tracked_observation_reference.model_dump(mode="json")
+                                       if payload.tracked_observation_reference else None)
+        if submitted_tracked_reference != existing_tracked_reference:
+            raise HTTPException(409, detail={
+                "code": "TRACKED_OBSERVATION_REFERENCE_IMMUTABLE",
+                "message": "A selected source measurement can only be changed through the explicit tracking action.",
+            })
+    stored_updates = existing.get("manual_updates", [])
+    if not isinstance(stored_updates, list):
+        stored_updates = []
+    if "manual_updates" in payload.model_fields_set and payload.manual_updates is not None:
+        submitted_updates = [item.model_dump(mode="json") for item in payload.manual_updates]
+        if len(submitted_updates) < len(stored_updates) or submitted_updates[:len(stored_updates)] != stored_updates:
+            raise HTTPException(409, detail={
+                "code": "MANUAL_UPDATE_HISTORY_IMMUTABLE",
+                "message": "Previously recorded PO updates cannot be edited or removed. Append a correction instead.",
+            })
+    workflow_status = payload.workflow_status or existing.get("workflow_status") or "not_started"
     candidate_name = existing.get("candidate_name") or (next((row.get("source_entity_name") or row.get("entity_name") for row in _source_rows(dataset, payload.source_entity_id) if row.get("source_entity_name") or row.get("entity_name")), payload.source_entity_id) if dataset else payload.source_entity_id)
     record = payload.model_dump(mode="json", exclude={"expected_revision"})
+    record["workflow_status"] = workflow_status
+    if "manual_updates" not in payload.model_fields_set:
+        record["manual_updates"] = existing.get("manual_updates", [])
+    elif record.get("manual_updates") is None:
+        record["manual_updates"] = existing.get("manual_updates", [])
+    record["tracked_observation_reference"] = existing_tracked_reference
     if target:
         candidate_name = target_name or candidate_name
         record["decision_target"] = target
@@ -480,6 +510,97 @@ def save_opportunity_decision(project_id: str, payload: OpportunityDecisionUpdat
             session.rollback()
             raise HTTPException(409, detail={"code": "DECISION_REVISION_CONFLICT", "message": "This decision changed in another screen. Reload it; your current edits have not been saved."})
         session.commit()
+    return get_opportunity_workspace(project_id, session)
+
+
+def _observation_identity(row: dict[str, Any]) -> str:
+    fields = ("source_entity_id", "metric_id", "metric_definition", "unit", "source_provider",
+              "geo", "platform", "granularity", "methodology", "period_semantics")
+    return json.dumps([row.get(field) for field in fields], ensure_ascii=False, separators=(",", ":"))
+
+
+def _observation_selection_key(row: dict[str, Any]) -> str:
+    return json.dumps([_observation_identity(row), row.get("period_start"), row.get("period_end"),
+                       format(float(row["value"]), ".15g") if row.get("value") is not None else None,
+                       row.get("source_reference"), row.get("evidence_reference")],
+                      ensure_ascii=False, separators=(",", ":"))
+
+
+@router.put("/{project_id}/opportunities/decisions/{candidate_id}/tracked-observation")
+def select_tracked_observation(project_id: str, candidate_id: str, payload: TrackedObservationSelection,
+                               session: SessionDependency) -> dict[str, Any]:
+    _project(session, project_id)
+    row = session.scalar(select(POOpportunityDecision).where(
+        POOpportunityDecision.project_id == project_id,
+        POOpportunityDecision.candidate_id == candidate_id,
+    ))
+    if row is None:
+        raise HTTPException(404, detail={"code": "DECISION_NOT_FOUND", "message": "The saved PO decision was not found."})
+    if row.revision != payload.expected_revision:
+        raise HTTPException(409, detail={"code": "DECISION_REVISION_CONFLICT", "message": "This decision changed in another screen. Reload it before selecting a measurement."})
+
+    decision = dict(row.decision_json or {})
+    target = decision.get("decision_target")
+    report = session.get(ImportedResearchReport, payload.report_id)
+    if (not isinstance(target, dict) or target.get("kind") != "report_finding"
+            or target.get("report_id") != payload.report_id
+            or not report or report.project_id != project_id
+            or report.content_sha256 != payload.report_content_sha256
+            or target.get("report_content_sha256") != payload.report_content_sha256):
+        raise HTTPException(409, detail={"code": "TRACKED_OBSERVATION_SOURCE_STALE", "message": "This report is not the exact report finding saved in the PO decision."})
+
+    data = report.research_data_json or {}
+    findings = {item.get("key"): item for item in data.get("findings", []) if isinstance(item, dict)}
+    finding = findings.get(target.get("item_key"))
+    if not finding:
+        raise HTTPException(409, detail={"code": "TRACKED_OBSERVATION_FINDING_STALE", "message": "The saved report finding no longer resolves."})
+    observations = assess_report_observations(data.get("quantitative_observations", []), report_id=report.id,
+        report_geo=report.geo, report_platform=report.os, report_period=report.research_period,
+        entities=data.get("entities", []), evidence_references=data.get("evidence_references", []))
+    matches = [item for item in observations if isinstance(item, dict)
+               and item.get("observation_type") == "reported"
+               and _observation_selection_key(item) == payload.observation_key]
+    if len(matches) != 1:
+        raise HTTPException(422, detail={"code": "TRACKED_OBSERVATION_NOT_UNIQUE", "message": "Select one uniquely identified reported measurement from this report."})
+    observation = matches[0]
+    sources = {observation.get("source_reference"), observation.get("evidence_reference")} - {None, ""}
+    finding_sources = set(finding.get("evidence_references") or [])
+    if (not observation.get("metric_id") or not observation.get("metric_definition")
+            or observation.get("value") is None or not observation.get("unit")
+            or not observation.get("period_start") or not observation.get("period_end")
+            or not sources or not (sources & finding_sources)):
+        raise HTTPException(422, detail={"code": "TRACKED_OBSERVATION_NOT_LINKED", "message": "This measurement lacks a complete period or a source explicitly linked to the saved finding."})
+
+    reference = TrackedObservationReference(
+        report_id=report.id, report_content_sha256=report.content_sha256,
+        observation_key=payload.observation_key, metric_identity_key=_observation_identity(observation), metric_id=observation["metric_id"],
+        metric_definition=observation["metric_definition"], value=observation["value"], unit=observation["unit"],
+        period_start=observation["period_start"], period_end=observation["period_end"],
+        source_reference=observation.get("source_reference"),
+        evidence_reference=observation.get("evidence_reference"), selected_at=datetime.now(timezone.utc),
+    ).model_dump(mode="json")
+    previous_reference = decision.get("tracked_observation_reference")
+    if previous_reference == reference:
+        return get_opportunity_workspace(project_id, session)
+
+    history = decision.get("revision_history", [])
+    if not isinstance(history, list):
+        history = []
+    snapshot = dict(decision)
+    snapshot.pop("revision_history", None)
+    history = [*history, {"revision": row.revision, "saved_at": decision.get("updated_at"), "snapshot": snapshot}]
+    decision["revision_history"] = history
+    decision["tracked_observation_reference"] = reference
+    decision["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = session.execute(update(POOpportunityDecision).where(
+        POOpportunityDecision.id == row.id,
+        POOpportunityDecision.revision == payload.expected_revision,
+    ).values(decision_json=decision, revision=payload.expected_revision + 1,
+             updated_at=datetime.now(timezone.utc).replace(tzinfo=None)))
+    if result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(409, detail={"code": "DECISION_REVISION_CONFLICT", "message": "This decision changed in another screen. The measurement was not selected; reload and try again."})
+    session.commit()
     return get_opportunity_workspace(project_id, session)
 
 

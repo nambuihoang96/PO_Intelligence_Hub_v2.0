@@ -301,8 +301,22 @@ class DataFirstWorkspaceTest(unittest.TestCase):
             open_questions=["Can retention be validated?"]), self.session)
         saved_candidate = saved["candidates"][0]
         self.assertEqual(saved_candidate["decision"]["priority"], "high")
+        self.assertEqual(saved_candidate["decision"]["workflow_status"], "not_started")
         self.assertEqual(len(saved_candidate["resolved_decision_evidence"]), 1)
         self.assertEqual(saved_candidate["resolved_decision_evidence"][0]["dataset_content_sha256"], imported.content_sha256)
+
+        completed = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+            expected_revision=saved_candidate["decision"]["revision"], candidate_id=candidate["candidate_id"],
+            dataset_id=imported.id, dataset_content_sha256=imported.content_sha256, source_entity_id=source_id,
+            decision_status="investigate", workflow_status="completed", rationale="Worth validating", priority="high",
+            next_action="Review retention evidence", supporting_evidence=[reference],
+            assessments=[{"dimension": "Retention evidence", "kind": "unknown", "statement": "No retention data supplied."}],
+            open_questions=["Can retention be validated?"]), self.session)
+        completed_decision = completed["candidates"][0]["decision"]
+        self.assertEqual(completed_decision["workflow_status"], "completed")
+        self.assertEqual(completed_decision["decision_status"], "investigate")
+        self.assertEqual(completed_decision["rationale"], "Worth validating")
+        self.assertEqual(completed_decision["next_action"], "Review retention evidence")
 
         update_workspace_state(self.project.id, ResearchWorkspaceStateUpdate(selected_app_ids=[], selected_app_context=None), self.session)
         historical = get_opportunity_workspace(self.project.id, self.session)["candidates"][0]
@@ -507,7 +521,11 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         saved = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
             candidate_id=target_candidate["candidate_id"], dataset_id=None, dataset_content_sha256=None,
             source_entity_id=None, decision_target=target, rationale="Assess this finding directly.",
-            supporting_evidence=[reference], next_action="Validate with target users."), self.session)
+            supporting_evidence=[reference], next_action="Validate with target users.", manual_updates=[{
+                "id": "manual-update-1", "observed_on": "2026-11-02", "content": "PO observed a new onboarding step.",
+                "source_note": None, "source_title": None, "source_url": None, "supersedes_id": None,
+                "recorded_at": "2026-11-02T10:00:00Z",
+            }]), self.session)
         revised = save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
             expected_revision=1, candidate_id=target_candidate["candidate_id"], source_entity_id=None,
             decision_target=target, rationale="Updated assessment after review.", supporting_evidence=[reference],
@@ -516,11 +534,30 @@ class DataFirstWorkspaceTest(unittest.TestCase):
         self.assertEqual(reopened["decision"]["rationale"], "Updated assessment after review.")
         self.assertEqual(reopened["decision"]["next_action"], "Run a focused user interview.")
         self.assertEqual(reopened["decision"]["revision"], 2)
+        self.assertEqual(reopened["decision"]["manual_updates"][0]["content"], "PO observed a new onboarding step.")
+        self.assertEqual(reopened["decision"]["revision_history"][0]["snapshot"]["manual_updates"][0]["id"], "manual-update-1")
         self.assertEqual(reopened["decision"]["revision_history"][0]["revision"], 1)
         self.assertEqual(reopened["decision"]["revision_history"][0]["snapshot"]["rationale"], "Assess this finding directly.")
         self.assertEqual(reopened["decision"]["revision_history"][0]["snapshot"]["next_action"], "Validate with target users.")
         self.assertEqual(reopened["resolved_decision_evidence"][0]["verification_status"], "unverified")
         self.assertEqual(self.session.get(ImportedResearchReport, report.id).benchmark_workspace_json["entries"][0]["notes"], "Legacy note remains")
+        for changed_updates in ([], [{
+            "id": "manual-update-1", "observed_on": "2026-11-02", "content": "Rewritten prior entry.",
+            "source_note": None, "source_title": None, "source_url": None, "supersedes_id": None,
+            "recorded_at": "2026-11-02T10:00:00Z",
+        }]):
+            with self.subTest(changed_updates=changed_updates):
+                with self.assertRaises(HTTPException) as error:
+                    save_opportunity_decision(self.project.id, OpportunityDecisionUpdate(
+                        expected_revision=2, candidate_id=target_candidate["candidate_id"], source_entity_id=None,
+                        decision_target=target, rationale="Attempted history rewrite.",
+                        supporting_evidence=[reference], manual_updates=changed_updates), self.session)
+                self.assertEqual(error.exception.status_code, 409)
+                self.assertEqual(error.exception.detail["code"], "MANUAL_UPDATE_HISTORY_IMMUTABLE")
+        after_rejections = get_opportunity_workspace(self.project.id, self.session)
+        preserved = next(item for item in after_rejections["candidates"] if item["candidate_id"] == target_candidate["candidate_id"])
+        self.assertEqual(preserved["decision"]["manual_updates"][0]["content"], "PO observed a new onboarding step.")
+        self.assertEqual(preserved["decision"]["revision"], 2)
 
     def test_stale_report_decision_target_cannot_be_retargeted(self) -> None:
         report = ImportedResearchReport(id="report-stale-target", project_id=self.project.id,

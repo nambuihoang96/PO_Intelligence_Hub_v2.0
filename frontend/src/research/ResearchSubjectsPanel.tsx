@@ -1,5 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { researchApi, type ProjectSavedInformation, type ProjectTrendUpdate, type ResearchBenchmarkCollection, type ResearchSubject, type ResearchSubjectAnalysisSection, type ResearchSubjectSource } from './api';
+import type { CodexResearchControls } from './CodexResearchSettings';
+import { SubjectProductAnalysis } from './SubjectProductAnalysis';
 
 function displayEvidenceStatus(value: string | null | undefined): string {
   const key = value?.trim().toLocaleLowerCase();
@@ -14,7 +16,7 @@ function sourceKey(source: ResearchSubjectSource): string {
   return [source.source_kind, source.source_id, source.source_key].join('|');
 }
 
-export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
+export function ResearchSubjectsPanel({ projectId, codexSettings }: { projectId: string; codexSettings?: CodexResearchControls }) {
   const [subjects, setSubjects] = useState<ResearchSubject[]>([]);
   const [sources, setSources] = useState<ResearchSubjectSource[]>([]);
   const [collections, setCollections] = useState<ResearchBenchmarkCollection[]>([]);
@@ -235,7 +237,7 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
       </div>
       {profileId === subject.id && <section className="research-subject-profile" aria-label={`Hồ sơ ${subject.name}`}>
         <div className="research-subject-profile-summary"><div><h4>{subject.name}</h4><p>{subject.subject_type || 'Chưa phân loại'} · {linkedSources.length} nguồn liên kết · {trendItems.length} cập nhật xu hướng · {savedItems.length} mục đã lưu · {subjectCollections.length} bộ so sánh · {savedSections.length} phần phân tích đã lưu</p></div>
-          <nav aria-label={`Các khu vực liên quan đến ${subject.name}`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Xem quyết định PO</a><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=data#project-saved-information`}>Thông tin đã lưu</a><a href="#project-trend-updates">Cập nhật xu hướng</a><a href="#project-image-evidence">Ảnh chứng cứ</a><a href="#project-benchmark-collections">Bộ so sánh</a></nav></div>
+          <nav aria-label={`Các khu vực liên quan đến ${subject.name}`}><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=opportunities&decisionKind=subject&decisionTargetId=${encodeURIComponent(subject.id)}`}>Xem quyết định PO</a><a href={`/research?projectId=${encodeURIComponent(projectId)}&view=notes#project-saved-information`}>Thông tin đã lưu</a><a href="#project-trend-updates">Cập nhật xu hướng</a><a href="#project-image-evidence">Ảnh chứng cứ</a><a href="#project-benchmark-collections">Bộ so sánh</a></nav></div>
         <div className="research-subject-profile-details"><p><strong>Tên gọi khác:</strong> {subject.aliases.length ? subject.aliases.join(', ') : 'Chưa có thông tin'}</p>
           <p><strong>Mã định danh ngoài:</strong> {subject.external_ids.length ? 'Có trong chi tiết nguồn' : 'Chưa có thông tin'}</p>
           <details><summary>Chi tiết định danh từ nguồn</summary><ul>
@@ -243,6 +245,11 @@ export function ResearchSubjectsPanel({ projectId }: { projectId: string }) {
             {Object.entries(subject.provenance).map(([key, value]) => <li key={key}>{key}: {typeof value === 'string' ? value : JSON.stringify(value)}</li>)}
           </ul></details>
         </div>
+        {codexSettings && <SubjectProductAnalysis projectId={projectId} subject={subject} sources={linkedSources} codexSettings={codexSettings} hasUnsavedChanges={hasChanges} onSaved={(section) => {
+          setAnalysisDrafts((current) => ({ ...current, [subject.id]: [...(current[subject.id] ?? savedSections), section] }));
+          setNotice('Đã lưu phân tích vào hồ sơ. Nội dung do Codex tạo và chưa được xác minh độc lập.');
+          void load();
+        }} />}
         <section className="research-subject-history" aria-label={`Thông tin đã lưu về ${subject.name}`}>
           <div><h5>Thông tin đã lưu về sản phẩm hoặc chủ đề</h5><p>Nội dung gốc và tệp đính kèm được giữ nguyên như khi cung cấp; chưa được xác minh độc lập.</p></div>
           {!savedItems.length ? <p>Hồ sơ này chưa có thông tin liên kết. Bạn có thể liên kết từ mục thông tin đã lưu của dự án.</p> : <div className="research-subject-history-list">{savedItems.slice(0, 10).map((item) => <article key={item.id}>

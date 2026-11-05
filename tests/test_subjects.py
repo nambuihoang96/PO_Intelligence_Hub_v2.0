@@ -1,4 +1,5 @@
 """Persistent subject identity and explicit source mapping tests."""
+import json
 import tempfile
 import unittest
 import sqlite3
@@ -168,21 +169,29 @@ class ResearchSubjectsTest(unittest.TestCase):
         command.downgrade(config, "20261024_0009")
         self.engine = create_database_engine(get_database_path())
         self.session = Session(self.engine, expire_on_commit=False)
-        report = ImportedResearchReport(
-            id="pre-subject-migration-report", project_id=self.project.id,
-            question="Historical report", geo="Unknown", os="Web", research_period="2026",
-            content="Original bytes stay unchanged.", research_data_json={"entities": [{"key": "old", "name": "Legacy subject"}]},
-            parse_status="PARSED", extraction_error=None, benchmark_selections_json=[{"item_key": "old"}],
-            benchmark_workspace_json={"entries": [{"item_key": "old", "notes": "Keep PO note"}]},
-            content_sha256="d" * 64, origin="chatgpt_user_import",
-        )
+        # Write the legacy row with explicit columns. The ORM model now includes columns added
+        # by later revisions (e.g. previous_report_id), which do not exist at revision 0009.
+        report_id = "pre-subject-migration-report"
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO imported_research_reports (id, project_id, question, geo, os, research_period, content, "
+                "research_data_json, parse_status, extraction_error, benchmark_selections_json, benchmark_workspace_json, "
+                "content_sha256, origin, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    report_id, self.project.id, "Historical report", "Unknown", "Web", "2026",
+                    "Original bytes stay unchanged.", json.dumps({"entities": [{"key": "old", "name": "Legacy subject"}]}),
+                    "PARSED", None, json.dumps([{"item_key": "old"}]),
+                    json.dumps({"entries": [{"item_key": "old", "notes": "Keep PO note"}]}),
+                    "d" * 64, "chatgpt_user_import", "2026-09-01 00:00:00",
+                ),
+            )
         dataset = QuantitativeDataset(
-            id="pre-subject-migration-dataset", project_id=self.project.id, report_id=report.id,
+            id="pre-subject-migration-dataset", project_id=self.project.id, report_id=report_id,
             filename="original.csv", content_sha256="e" * 64, original_csv="Name,Value\nLegacy,7\n",
             field_mapping_json={}, entity_mappings_json={}, observations_json=[], compatibility_status="partial",
             validation_reasons_json=[],
         )
-        self.session.add_all([report, dataset])
+        self.session.add(dataset)
         self.session.commit()
         self.session.close()
         self.engine.dispose()
@@ -190,7 +199,7 @@ class ResearchSubjectsTest(unittest.TestCase):
         command.upgrade(config, "head")
         self.engine = create_database_engine(get_database_path())
         self.session = Session(self.engine, expire_on_commit=False)
-        saved_report = self.session.get(ImportedResearchReport, report.id)
+        saved_report = self.session.get(ImportedResearchReport, report_id)
         saved_dataset = self.session.get(QuantitativeDataset, dataset.id)
         self.assertEqual(saved_report.content, "Original bytes stay unchanged.")
         self.assertEqual(saved_report.benchmark_workspace_json["entries"][0]["notes"], "Keep PO note")

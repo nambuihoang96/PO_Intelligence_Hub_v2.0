@@ -101,7 +101,7 @@ function ProjectList({
   return (
     <div className="research-home">
       <section className="research-panel" aria-labelledby="projects-title">
-        <div className="panel-heading"><div><span className="state-label">KHÔNG GIAN NGHIÊN CỨU</span><h2 id="projects-title">Dự án của bạn</h2><p>Mở lại nghiên cứu đã lưu hoặc bắt đầu một dự án mới.</p></div>
+        <div className="panel-heading"><div><span className="state-label">KHÔNG GIAN NGHIÊN CỨU</span><h2 id="projects-title">Dự án của bạn</h2><p>Chọn một dự án để mở Tổng quan dự án, báo cáo và các bước nghiên cứu đã lưu.</p></div>
           <a className="primary-action" href="/research/new">Tạo dự án <span aria-hidden="true">＋</span></a>
         </div>
         {error && <ErrorNotice error={error} onRetry={onRetry} />}
@@ -112,7 +112,7 @@ function ProjectList({
             {projects.map((project) => (
               <div className="project-row-wrap" key={project.id}><a className="project-row" href={`/research?projectId=${encodeURIComponent(project.id)}`}>
                 <span className="project-mark" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span>
-                <span className="project-row-copy"><strong>{project.name}</strong><small>{project.category || 'Chưa phân loại'}{project.owner ? ` · ${project.owner}` : ''}</small></span>
+                <span className="project-row-copy"><strong>{project.name}</strong><small>{project.category || 'Chưa phân loại'}{project.owner ? ` · ${project.owner}` : ''} · Mở Tổng quan dự án</small></span>
                 <span className="row-arrow" aria-hidden="true">→</span>
               </a></div>
             ))}
@@ -141,6 +141,7 @@ function NewProjectForm() {
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
   const [category, setCategory] = useState('');
+  const [topic, setTopic] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -150,7 +151,7 @@ function NewProjectForm() {
     setError(null);
     try {
       const project = await researchApi.createProject({
-        name: name.trim(), owner: owner.trim() || null, category: category.trim() || null,
+        name: name.trim(), owner: owner.trim() || null, category: category.trim() || null, topic: topic.trim() || null,
       });
       window.location.assign(`/research?projectId=${encodeURIComponent(project.id)}`);
     } catch (cause) {
@@ -168,6 +169,9 @@ function NewProjectForm() {
         {error && <ErrorNotice error={error} />}
         <label className="field-label" htmlFor="project-name">Tên dự án <span>Bắt buộc</span></label>
         <input id="project-name" autoComplete="off" maxLength={200} required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Nghiên cứu thị trường game giải đố" />
+        <label className="field-label" htmlFor="project-topic">Chủ đề nghiên cứu <span>Không bắt buộc</span></label>
+        <input id="project-topic" autoComplete="off" maxLength={300} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Ví dụ: Game puzzle đang tăng lượt tải ở thị trường Đông Nam Á" />
+        <p className="field-help">Chủ đề dùng làm câu hỏi khi nghiên cứu bằng Codex. Bạn có thể bổ sung sau.</p>
         <div className="field-grid">
           <div><label className="field-label" htmlFor="project-owner">Người phụ trách <span>Không bắt buộc</span></label><input id="project-owner" maxLength={200} value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="Cá nhân hoặc nhóm" /></div>
           <div><label className="field-label" htmlFor="project-category">Lĩnh vực <span>Không bắt buộc</span></label><input id="project-category" maxLength={120} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Trò chơi, năng suất…" /></div>
@@ -268,7 +272,7 @@ function PlanEditor({ projectId }: { projectId: string }) {
   return (
     <div className="research-layout">
       <div className="research-main-column">
-        <ProjectJourneyNav projectId={projectId} active="research" />
+        <ProjectJourneyNav projectId={projectId} active={null} />
         <form className="research-panel research-form" onSubmit={save}>
           <div className="panel-heading"><div><span className="state-label">NGHIÊN CỨU CHUYÊN SÂU · {latestPlan ? `BẢN TÓM TẮT PHIÊN BẢN ${activePlan?.version ?? latestPlan.version}` : 'TÓM TẮT MỚI'}</span><h2>Chuẩn bị nghiên cứu</h2><p>Định hình câu hỏi và phạm vi. Bạn sẽ nghiên cứu bằng ChatGPT; ứng dụng không tự truy cập nguồn từ màn hình này.</p></div>
             <a className="secondary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>← Về trang dự án</a>
@@ -371,7 +375,17 @@ export function ResearchWorkspace({ mode }: { mode: 'list' | 'new' | 'data' }) {
     return () => { active = false; };
   }, [projectId, mode]);
 
-  if (projectId && (mode === 'data' || view === 'data')) return <DataFirstWorkspace projectId={projectId} />;
+  const notesAnchors = ['project-saved-information', 'project-subject-profiles', 'project-trend-updates', 'project-image-evidence', 'project-benchmark-collections'];
+  const params = new URLSearchParams(window.location.search);
+  const legacyDataLinkTargetsNotes = view === 'data' && (
+    notesAnchors.includes(decodeURIComponent(window.location.hash.slice(1)))
+    || params.has('subjectId')
+    || params.has('collectionId')
+  );
+  if (projectId && (mode === 'data' || ['data', 'csv', 'notes'].includes(view ?? ''))) {
+    const workspaceView = view === 'notes' || legacyDataLinkTargetsNotes ? 'notes' : 'csv';
+    return <DataFirstWorkspace projectId={projectId} view={workspaceView} />;
+  }
   if (projectId && view === 'plan') return <PlanEditor projectId={projectId} />;
   if (projectId) return <ProjectHome projectId={projectId} />;
   if (mode === 'new') return <NewProjectForm />;

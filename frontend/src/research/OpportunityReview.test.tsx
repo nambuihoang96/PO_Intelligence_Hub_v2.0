@@ -52,7 +52,8 @@ describe('OpportunityReview', () => {
 
   it('shows source measurements as unverified and does not auto-attach similarly named report findings', async () => {
     render(<OpportunityReview projectId="workspace-1" />);
-    expect(await screen.findByRole('heading', { name: 'Theo dõi quyết định sản phẩm' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Quyết định và việc tiếp theo' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '← Về việc cần làm' }).getAttribute('href')).toBe('/tracking?projectId=workspace-1');
     expect(await screen.findByRole('heading', { name: 'Product Alpha' })).toBeTruthy();
     expect(await screen.findByLabelText('Gắn Downloads ở dòng dữ liệu 2')).toBeTruthy();
     expect(screen.getByText(/dòng dữ liệu 2.*chưa xác minh/i)).toBeTruthy();
@@ -77,6 +78,8 @@ describe('OpportunityReview', () => {
     window.history.replaceState({}, '', '/research?projectId=workspace-1&view=opportunities&decisionKind=report_finding&decisionReportId=report-1&decisionReportHash=' + 'b'.repeat(64) + '&decisionItemKey=finding-1');
     render(<OpportunityReview projectId="workspace-1" />);
     expect(await screen.findByRole('heading', { name: 'Users value simplicity' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '← Về phát hiện gốc' }).getAttribute('href')).toBe('/reports/report-1?section=insights&finding=finding-1');
+    expect(screen.queryByRole('link', { name: '← Về phát hiện trong báo cáo' })).toBeNull();
     expect(screen.getByText('PHÁT HIỆN TRONG BÁO CÁO')).toBeTruthy();
     expect((screen.getByLabelText('Báo cáo nghiên cứu') as HTMLSelectElement).value).toBe('report-1');
     expect(screen.getByText(/The report says users prefer simple flows\./)).toBeTruthy();

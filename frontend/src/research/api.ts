@@ -5,6 +5,7 @@ export type ResearchProject = {
   name: string;
   owner: string | null;
   category: string | null;
+  topic?: string | null;
   workspace_state_json?: { selected_app_ids?: string[]; selected_app_criterion?: string | null; selected_app_context?: ShortlistContext };
   created_at: string;
   updated_at: string;
@@ -194,6 +195,22 @@ export type OpportunityDecisionTarget = {
   item_key?: string;
 };
 
+export type TrackedObservationReference = {
+  report_id: string;
+  report_content_sha256: string;
+  observation_key: string;
+  metric_identity_key: string;
+  metric_id: string;
+  metric_definition: string;
+  value: number;
+  unit: string;
+  period_start: string;
+  period_end: string;
+  source_reference: string | null;
+  evidence_reference: string | null;
+  selected_at: string;
+};
+
 export type OpportunityDecision = {
   candidate_id: string;
   expected_revision?: number;
@@ -202,6 +219,8 @@ export type OpportunityDecision = {
   dataset_content_sha256: string | null;
   source_entity_id: string | null;
   decision_target?: OpportunityDecisionTarget | null;
+  tracked_observation_reference?: TrackedObservationReference | null;
+  workflow_status?: 'not_started' | 'researching' | 'waiting_for_data' | 'evaluating' | 'completed' | 'paused';
   decision_status: 'investigate' | 'benchmark' | 'experiment' | 'implementation_candidate' | 'hold' | 'reject' | null;
   rationale: string;
   supporting_evidence: OpportunityEvidenceReference[];
@@ -211,11 +230,23 @@ export type OpportunityDecision = {
   priority: 'high' | 'medium' | 'low' | 'not_assessed';
   review_date: string | null;
   next_action: string;
+  manual_updates?: ManualTrackingUpdate[];
   candidate_name?: string;
   dataset_filename?: string;
   selection_reason?: string;
   updated_at?: string;
   revision_history?: { revision: number; saved_at?: string | null; snapshot: Record<string, unknown> }[];
+};
+
+export type ManualTrackingUpdate = {
+  id: string;
+  observed_on: string;
+  content: string;
+  source_note: string | null;
+  source_title: string | null;
+  source_url: string | null;
+  supersedes_id: string | null;
+  recorded_at: string;
 };
 
 export type OpportunityCandidate = {
@@ -491,7 +522,7 @@ export const researchApi = {
     ));
     return runsByProject.flat().sort((left, right) => right.created_at.localeCompare(left.created_at));
   },
-  createProject(payload: Pick<ResearchProject, 'name' | 'owner' | 'category'>): Promise<ResearchProject> {
+  createProject(payload: Pick<ResearchProject, 'name' | 'owner' | 'category'> & { topic?: string | null }): Promise<ResearchProject> {
     return request('/projects', { method: 'POST', body: JSON.stringify(payload) });
   },
   updateWorkspaceState(projectId: string, selected_app_ids: string[], selection_criterion: string | null = null, selected_app_context?: ShortlistContext | null): Promise<ResearchProject> {
@@ -502,6 +533,9 @@ export const researchApi = {
   },
   saveOpportunityDecision(projectId: string, payload: OpportunityDecision): Promise<OpportunityWorkspace> {
     return request(`/projects/${encodeURIComponent(projectId)}/opportunities/decisions`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  selectTrackedObservation(projectId: string, candidateId: string, input: { expected_revision: number; report_id: string; report_content_sha256: string; observation_key: string }): Promise<OpportunityWorkspace> {
+    return request(`/projects/${encodeURIComponent(projectId)}/opportunities/decisions/${encodeURIComponent(candidateId)}/tracked-observation`, { method: 'PUT', body: JSON.stringify(input) });
   },
   createPlan(projectId: string, payload: ResearchPlanPayload): Promise<ResearchPlan> {
     return request(`/projects/${encodeURIComponent(projectId)}/plans`, { method: 'POST', body: JSON.stringify(payload) });

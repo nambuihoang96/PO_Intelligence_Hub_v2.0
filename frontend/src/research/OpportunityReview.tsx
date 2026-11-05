@@ -55,7 +55,7 @@ function decisionDraft(candidate: OpportunityCandidate): OpportunityDecision {
   return candidate.decision ?? {
     candidate_id: candidate.candidate_id, expected_revision: 0, dataset_id: candidate.dataset_id, dataset_content_sha256: candidate.dataset_content_sha256,
     source_entity_id: candidate.source_entity_id, decision_target: candidate.decision_target ?? null, decision_status: null, rationale: '', supporting_evidence: [],
-    contradictory_evidence: [], open_questions: [], assessments: [], priority: 'not_assessed', review_date: null, next_action: '',
+    contradictory_evidence: [], open_questions: [], assessments: [], priority: 'not_assessed', review_date: null, next_action: '', manual_updates: [],
   };
 }
 
@@ -130,6 +130,10 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
   useEffect(() => { void load(); }, [projectId]);
 
   const candidate = workspace?.candidates.find((item) => item.candidate_id === selectedId) ?? null;
+  const reportTarget = candidate?.decision_target ?? candidate?.decision?.decision_target;
+  const reportFindingHref = reportTarget?.kind === 'report_finding' && reportTarget.report_id && reportTarget.item_key
+    ? `/reports/${encodeURIComponent(reportTarget.report_id)}?section=insights&finding=${encodeURIComponent(reportTarget.item_key)}`
+    : null;
   useEffect(() => {
     revision.current += 1;
     const nextDecision = candidate ? decisionDraft(candidate) : null;
@@ -286,11 +290,11 @@ export function OpportunityReview({ projectId }: { projectId: string }) {
   if (error && !workspace) return <div className="opportunity-page"><p className="research-alert" role="alert">{error}</p><button className="secondary-action" onClick={() => void load()}>Thử lại</button></div>;
 
   return <main className="opportunity-page">
-    <ProjectJourneyNav projectId={projectId} active="research" />
-    <header className="opportunity-header"><div><a className="text-button" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`} onClick={requestNavigation}>← Quay lại không gian dự án</a><span className="state-label">ĐÁNH GIÁ CỦA PO</span><h1>Theo dõi quyết định sản phẩm</h1><p>Xem lại nghiên cứu và nguồn tham khảo, ghi nhận đánh giá của bạn và lưu bước tiếp theo cùng nội dung nghiên cứu.</p></div><div className="opportunity-header-actions"><a className="secondary-action" href={`/compare-periods?projectId=${encodeURIComponent(projectId)}`} onClick={requestNavigation}>So sánh các kỳ</a><button className="secondary-action" onClick={requestRefresh} disabled={saveState === 'saving'}>Tải lại</button></div></header>
+    <ProjectJourneyNav projectId={projectId} active="tracking" />
+    <header className="opportunity-header"><div><a className="text-button" href={reportFindingHref ?? `/tracking?projectId=${encodeURIComponent(projectId)}`} onClick={requestNavigation}>{reportFindingHref ? '← Về phát hiện gốc' : '← Về việc cần làm'}</a><span className="state-label">ĐÁNH GIÁ CỦA PO</span><h1>Quyết định và việc tiếp theo</h1><p>Xem bằng chứng, cập nhật hướng xử lý và ghi bước tiếp theo cho nội dung đã lưu.</p></div><div className="opportunity-header-actions"><button className="secondary-action" onClick={requestRefresh} disabled={saveState === 'saving'}>Tải lại</button></div></header>
     <div className="opportunity-summary" aria-label="Tóm tắt quyết định PO"><span><strong>{workspace?.candidates.length ?? 0}</strong> mục cần quyết định</span><span><strong>{investigateCount}</strong> cần tìm hiểu thêm</span><span><strong>{benchmarkCount}</strong> cần so sánh chuyên sâu</span><span><strong>{followupCount}</strong> hành động tiếp theo</span><span><strong>{reviewCount}</strong> còn thiếu bằng chứng</span><span><strong>{savedCount}</strong> quyết định đã lưu</span></div>
     {workspace?.shortlist_warning && <div className="research-alert" role="status">{workspace.shortlist_warning} Không tự suy đoán nguồn dữ liệu còn thiếu. Các quyết định đã lưu vẫn được giữ bên dưới.</div>}
-    {!workspace?.candidates.length && <section className="research-panel opportunity-empty"><h2>Chưa có nội dung nghiên cứu cần xem xét</h2><p>Thêm báo cáo, chủ đề nghiên cứu, bộ sưu tập hoặc cập nhật xu hướng để bắt đầu ghi nhận quyết định. Sản phẩm từ CSV sẽ xuất hiện sau khi lưu danh sách rút gọn.</p><a className="primary-action" href={`/research?projectId=${encodeURIComponent(projectId)}&view=data`}>Mở không gian nghiên cứu</a></section>}
+    {!workspace?.candidates.length && <section className="research-panel opportunity-empty"><h2>Chưa có nội dung nghiên cứu cần xem xét</h2><p>Thêm báo cáo, chủ đề nghiên cứu, bộ sưu tập hoặc cập nhật xu hướng để bắt đầu ghi nhận quyết định. Sản phẩm từ CSV sẽ xuất hiện sau khi lưu danh sách rút gọn.</p><a className="primary-action" href={`/research?projectId=${encodeURIComponent(projectId)}`}>Mở tổng quan dự án</a></section>}
     {!!workspace?.candidates.length && <div className="opportunity-layout">
       <aside className="opportunity-list"><div className="opportunity-filters"><label>Tìm nội dung cần quyết định<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm sản phẩm, phát hiện hoặc chủ đề" /></label><label>Quyết định<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Tất cả quyết định</option>{Object.entries(decisionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Mức ưu tiên<select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}><option value="all">Tất cả mức ưu tiên</option><option value="high">Cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option><option value="not_assessed">Chưa đánh giá</option></select></label></div>
         <div className="opportunity-candidate-list" role="list" aria-label="PO mục cần quyết định">{filtered.map((item) => <button role="listitem" key={item.candidate_id} className={selectedId === item.candidate_id ? 'active' : ''} onClick={() => requestCandidate(item.candidate_id)} disabled={saveState === 'saving'}><strong>{item.name}</strong><span>{item.target_kind ? `${targetKindLabel(item.target_kind)} · ${datasetNameLabel(item.dataset_filename)}` : `${datasetNameLabel(item.dataset_filename)} · ${item.quantitative_evidence.length} quan sát`}</span><small>{item.historical && !item.stale ? 'Quyết định trước đây · còn nguồn gốc' : item.stale ? 'Cần xem lại nguồn' : item.decision?.decision_status ? decisionLabels[item.decision.decision_status] : 'Chưa đánh giá'} · {item.decision ? priorityLabels[item.decision.priority] : 'Chưa đánh giá mức ưu tiên'}</small></button>)}{!filtered.length && <p>Không có kết quả phù hợp với bộ lọc.</p>}</div>

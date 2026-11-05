@@ -67,7 +67,7 @@ describe('research run UI integration', () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/projects/project-1/runs') && init?.method === 'POST')).toBe(true);
   });
 
-  it('opens a product-first Project Home with the three contextual actions by default', async () => {
+  it('opens a v4 Project Home with two primary actions and a clear project workflow', async () => {
     installApi((url) => {
       if (url.endsWith('/projects/project-1')) return project;
       if (url.includes('/projects/project-1/reports?')) return page([]);
@@ -80,10 +80,11 @@ describe('research run UI integration', () => {
 
     window.history.replaceState({}, '', '/research?projectId=project-1');
     render(<ResearchWorkspace mode="list" />);
-    expect(await screen.findByRole('heading', { name: 'Bạn muốn thực hiện gì?' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Nghiên cứu chuyên sâu Tạo câu hỏi/ }).getAttribute('href')).toContain('view=plan');
-    expect(screen.getByRole('link', { name: /Lưu thông tin Lưu quan sát, bài viết/ }).getAttribute('href')).toContain('#project-saved-information');
-    expect(screen.getByRole('link', { name: /Phân tích CSV Khám phá số liệu/ }).getAttribute('href')).toContain('action=import-csv');
+    // Project Home redesign (Peachy, 2026-11-04/05): primary actions are CSV import and overview research.
+    expect(await screen.findByRole('heading', { level: 1, name: project.name })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Bắt đầu nghiên cứu' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Nghiên cứu tổng quan' }).getAttribute('href')).toContain('view=plan');
+    expect(screen.getByRole('link', { name: 'Nhập CSV' }).getAttribute('href')).toContain('action=import-csv');
   });
 
   it('keeps Research Home focused on reopening a project or creating one', async () => {
@@ -119,12 +120,12 @@ describe('research run UI integration', () => {
 
     window.history.replaceState({}, '', '/research?projectId=project-1');
     render(<ResearchWorkspace mode="list" />);
-    const savedReport = (await screen.findAllByRole('link', { name: /What keeps puzzle players engaged/ })).find((link) => link.getAttribute('href') === '/reports/report-1');
-    expect(savedReport).toBeTruthy();
-    expect(savedReport?.getAttribute('href')).toBe('/reports/report-1');
-    expect(screen.getByText('Puzzle October')).toBeTruthy();
-    expect(screen.getByText('Puzzle One')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Báo cáo nghiên cứu' })).toBeTruthy();
+    const readReport = await screen.findByRole('link', { name: 'Đọc báo cáo và nguồn' });
+    expect(readReport.getAttribute('href')).toBe('/reports/report-1');
+    expect(screen.getByRole('link', { name: 'Mở bộ so sánh Puzzle October' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mở hồ sơ Puzzle One' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Kết quả mới nhất' })).toBeTruthy();
+    expect(screen.getByText('NGHIÊN CỨU GẦN NHẤT')).toBeTruthy();
     expect(screen.queryByText('Đã lưu báo cáo')).toBeNull();
   });
 

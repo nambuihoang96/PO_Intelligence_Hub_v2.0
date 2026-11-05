@@ -1,0 +1,398 @@
+/* Project Home → CSV analysis theme prototype. Other routes keep their current theme. */
+.app-shell[data-theme-preview] {
+  --theme-canvas: #fff9f6;
+  --theme-surface: #ffffff;
+  --theme-raised: #fffdfb;
+  --theme-ink: #30282d;
+  --theme-muted: #71646a;
+  --theme-line: #eadbd4;
+  --theme-accent: #b75e45;
+  --theme-accent-hover: #994b37;
+  --theme-soft: #fff1e8;
+  --theme-blue: #edf4ff;
+  --theme-positive-bg: #eaf8f1;
+  --theme-positive-ink: #17633c;
+  --theme-negative-bg: #fff0ed;
+  --theme-negative-ink: #8d3434;
+  --theme-review-bg: #fff4df;
+  --theme-review-ink: #725018;
+  --theme-new-bg: #eaf1ff;
+  --theme-new-ink: #2f5392;
+  color-scheme: light;
+}
+.app-shell[data-theme-preview="dark"] {
+  --theme-canvas: #171419;
+  --theme-surface: #211b21;
+  --theme-raised: #2a2229;
+  --theme-ink: #f5edeb;
+  --theme-muted: #c5b7b7;
+  --theme-line: #51434a;
+  --theme-accent: #ff9b84;
+  --theme-accent-hover: #ffc0aa;
+  --theme-soft: #38272c;
+  --theme-blue: #262c40;
+  --theme-positive-bg: #203a30;
+  --theme-positive-ink: #a2e5be;
+  --theme-negative-bg: #452a2d;
+  --theme-negative-ink: #ffaaa5;
+  --theme-review-bg: #45391f;
+  --theme-review-ink: #f3d18a;
+  --theme-new-bg: #292f4d;
+  --theme-new-ink: #c0cbff;
+  color-scheme: dark;
+}
+.app-shell[data-theme-preview] > .main-panel { color: var(--theme-ink); background: var(--theme-canvas); }
+.app-shell[data-theme-preview] .topbar { color: var(--theme-muted); background: var(--theme-surface); border-color: var(--theme-line); }
+.app-shell[data-theme-preview] .breadcrumb,
+.app-shell[data-theme-preview] .breadcrumb a,
+.app-shell[data-theme-preview] .local-badge { color: var(--theme-muted); }
+.app-shell[data-theme-preview] .local-badge { border-color: var(--theme-line); background: var(--theme-raised); }
+
+.project-theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px;
+  padding: 0 12px; border: 1px solid var(--theme-line, var(--peachy-line)); border-radius: 9px;
+  background: var(--theme-surface, #fff); color: var(--theme-ink, #30282d); font-size: 13px;
+  font-weight: 600; cursor: pointer;
+}
+.project-theme-toggle:hover { border-color: var(--theme-accent, #b75e45); background: var(--theme-soft, #fff1e8); }
+.project-theme-toggle:focus-visible { outline: 3px solid var(--theme-accent, #b75e45); outline-offset: 3px; }
+.data-workspace-heading--csv .project-theme-toggle { justify-self: start; margin-top: 4px; }
+
+/* Project Home surfaces and text */
+.app-shell[data-theme-preview="dark"] .project-home {
+  --ph-ink: var(--theme-ink); --ph-muted: var(--theme-muted); --ph-line: var(--theme-line); --ph-accent: var(--theme-accent);
+  color: var(--theme-ink);
+}
+.app-shell[data-theme-preview="dark"] .project-home-section,
+.app-shell[data-theme-preview="dark"] .project-home-state,
+.app-shell[data-theme-preview="dark"] .project-home-saved-details { border-color: var(--theme-line); background: var(--theme-surface); color: var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey { border-color: var(--theme-line); background: var(--theme-surface); box-shadow: none; }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-brand,
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-heading strong,
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-steps a { color: var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-heading small { color: var(--theme-muted); }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-steps { border-color: var(--theme-line); }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-steps a.active { color: var(--theme-accent-hover); background: var(--theme-soft); }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-steps a > span { background: var(--theme-raised); }
+.app-shell[data-theme-preview="dark"] .project-home-next-item { border-color: var(--theme-line); background: var(--theme-raised); }
+.app-shell[data-theme-preview="dark"] .project-home-next-item h3,
+.app-shell[data-theme-preview="dark"] .project-home-next-empty strong,
+.app-shell[data-theme-preview="dark"] .project-home-row-copy strong,
+.app-shell[data-theme-preview="dark"] .project-home-latest-report > div > a,
+.app-shell[data-theme-preview="dark"] .project-home-section-heading h2,
+.app-shell[data-theme-preview="dark"] .project-home-journey-steps strong { color: var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .project-home-header { border-color: var(--theme-line); }
+.app-shell[data-theme-preview="dark"] .project-home-eyebrow,
+.app-shell[data-theme-preview="dark"] .project-home-kicker,
+.app-shell[data-theme-preview="dark"] .project-home-description,
+.app-shell[data-theme-preview="dark"] .project-home-next-item p,
+.app-shell[data-theme-preview="dark"] .project-home-next-empty p,
+.app-shell[data-theme-preview="dark"] .project-home-row-copy small,
+.app-shell[data-theme-preview="dark"] .project-home-date,
+.app-shell[data-theme-preview="dark"] .project-home-latest-report small,
+.app-shell[data-theme-preview="dark"] .project-home-journey-steps small { color: var(--theme-muted); }
+.app-shell[data-theme-preview="dark"] .project-home-secondary { border-color: var(--theme-line); color: var(--theme-ink); background: var(--theme-surface); }
+.app-shell[data-theme-preview="dark"] .project-home-secondary:hover,
+.app-shell[data-theme-preview="dark"] .project-home-action:hover,
+.app-shell[data-theme-preview="dark"] .project-home-report:hover { border-color: var(--theme-accent); background: var(--theme-soft); }
+.app-shell[data-theme-preview="dark"] .project-home-status { color: var(--theme-accent-hover); background: var(--theme-soft); }
+.app-shell[data-theme-preview="dark"] .project-home-next-button,
+.app-shell[data-theme-preview="dark"] .project-home-primary-link { border-color: var(--theme-accent); color: #241815; background: var(--theme-accent); }
+.app-shell[data-theme-preview="dark"] .project-home-next-button:hover,
+.app-shell[data-theme-preview="dark"] .project-home-primary-link:hover { background: var(--theme-accent-hover); }
+.app-shell[data-theme-preview="dark"] .project-home-decision-list,
+.app-shell[data-theme-preview="dark"] .project-home-decision-row,
+.app-shell[data-theme-preview="dark"] .project-home-latest-report,
+.app-shell[data-theme-preview="dark"] .project-home-journey-steps li { border-color: var(--theme-line); }
+.app-shell[data-theme-preview="dark"] .project-home-journey-steps li > span { color: var(--theme-accent-hover); background: var(--theme-soft); }
+.app-shell[data-theme-preview="dark"] .project-home-quick-links a,
+.app-shell[data-theme-preview="dark"] .project-home-source-link { color: var(--theme-accent-hover); }
+.app-shell[data-theme-preview="dark"] .project-home-action-mark.peach { color: #ffd0ad; background: #453126; }
+.app-shell[data-theme-preview="dark"] .project-home-action-mark.lilac { color: #d2c4ff; background: #342b49; }
+
+/* Product Analysis table, chart and warning states */
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .project-journey { color: var(--theme-ink);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .project-journey,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .data-workspace-heading,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-dataset-toolbar,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-explorer--csv,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-analysis { border-color: var(--theme-line); background: var(--theme-surface); color: var(--theme-ink);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv h2,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv h3,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv h4,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .panel-heading h3,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-dataset-toolbar__meta strong,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__rows strong,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody th { color: var(--theme-ink);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .data-workspace-heading--csv .csv-source-note { color: var(--theme-muted);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv p,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv small,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .field-label,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .data-scope-pill,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__scope,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__note,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__empty,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__name { color: var(--theme-muted);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-product-controls input,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv select,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv input,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv textarea { border-color: var(--theme-line); color: var(--theme-ink); background: var(--theme-raised); color-scheme: dark;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table-scroll { border-color: var(--theme-line);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table th,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table td { border-color: var(--theme-line); color: var(--theme-ink); background: var(--theme-surface);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table thead th,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table thead th:first-child,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table thead th:nth-child(2) { background: var(--theme-raised); color: var(--theme-muted);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody th:first-child,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody th:nth-child(2) { background: var(--theme-surface);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table .workspace-source-value { color: var(--theme-ink) !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-readiness-summary,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-period,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-counts > span { border-color: var(--theme-line); background: var(--theme-raised); color: var(--theme-muted);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-summary > strong,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-heading,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-change > strong { color: var(--theme-ink);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-insight { border-color: #60729f; background: var(--theme-blue); color: #d8e0ff !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-next-step { border-color: #4d8066; background: var(--theme-positive-bg); color: var(--theme-ink) !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-signals article,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-note,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-summary small,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-caveat { border-color: #74603b; background: var(--theme-review-bg); color: var(--theme-review-ink);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-signals article > strong,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-signals article > span,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-signals article > p { color: var(--theme-review-ink);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-counts .increase,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-change.increase,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value--increase,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value--highest,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value-label--increase,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value-label--highest { border-color: #4d8066; background: var(--theme-positive-bg); color: var(--theme-positive-ink) !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-counts .decrease,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-change.decrease,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value--decrease,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value--lowest,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value-label--decrease,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value-label--lowest { border-color: #845055; background: var(--theme-negative-bg); color: var(--theme-negative-ink) !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-counts .review,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-change.review,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value--review,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value-label--review { border-color: #74603b; background: var(--theme-review-bg); color: var(--theme-review-ink) !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value--new,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-value-label--new { background: var(--theme-new-bg); color: var(--theme-new-ink) !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__track { border-color: #786b73; background: linear-gradient(to bottom, var(--theme-raised) 49.5%, var(--theme-line) 49.5%, var(--theme-line) 50.5%, var(--theme-raised) 50.5%);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__bar { background: #89b7ff;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-chart__bar--negative { background: #ff938f;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-error { background: var(--theme-negative-bg); color: var(--theme-negative-ink) !important;}
+
+@media (prefers-reduced-motion: no-preference) {
+}
+
+/* Rework round: lower card density and make the PO's next action explicit. */
+.app-shell[data-theme-preview] .project-home-content-grid { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .8fr); gap: 28px; }
+.app-shell[data-theme-preview] .project-home-section { border-color: transparent; background: transparent; box-shadow: none; padding: 4px 0; }
+.app-shell[data-theme-preview] .project-home-next-item { border: 0; border-left: 3px solid var(--theme-accent); border-radius: 0; background: transparent; padding: 2px 0 2px 16px; }
+.app-shell[data-theme-preview] .project-home-next-item-meta { gap: 5px 12px; }
+.app-shell[data-theme-preview] .project-home-status { border-radius: 4px; }
+.app-shell[data-theme-preview] .project-home-next-detail-link { width: fit-content; color: var(--theme-accent-hover); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.app-shell[data-theme-preview] .project-home-journey-steps li { border-color: var(--theme-line); }
+.app-shell[data-theme-preview] .project-home-journey-steps li > span { border-radius: 5px; color: var(--theme-muted); background: var(--theme-raised); }
+.app-shell[data-theme-preview] .project-home-review { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; border-top: 1px solid var(--theme-line); border-bottom: 1px solid var(--theme-line); color: var(--theme-ink); }
+.app-shell[data-theme-preview] .project-home-review h2 { margin: 3px 0 5px; font-size: 18px; }
+.app-shell[data-theme-preview] .project-home-review p { margin: 0 0 4px; color: var(--theme-ink); font-size: 14px; line-height: 1.5; }
+.app-shell[data-theme-preview] .project-home-review small { color: var(--theme-muted); line-height: 1.45; }
+.app-shell[data-theme-preview] .project-home-review > a { flex: 0 0 auto; color: var(--theme-accent-hover); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-values-table-details > summary { color: var(--theme-accent-hover); font-size: 14px; font-weight: 650;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-values-table-details > summary:focus-visible,
+.app-shell[data-theme-preview] .project-home-review > a:focus-visible,
+.app-shell[data-theme-preview] .project-home-next-detail-link:focus-visible { outline: 3px solid #8bb8ff; outline-offset: 3px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-values-chart__name { overflow-wrap: anywhere; white-space: normal;}
+@media (max-width: 760px) {
+  .app-shell[data-theme-preview] .project-home-content-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .app-shell[data-theme-preview] .project-home-review { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .app-shell[data-theme-preview] .project-home-review > a { min-height: 42px; display: inline-flex; align-items: center; }
+}
+
+/* Owner rework: shared theme control, evidence-forward Project Home, and calm CSV reading. */
+.app-shell[data-theme-preview] > .sidebar > .project-theme-toggle { flex: 0 0 auto; margin-left: auto; }
+.app-shell[data-theme-preview] .project-journey > .project-theme-toggle { flex: 0 0 auto; margin-left: auto; }
+.app-shell[data-theme-preview="dark"] > .sidebar,
+.app-shell[data-theme-preview="dark"] .project-journey { border-color: var(--theme-line); background: var(--theme-surface); color: var(--theme-ink); box-shadow: none; }
+.app-shell[data-theme-preview="dark"] > .sidebar .brand,
+.app-shell[data-theme-preview="dark"] > .sidebar .brand-copy strong,
+.app-shell[data-theme-preview="dark"] > .sidebar .nav-item,
+.app-shell[data-theme-preview="dark"] .project-journey-brand,
+.app-shell[data-theme-preview="dark"] .project-journey-heading strong,
+.app-shell[data-theme-preview="dark"] .project-journey-steps a { color: var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] > .sidebar .nav-item.active { color: var(--theme-accent); background: var(--theme-soft); }
+.app-shell[data-theme-preview="dark"] > .sidebar .nav-icon { color: var(--theme-accent); }
+.app-shell[data-theme-preview] .project-journey { gap: 12px 18px; }
+.app-shell[data-theme-preview] .project-journey-steps { flex: 0 1 auto; }
+.app-shell[data-theme-preview] .project-home-header { align-items: center; border-bottom: 1px solid var(--theme-line); }
+.app-shell[data-theme-preview] .project-home-header h1 { font-size: clamp(32px, 3.2vw, 44px); }
+.app-shell[data-theme-preview] .project-home-content-grid { grid-template-columns: minmax(0, 1.3fr) minmax(320px, .85fr); gap: clamp(28px, 4vw, 56px); }
+.app-shell[data-theme-preview] .project-home-section-heading h2 { font-size: 22px; }
+.app-shell[data-theme-preview] .project-home-latest-card { display: grid; justify-items: start; gap: 12px; padding: 5px 0 0; }
+.app-shell[data-theme-preview] .project-home-latest-title { color: var(--theme-ink); font-size: clamp(22px, 2.2vw, 30px); font-weight: 650; line-height: 1.25; text-decoration: none; text-wrap: pretty; }
+.app-shell[data-theme-preview] .project-home-latest-card > p { margin: 0; color: var(--theme-muted); font-size: 15px; line-height: 1.55; }
+.app-shell[data-theme-preview] .project-home-latest-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--theme-muted); font-size: 14px; }
+.app-shell[data-theme-preview] .project-home-next-item { gap: 14px; }
+.app-shell[data-theme-preview] .project-home-next-item h3 { color: var(--theme-ink); font-size: 21px; }
+.app-shell[data-theme-preview] .project-home-next-item p,
+.app-shell[data-theme-preview] .project-home-next-empty p { color: var(--theme-muted); font-size: 16px; line-height: 1.55; }
+.app-shell[data-theme-preview] .project-home-next-empty { padding: 6px 0; }
+.app-shell[data-theme-preview] .project-home-next-empty strong { color: var(--theme-ink); font-size: 17px; }
+.app-shell[data-theme-preview] .project-home-review { margin-top: 4px; }
+.app-shell[data-theme-preview] .project-home-saved-details { border-radius: 0; background: transparent; }
+.app-shell[data-theme-preview] .project-home-saved-details > summary { color: var(--theme-muted); font-size: 14px; }
+.app-shell[data-theme-preview] .project-home-quick-links { gap: 14px 20px; }
+.app-shell[data-theme-preview] .project-home-header-actions { gap: 0; }
+.app-shell[data-theme-preview] .data-first-workspace--csv .data-workspace-heading--csv h2 { font-size: clamp(30px, 3vw, 40px);}
+.app-shell[data-theme-preview] .data-first-workspace--csv .data-workspace-heading--csv p { color: var(--theme-muted); font-size: 16px; line-height: 1.55;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-dataset-toolbar__meta strong { color: var(--theme-muted); font-size: 14px; font-weight: 500;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-dataset-toolbar > .field-label { font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-dataset-toolbar select { font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-dataset-toolbar > .secondary-action { font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-analysis {  color: var(--theme-ink);}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-heading h3 { color: var(--theme-ink); font-size: 26px; line-height: 1.25;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-source-tag {  color: var(--theme-muted); font-size: 14px; font-weight: 500;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-modes { border-bottom-color: var(--theme-line);}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-modes button {  color: var(--theme-muted); font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-modes button[aria-pressed="true"] { border-bottom-color: var(--theme-accent);  color: var(--theme-ink);}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-file-context > strong { color: var(--theme-ink); font-size: 17px; overflow-wrap: anywhere;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-file-context > span { color: var(--theme-muted); font-size: 15px; line-height: 1.5;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-file-context > p { color: var(--theme-muted); font-size: 15px; line-height: 1.55;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals h5 { color: var(--theme-ink); font-size: 17px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals article > strong { color: var(--theme-ink); font-size: 16px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals article > strong span { color: var(--theme-muted); font-size: 14px; font-weight: 500;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals article > span,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals article > small { color: var(--theme-muted); font-size: 14px; line-height: 1.5;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals article > p { color: var(--theme-ink); font-size: 15px; line-height: 1.5;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-signals article > p > b { color: var(--theme-accent-hover); font-weight: 650;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-next-step { background: var(--theme-soft); color: var(--theme-ink) !important; font-size: 15px; line-height: 1.5;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-next-step .secondary-action { font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-analysis > p,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-caveat,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-period,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-legend,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-ranking-rule { color: var(--theme-muted); font-size: 14px; line-height: 1.55;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-pair-selectors label { color: var(--theme-muted); font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-pair-selectors select { font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-pair-caption {  color: var(--theme-muted); font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-counts > span {  color: var(--theme-ink); font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-group-summary > strong,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-group-summary > span { color: var(--theme-ink); font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-group-summary > small { color: var(--theme-muted); font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-change {  color: var(--theme-ink);}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-change > strong { color: var(--theme-ink); font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-change > span,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-change > b,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-change > small { color: var(--theme-muted); font-size: 14px; line-height: 1.5;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-details > summary,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-advanced-filters > summary,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-values-table-details > summary { color: var(--theme-accent-hover); font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-readiness-summary {  color: var(--theme-muted); font-size: 14px; line-height: 1.55;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-explorer--csv > .panel-heading h3 { font-size: 18px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-product-controls label { color: var(--theme-muted); font-size: 14px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-product-controls input,
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-product-controls select { font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-advanced-filters > summary { color: var(--theme-accent-hover); font-size: 15px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-app-table-scroll { border-color: var(--theme-line);}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-values-table-details [data-csv-source-rows]:focus-within { outline: 2px solid var(--theme-accent); outline-offset: -2px;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-analysis select,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-dataset-toolbar select { color: var(--theme-ink); background: var(--theme-surface); border-color: var(--theme-line);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-next-step { background: var(--theme-raised);}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-signals article > p > b { color: #ffb29f;}
+@media (max-width: 760px) {
+  .app-shell[data-theme-preview] .project-home-content-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .app-shell[data-theme-preview] .project-journey { flex-wrap: wrap; }
+  .app-shell[data-theme-preview] .project-journey > .project-theme-toggle { margin-left: auto; }
+}
+
+/* Owner UAT fixes: dark mode contrast and legible evidence text. */
+.app-shell[data-theme-preview="dark"] .project-home-header h1,
+.app-shell[data-theme-preview="dark"] .project-home-latest-title,
+.app-shell[data-theme-preview="dark"] .project-home-section-heading h2,
+.app-shell[data-theme-preview="dark"] .project-home-next-item h3 { color: #f5edeb !important; }
+.app-shell[data-theme-preview="dark"] .project-home-latest-title { margin: 0; font-size: clamp(22px, 2.2vw, 30px); font-weight: 650; line-height: 1.25; text-wrap: pretty; }
+.app-shell[data-theme-preview="dark"] .project-home-latest-card > p { color: #e1d5d2; }
+.app-shell[data-theme-preview="dark"] .project-home-next-detail-link { color: #ffd0bf; }
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-steps a.active,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .project-journey-steps a.active { color: #fff8f4; background: #493137;}
+.app-shell[data-theme-preview="dark"] .project-home .project-journey-steps a.active > span,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .project-journey-steps a.active > span { color: #fff8f4; background: #65414a;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .project-journey-steps a > span { border-color: #5a4b52; background: #30272e; color: #e1d7d8;}
+
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv p,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-file-context > span,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-file-context > p,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-period,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-caption,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-caveat,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-readiness-summary { color: #e1d7d8 !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-codex-configuration,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-saved-shortlist,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-period,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-caption,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-note,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-readiness-summary { border-color: #5a4b52; background: #30272e;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-caption strong { color: #f5edeb;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-codex-configuration > summary,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-saved-shortlist .panel-heading,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-saved-shortlist h3,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-advanced-filters > summary,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-values-table-details > summary { color: #ffd0bf;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .primary-action { border-color: #ff9b84; background: #ff9b84; color: #241815;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .secondary-action { border-color: #75616b; background: #352b33; color: #f5edeb;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-summary > small,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-summary small,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-note,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-caveat { color: #f3d18a !important;}
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-summary > small,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-group-summary small { border-color: #74603b; background: #45391f;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-file-context > span,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-file-context > p,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-period,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-pair-caption,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-auto-caveat,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-readiness-summary,
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-app-table,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-product-source,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-values-table-details > summary { font-size: 16px; line-height: 1.55;}
+.app-shell[data-theme-preview] .data-first-workspace--csv .workspace-app-table small,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-product-source span,
+.app-shell[data-theme-preview] .data-first-workspace--csv .csv-product-source code { font-size: 15px; line-height: 1.5;}
+@media (max-width: 640px) {
+  .app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody tr { border-color: #51434a; background: #211b21;}
+  .app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody tr > th:nth-child(2) { color: #f5edeb;}
+  .app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody tr > td:nth-child(n+3) { border-color: #51434a; color: #e1d7d8;}
+  .app-shell[data-theme-preview="dark"] .data-first-workspace--csv .workspace-app-table tbody td[data-label]::before { color: #ffc0aa;}
+}
+
+/* Owner correction: retain Peachy geometry; typography and contrast only. */
+.app-shell[data-theme-preview] .intake-form--research-again { font-size:16px; line-height:1.6; }
+.app-shell[data-theme-preview] .intake-form--research-again :is(p,label,input,textarea,select,summary,button) { font-size:16px; line-height:1.55; }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again { color:var(--theme-ink); background:var(--theme-surface); border-color:var(--theme-line); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again :is(h2,h3,strong,label,summary) { color:var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again :is(p,small,.field-label,.field-help) { color:var(--theme-muted); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again :is(input,textarea,select,.research-again-source,.research-again-prompt,.research-again-automation,.report-import-card,.report-preview) { color:var(--theme-ink); background:var(--theme-raised); border-color:var(--theme-line); color-scheme:dark; }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again :is(a,.text-button) { color:var(--theme-accent-hover); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again .secondary-action { color:var(--theme-ink); background:var(--theme-raised); border-color:var(--theme-line); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again .primary-action { color:#241815; background:var(--theme-accent); border-color:var(--theme-accent); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again .research-alert { color:var(--theme-review-ink); background:var(--theme-review-bg); border-color:var(--theme-line); }
+/* Intake surfaces keep existing Peachy card geometry. */
+.app-shell[data-theme-preview="dark"] .intake-form--research-again :is(.codex-research-settings,.research-again-scope,.research-import-details) { background:var(--theme-raised); border-color:var(--theme-line); color:var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again .codex-research-settings :is(span,strong,label) { color:var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again .codex-research-settings :is(small,.codex-research-settings__status) { color:var(--theme-muted); }
+.app-shell[data-theme-preview="dark"] .intake-form--research-again .codex-research-settings .codex-research-settings__error { color:var(--theme-review-ink); }
+
+/* Round 12: dark CSV picker/mode surfaces; Peachy geometry and light theme unchanged. */
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-selectors { background:var(--theme-surface); border-color:var(--theme-line); color:var(--theme-ink); }
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-selectors :is(label,span) { color:var(--theme-muted); }
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-selectors select,
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-pair-selectors option { background:var(--theme-raised); color:var(--theme-ink); border-color:var(--theme-line); color-scheme:dark; }
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-modes button { background:var(--theme-surface); color:var(--theme-ink); border-color:var(--theme-line); }
+.app-shell[data-theme-preview="dark"] .data-first-workspace--csv .csv-auto-modes button[aria-pressed="true"] { background:var(--theme-soft); color:var(--theme-accent-hover); border-color:var(--theme-accent); }

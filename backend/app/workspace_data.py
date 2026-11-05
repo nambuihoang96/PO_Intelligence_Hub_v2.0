@@ -229,6 +229,10 @@ def revalidate_workspace_dataset(project_id: str, dataset_id: str, session: Sess
     })
     preview = _preview_dataset(None, payload)
     if review_state(dataset).get("entries"):
+        # Reviewed rows stay frozen (the overlay keys depend on them); dataset-level warnings still refresh.
+        dataset.validation_reasons_json = preview.validation_reasons
+        session.commit()
+        session.refresh(dataset)
         return _dataset_read(dataset)
     observations = [item.model_dump(mode="json") for item in preview.observations]
     for row in observations:

@@ -5,6 +5,7 @@ import { ResearchWorkspace } from './research/ResearchWorkspace';
 import { ResearchRunsWorkspace } from './research/ResearchRunsWorkspace';
 import { SourcesWorkspace } from './sources/SourcesWorkspace';
 import { ReportHistory, ReportViewer, ResearchIntake } from './reports/ResearchIntake';
+import { ReportUpdateComparison } from './reports/ReportUpdateComparison';
 import { QuantitativePeriodComparison } from './reports/QuantitativePeriodComparison';
 import { ResultsIcon, type ResultsIconName } from './ui/ResultsIcon';
 import { AppNavigation } from './AppNavigation';
@@ -85,6 +86,7 @@ function currentPage(pathname: string): Page {
   const path = pathname.replace(/\/$/, '') || '/';
   if (path === '/') return pages.find((page) => page.path === '/research')!;
   if (path.startsWith('/reports/')) return pages.find((page) => page.path === '/reports')!;
+  if (path === '/report-updates') return pages.find((page) => page.path === '/tracking')!;
   if (path.startsWith('/compare-periods')) return pages.find((page) => page.path === '/research')!;
   if (path.startsWith('/sources') || path.startsWith('/explorer')) return pages.find((page) => page.path === '/research')!;
   return allPages.find((page) => page.path === path) ?? pages[0];
@@ -113,14 +115,16 @@ function App() {
   const params = new URLSearchParams(window.location.search);
   const qaDemoMode = import.meta.env.VITE_QA_DEMO_MODE === 'true';
   const projectId = params.get('projectId');
-  const page = pathname === '/' && projectId ? pages.find((item) => item.path === '/reports')! : currentPage(pathname);
+  const opportunityReviewView = params.get('view') === 'opportunities';
+  const page = opportunityReviewView && projectId ? pages.find((item) => item.path === '/tracking')!
+    : pathname === '/' && projectId ? pages.find((item) => item.path === '/reports')! : currentPage(pathname);
   const researchPage = page.path.startsWith('/research');
   const runId = params.get('runId');
   const projectSelected = Boolean(projectId);
-  const opportunityReviewView = params.get('view') === 'opportunities';
-  const dataWorkspace = projectSelected && ['data', 'opportunities'].includes(params.get('view') ?? '');
+  const dataWorkspace = projectSelected && ['data', 'csv', 'notes', 'opportunities'].includes(params.get('view') ?? '');
+  const projectWorkflow = pathname.startsWith('/reports/') || Boolean(projectId && ['/', '/research', '/reports', '/tracking', '/report-updates'].includes(pathname));
   const projectView = params.get('view');
-  const pageTitle = pathname.startsWith('/reports/') ? 'Báo cáo nghiên cứu' : pathname === '/' && projectId ? 'Nhập báo cáo nghiên cứu' : pathname === '/reports' ? 'Báo cáo đã lưu' : pathname === '/tracking' ? 'Theo dõi' : pathname === '/explorer' ? 'Danh sách ứng dụng App Store' : pathname === '/compare-periods' ? 'So sánh các kỳ' : pathname === '/sources' ? runId ? 'Bằng chứng nghiên cứu' : 'Nguồn nghiên cứu' : page.path === '/research/new' ? 'Tạo dự án'
+  const pageTitle = pathname === '/report-updates' ? 'Cập nhật từ báo cáo' : pathname.startsWith('/reports/') ? 'Báo cáo nghiên cứu' : pathname === '/' && projectId ? 'Nhập báo cáo nghiên cứu' : pathname === '/reports' ? 'Báo cáo đã lưu' : pathname === '/tracking' ? 'Theo dõi' : pathname === '/explorer' ? 'Danh sách ứng dụng App Store' : pathname === '/compare-periods' ? 'So sánh các kỳ' : pathname === '/sources' ? runId ? 'Bằng chứng nghiên cứu' : 'Nguồn nghiên cứu' : page.path === '/research/new' ? 'Tạo dự án'
     : page.path === '/research/runs' ? 'Lịch sử nghiên cứu'
       : page.path === '/sources' && runId ? 'Bằng chứng nghiên cứu' : projectSelected && projectView === 'plan' ? 'Nghiên cứu chuyên sâu' : dataWorkspace ? 'Không gian nghiên cứu' : projectSelected ? 'Tổng quan dự án' : page.title;
   const pageIntro = pathname === '/' && projectId ? 'Lưu báo cáo ChatGPT vào dự án.' : pathname === '/reports' ? 'Tìm và mở báo cáo đã lưu, tiếp tục đánh giá từ dự án liên quan.' : pathname === '/tracking' ? 'Xem các quyết định đã lưu và những công việc cần tiếp tục.' : pathname === '/explorer' ? 'Tìm ứng dụng theo tên, nền tảng và quốc gia.' : pathname === '/compare-periods' ? 'Chỉ so sánh dữ liệu CSV có cùng định nghĩa và phạm vi phù hợp.' : pathname === '/sources' ? runId ? 'Xem bằng chứng của lượt nghiên cứu đã chọn.' : 'Xem nguồn tham khảo trong nghiên cứu.' : page.path === '/research/new'
@@ -130,8 +134,8 @@ function App() {
         : projectSelected && projectView === 'plan' ? 'Nhập câu hỏi và phạm vi nghiên cứu cho dự án.' : dataWorkspace ? 'Lưu thông tin, đọc báo cáo và phân tích dữ liệu trong cùng dự án.' : projectSelected ? 'Báo cáo, dữ liệu và các bước tiếp theo nằm trong cùng dự án.' : page.intro;
 
   return (
-    <div className={`app-shell${researchPage ? ' research-page' : ''}`}>
-      <AppNavigation pages={pages} currentPath={page.path} currentLabel={page.label} />
+    <div className={`app-shell${researchPage ? ' research-page' : ''}${projectWorkflow ? ' project-workflow' : ''}`}>
+      {!projectWorkflow && <AppNavigation pages={pages} currentPath={page.path} currentLabel={page.label} />}
 
       <main className="main-panel">
         <header className="topbar">
@@ -141,13 +145,13 @@ function App() {
 
         <div className="content-wrap">
           {qaDemoMode && <div className="qa-demo-banner" role="status">QA DEMO — DỮ LIỆU MÔ PHỎNG, KHÔNG PHẢI NGHIÊN CỨU THẬT</div>}
-          {!opportunityReviewView && !(projectSelected && !projectView) && !pathname.startsWith('/reports/') && !(pathname === '/' && projectId) && !(pathname === '/reports' && projectId) && <section className="page-heading" aria-labelledby="page-title">
+          {!opportunityReviewView && !projectSelected && !pathname.startsWith('/reports/') && pathname !== '/report-updates' && !(pathname === '/' && projectId) && !(pathname === '/reports' && projectId) && <section className="page-heading" aria-labelledby="page-title">
             <div className="eyebrow">{page.eyebrow}</div>
             <h1 id="page-title">{pageTitle}</h1>
             <p className="intro">{pageIntro}</p>
           </section>}
 
-          {pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : pathname === '/tracking' ? <TrackingWorkspace projectId={projectId} /> : pathname === '/compare-periods' ? <QuantitativePeriodComparison /> : pathname === '/' ? projectId ? <ResearchIntake /> : <ResearchWorkspace mode="list" /> : page.path === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : page.path.startsWith('/research') ? <ResearchWorkspace mode={page.path === '/research/new' ? 'new' : ['data', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : pathname === '/sources' ? <SourcesWorkspace runId={runId} /> : pathname === '/explorer' ? <ExplorerWorkspace /> : <>
+          {pathname === '/report-updates' && projectId ? <ReportUpdateComparison projectId={projectId} /> : pathname.startsWith('/reports/') ? <ReportViewer reportId={pathname.slice('/reports/'.length)} /> : pathname === '/reports' ? <ReportHistory /> : pathname === '/tracking' ? <TrackingWorkspace projectId={projectId} /> : pathname === '/compare-periods' ? <QuantitativePeriodComparison /> : pathname === '/' ? projectId ? <ResearchIntake /> : <ResearchWorkspace mode="list" /> : pathname === '/research/runs' ? <ResearchRunsWorkspace runId={runId} projectId={projectId} /> : pathname.startsWith('/research') ? <ResearchWorkspace mode={pathname === '/research/new' ? 'new' : ['data', 'csv', 'notes', 'opportunities'].includes(params.get('view') ?? '') ? 'data' : 'list'} /> : pathname === '/sources' ? <SourcesWorkspace runId={runId} /> : pathname === '/explorer' ? <ExplorerWorkspace /> : <>
             <div className="section-divider"><span>NỘI DUNG</span><span className="divider-line" /></div>
             <EmptyState page={page} />
             <aside className="connection-note" aria-label="Data connection status">
